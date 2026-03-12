@@ -21,7 +21,9 @@ def test_deserialize_yang_module():
                         "mandatory": true
                     }
                 ],
-                "containers": []
+                "containers": [],
+                "lists": [],
+                "choices": []
             }
         ]
     }

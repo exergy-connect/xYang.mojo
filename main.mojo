@@ -1,4 +1,5 @@
 from xyang.json.parser import parse_yang_module
+from xyang.utils import print_module_tree
 
 
 def main():
@@ -8,5 +9,5 @@ def main():
         text = f.read()
 
     var module = parse_yang_module(text)
-    print(module.name, module.namespace, module.prefix)
+    print_module_tree(module)
 
