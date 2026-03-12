@@ -6,37 +6,37 @@ comptime Arc = ArcPointer
 
 
 @fieldwise_init
-struct YangType(Movable, Stringable):
+struct YangType(Movable):
     var name: String
 
-    fn __str__(self) -> String:
+    def __str__(self) -> String:
         return "YangType(" + self.name + ")"
 
 
 @fieldwise_init
-struct YangLeaf(Movable, Stringable):
+struct YangLeaf(Movable):
     var name: String
     var type: YangType
     var mandatory: Bool
 
-    fn __str__(self) -> String:
+    def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
         return "YangLeaf(" + self.name + ", type=" + String(self.type) + ", mandatory=" + m + ")"
 
 
 @fieldwise_init
-struct YangChoice(Movable, Stringable):
+struct YangChoice(Movable):
     var name: String
     var mandatory: Bool
     var case_names: List[String]
 
-    fn __str__(self) -> String:
+    def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
         return "YangChoice(" + self.name + ", mandatory=" + m + ", cases=" + String(len(self.case_names)) + ")"
 
 
 @fieldwise_init
-struct YangContainer(Movable, Stringable):
+struct YangContainer(Movable):
     var name: String
     var description: String
     var leaves: List[Arc[YangLeaf]]
@@ -44,7 +44,7 @@ struct YangContainer(Movable, Stringable):
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
 
-    fn __str__(self) -> String:
+    def __str__(self) -> String:
         var nleaf = len(self.leaves)
         var ncont = len(self.containers)
         var nlist = len(self.lists)
@@ -53,7 +53,7 @@ struct YangContainer(Movable, Stringable):
 
 
 @fieldwise_init
-struct YangList(Movable, Stringable):
+struct YangList(Movable):
     var name: String
     var key: String
     var description: String
@@ -62,7 +62,7 @@ struct YangList(Movable, Stringable):
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
 
-    fn __str__(self) -> String:
+    def __str__(self) -> String:
         var nleaf = len(self.leaves)
         var ncont = len(self.containers)
         var nlist = len(self.lists)
@@ -71,13 +71,13 @@ struct YangList(Movable, Stringable):
 
 
 @fieldwise_init
-struct YangModule(Movable, Stringable):
+struct YangModule(Movable):
     ## Minimal YANG module representation for JSON/YANG parsing.
     var name: String
     var namespace: String
     var prefix: String
     var top_level_containers: List[Arc[YangContainer]]
 
-    fn __str__(self) -> String:
+    def __str__(self) -> String:
         return "YangModule(" + self.name + ", namespace=" + self.namespace + ", prefix=" + self.prefix + ", containers=" + String(len(self.top_level_containers)) + ")"
 
