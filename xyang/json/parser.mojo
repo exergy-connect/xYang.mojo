@@ -2,6 +2,7 @@
 
 from emberjson import parse, Value
 from std.memory import ArcPointer
+from xyang.xpath import parse_xpath, Expr
 from xyang.ast import (
     YangModule,
     YangContainer,
@@ -9,6 +10,7 @@ from xyang.ast import (
     YangChoice,
     YangLeaf,
     YangType,
+    YangMust,
 )
 
 comptime Arc = ArcPointer
@@ -81,13 +83,57 @@ def _is_required(prop_key: String, container_prop: Value) -> Bool:
     return False
 
 
+def _parse_yang_must_list(ref xy: Value) -> List[Arc[YangMust]]:
+    """Extract a list of YangMust constraints from an x-yang object."""
+    var must_list = List[Arc[YangMust]]()
+    if "must" not in xy.object() or not xy.object()["must"].is_array():
+        return must_list^
+
+    ref marr = xy.object()["must"].array()
+    for i in range(len(marr)):
+        if not marr[i].is_object():
+            continue
+        ref mobj = marr[i].object()
+        var expr = ""
+        var errmsg = ""
+        var desc = ""
+        if "must" in mobj and mobj["must"].is_string():
+            expr = mobj["must"].string()
+        if "error-message" in mobj and mobj["error-message"].is_string():
+            errmsg = mobj["error-message"].string()
+        if "description" in mobj and mobj["description"].is_string():
+            desc = mobj["description"].string()
+
+        # Parse the must expression via the XPath parser when possible; store AST in YangMust (it owns and frees).
+        # If parsing fails (e.g. unsupported syntax like ('a','b')), xpath_ast is empty.
+        var ptr = Expr.ExprPointer()
+        try:
+            ptr = parse_xpath(expr)
+        except:
+            pass
+        must_list.append(Arc[YangMust](
+            YangMust(
+                expression = expr,
+                error_message = errmsg,
+                description = desc,
+                xpath_ast = ptr,
+            ),
+        ))
+    return must_list^
+
+
 def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) -> YangLeaf:
     """Parse a leaf definition from a JSON Schema property."""
     var type_name = _leaf_type_name_from_prop(prop)
+    var must_list = List[Arc[YangMust]]()
+    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
+        ref xy = prop.object()["x-yang"]
+        must_list = _parse_yang_must_list(xy)
     return YangLeaf(
         name = name,
         type = YangType(name = type_name),
         mandatory = mandatory,
+        must = must_list^,
     )
 
 

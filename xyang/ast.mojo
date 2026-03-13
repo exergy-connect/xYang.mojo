@@ -2,6 +2,7 @@
 
 from std.memory import ArcPointer
 from emberjson import JsonDeserializable
+from xyang.xpath import Expr
 
 comptime Arc = ArcPointer
 
@@ -15,14 +16,46 @@ struct YangType(Movable, JsonDeserializable):
 
 
 @fieldwise_init
+struct YangMust(Movable):
+    ## Represents a YANG `must` expression attached to a leaf.
+    ## - expression: raw XPath string from the schema (x-yang.must[].must)
+    ## - xpath_ast: parsed XPath AST root; empty when parse failed. YangMust owns and frees it.
+    var expression: String
+    var error_message: String
+    var description: String
+    var xpath_ast: Expr.ExprPointer
+
+    fn __del__(deinit self):
+        if self.xpath_ast:
+            try:
+                self.xpath_ast[].free_tree()
+                self.xpath_ast.destroy_pointee()
+                self.xpath_ast.free()
+            except:
+                pass
+
+
+@fieldwise_init
 struct YangLeaf(Movable, JsonDeserializable):
     var name: String
     var type: YangType
     var mandatory: Bool
+    ## Zero or more must expressions (parsed from x-yang.must[]).
+    var must: List[Arc[YangMust]]
 
     def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
-        return "YangLeaf(" + self.name + ", type=" + String(self.type) + ", mandatory=" + m + ")"
+        return (
+            "YangLeaf("
+            + self.name
+            + ", type="
+            + String(self.type)
+            + ", mandatory="
+            + m
+            + ", must="
+            + String(len(self.must))
+            + ")"
+        )
 
 
 @fieldwise_init

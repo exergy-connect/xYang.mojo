@@ -1,8 +1,13 @@
 ---
-description: Mojo AST and ownership patterns for xYang.mojo
+description: Mojo coding patterns
 globs: **/*.mojo
-alwaysApply: false
+alwaysApply: true
 ---
+
+# Build command
+```
+pixi run mojo -I. build <file>.mojo
+```
 
 # Mojo AST & Ownership Patterns
 

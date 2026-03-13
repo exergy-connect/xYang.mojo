@@ -1,0 +1,39 @@
+---
+description: Mojo enum-like pattern (comptime constants + Copyable struct)
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo “enum” pattern
+
+Mojo has no dedicated `enum` type. Use a **Movable struct** with **comptime constants** and a shared **value** field.
+
+## Pattern
+
+1. **Comptime type alias**: `comptime Type = UInt8` (or another integer type).
+2. **Comptime constants**: one per variant, `comptime NAME: Self.Type = value` (0, 1, 2, …).
+3. **Instance fields**: at least `var value: Self.Type`
+4. **Struct**: `Movable`, and use `@fieldwise_init` if you want convenient construction.
+
+## Example (token type)
+
+```mojo
+@fieldwise_init
+struct Token(Movable):
+
+    comptime Type = UInt8
+
+    comptime IDENTIFIER: Self.Type    = 0
+    comptime NUMBER: Self.Type        = 1
+    comptime STRING: Self.Type        = 2
+    # ... etc 
+
+    var value: Self.Type
+
+    def __str__(self) -> String:
+        return f"Token(value='{self.value}')"
+```
+
+- **Use**: `Token(value=Token.NUMBER)`; compare with `tok.type == Token.EOF`.
+- **Do**: keep variant names in one place; use `Self.Type` for the constant value type so it stays consistent.
+- **Don’t**: use stringly-typed “enums”; use this comptime-constant + `value` field pattern so comparisons and storage are cheap and clear.
