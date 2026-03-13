@@ -4,6 +4,7 @@ from std.collections import List
 from std.collections.string import Codepoint
 from std.memory import ArcPointer
 from xyang.xpath.token import Token
+from sys.intrinsics import likely, unlikely
 
 comptime Arc = ArcPointer
 
@@ -43,8 +44,7 @@ struct XPathTokenizer(Movable):
     ## Return the next token and advance. Parser calls this repeatedly (incremental).
     ## Tokens are span-based (start, length, line); use .text(expression) or token_text() for lexeme.
     def next_token(mut self) -> Token:
-        _skip_whitespace(self)
-        if _at_end(self):
+        if unlikely(_skip_whitespace(self)):
             return Token(type=Token.EOF, start=self.pos, length=0, line=self.line)
         return _scan_one_token(self)
 
@@ -61,9 +61,9 @@ struct XPathTokenizer(Movable):
         var tokens = List[Arc[Token]]()
         while True:
             var t = self.next_token()
-            tokens.append(Arc[Token](t^))
             if t.type == Token.EOF:
                 break
+            tokens.append(Arc[Token](t^))
         return tokens^
 
 
@@ -82,7 +82,7 @@ def _peek(ref self: XPathTokenizer) -> Codepoint:
     return Codepoint.ord(self.expression[self.pos:self.pos + 1])
 
 def _peek_next(ref self: XPathTokenizer) -> Codepoint:
-    if self.pos + 1 >= len(self.expression):
+    if unlikely(self.pos + 1 >= len(self.expression)):
         return CP_EOF
     return Codepoint.ord(self.expression[self.pos + 1:self.pos + 2])
 
@@ -94,9 +94,16 @@ def _advance(mut self: XPathTokenizer, delta: Int = 1):
         self.pos += 1
 
 
-def _skip_whitespace(mut self: XPathTokenizer):
-    while not _at_end(self) and _is_space(_peek(self)):
-        _advance(self)
+def _skip_whitespace(mut self: XPathTokenizer) -> Bool:
+    var n = len(self.expression)
+    while self.pos < n:
+        var c = Codepoint.ord(self.expression[self.pos:self.pos + 1])
+        if not _is_space(c):
+            return False
+        if c == CP_NEWLINE:
+            self.line += 1
+        self.pos += 1
+    return True
 
 
 def _scan_one_token(mut self: XPathTokenizer) -> Token:

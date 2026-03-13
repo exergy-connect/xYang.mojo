@@ -49,6 +49,9 @@ struct PathNode(ASTNode, Movable):
     var is_absolute: Bool
     var is_cacheable: Bool
 
+    def copy(self) -> PathNode:
+        return PathNode(segments=self.segments.copy(), is_absolute=self.is_absolute, is_cacheable=self.is_cacheable)
+
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("PathNode.accept not implemented")
 
@@ -75,7 +78,7 @@ struct BinaryOpNode(ASTNode, Movable):
 @fieldwise_init
 struct FunctionCallNode(ASTNode, Movable):
     var name: String
-    var args: List[ASTNodeVariant]
+    var args: List[Arc[ASTNodeVariant]]
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("FunctionCallNode.accept not implemented")

@@ -32,3 +32,34 @@ struct Token(Copyable):
         if strip_quotes and self.type == Self.STRING:
             return String(source[self.start + 1:self.start + self.length - 1])
         return String(source[self.start:self.start + self.length])
+
+    ## Return the type name string for the given type constant (e.g. "IDENTIFIER", "EOF").
+    @staticmethod
+    def type_name(type_value: Self.Type) -> String:
+        if type_value == Self.IDENTIFIER:
+            return "IDENTIFIER"
+        if type_value == Self.NUMBER:
+            return "NUMBER"
+        if type_value == Self.STRING:
+            return "STRING"
+        if type_value == Self.OPERATOR:
+            return "OPERATOR"
+        if type_value == Self.PAREN_OPEN:
+            return "PAREN_OPEN"
+        if type_value == Self.PAREN_CLOSE:
+            return "PAREN_CLOSE"
+        if type_value == Self.BRACKET_OPEN:
+            return "BRACKET_OPEN"
+        if type_value == Self.BRACKET_CLOSE:
+            return "BRACKET_CLOSE"
+        if type_value == Self.DOT:
+            return "DOT"
+        if type_value == Self.DOTDOT:
+            return "DOTDOT"
+        if type_value == Self.SLASH:
+            return "SLASH"
+        if type_value == Self.COMMA:
+            return "COMMA"
+        if type_value == Self.EOF:
+            return "EOF"
+        return "UNKNOWN"
