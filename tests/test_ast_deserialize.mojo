@@ -1,3 +1,9 @@
+## Reflection sanity test: verify that emberjson.deserialize[T] correctly
+## materializes the YANG AST structs when the input JSON is a hand-crafted,
+## minimal example that EXACTLY matches the struct shapes (including `$schema`
+## and `$id`). This does NOT test the full JSON Schema meta-model; that still
+## uses the manual Value-based parser in xyang/json/parser.mojo.
+
 from std.testing import assert_equal, assert_true, TestSuite
 from std.memory import ArcPointer
 from emberjson import deserialize, JsonDeserializable
