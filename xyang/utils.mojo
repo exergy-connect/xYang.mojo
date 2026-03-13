@@ -26,8 +26,9 @@ def _print_container(container: YangContainer, indent: String):
     for i in range(len(container.leaves)):
         ref leaf = container.leaves[i][]
         print(inner + "leaf " + leaf.name + " : " + leaf.type.name + (" (mandatory)" if leaf.mandatory else ""))
-    for c in container.containers:
-        _print_container(c[], inner)
+    if len(container.containers) > 0:
+        for c in container.containers:
+            _print_container(c[], inner)
     for i in range(len(container.lists)):
         _print_list(container.lists[i][], inner)
     for i in range(len(container.choices)):

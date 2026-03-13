@@ -47,6 +47,8 @@ struct YangList(Movable, JsonDeserializable):
 
 @fieldwise_init
 struct YangModule(Movable, JsonDeserializable):
+    var `$schema`: String
+    var `$id`: String
     var name: String
     var namespace: String
     var prefix: String
@@ -57,6 +59,8 @@ def test_deserialize_yang_module():
     # Minimal JSON representing a YangModule with one container and one leaf.
     var json_str = """
     {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "urn:xframe:meta-model",
         "name": "meta-model",
         "namespace": "urn:xframe:meta-model",
         "prefix": "mm",
@@ -79,14 +83,10 @@ def test_deserialize_yang_module():
     }
     """
 
-    # NOTE: This succeeds only because the JSON is a hand-crafted, minimal
-    # example that exactly matches the YangModule shape. Real meta-model
-    # files like examples/meta-model.yang.json contain extra fields such as
-    # "$schema" and "x-yang" that cannot be represented as Mojo struct fields
-    # (invalid identifiers) and will cause EmberJson reflection to crash with
-    # "Unexpected field" errors when using deserialize[YangModule](...).
     var module = deserialize[YangModule](json_str)
 
+    assert_equal(module.`$schema`, "https://json-schema.org/draft/2020-12/schema")
+    assert_equal(module.`$id`, "urn:xframe:meta-model")
     assert_equal(module.name, "meta-model")
     assert_equal(module.namespace, "urn:xframe:meta-model")
     assert_equal(module.prefix, "mm")

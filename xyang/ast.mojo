@@ -1,12 +1,13 @@
 ## Minimal YANG AST model in Mojo for xYang.mojo.
 
 from std.memory import ArcPointer
+from emberjson import JsonDeserializable
 
 comptime Arc = ArcPointer
 
 
 @fieldwise_init
-struct YangType(Movable):
+struct YangType(Movable, JsonDeserializable):
     var name: String
 
     def __str__(self) -> String:
@@ -14,7 +15,7 @@ struct YangType(Movable):
 
 
 @fieldwise_init
-struct YangLeaf(Movable):
+struct YangLeaf(Movable, JsonDeserializable):
     var name: String
     var type: YangType
     var mandatory: Bool
@@ -25,7 +26,7 @@ struct YangLeaf(Movable):
 
 
 @fieldwise_init
-struct YangChoice(Movable):
+struct YangChoice(Movable, JsonDeserializable):
     var name: String
     var mandatory: Bool
     var case_names: List[String]
@@ -36,7 +37,7 @@ struct YangChoice(Movable):
 
 
 @fieldwise_init
-struct YangContainer(Movable):
+struct YangContainer(Movable, JsonDeserializable):
     var name: String
     var description: String
     var leaves: List[Arc[YangLeaf]]
@@ -53,7 +54,7 @@ struct YangContainer(Movable):
 
 
 @fieldwise_init
-struct YangList(Movable):
+struct YangList(Movable, JsonDeserializable):
     var name: String
     var key: String
     var description: String
@@ -71,7 +72,7 @@ struct YangList(Movable):
 
 
 @fieldwise_init
-struct YangModule(Movable):
+struct YangModule(Movable, JsonDeserializable):
     ## Minimal YANG module representation for JSON/YANG parsing.
     var name: String
     var namespace: String

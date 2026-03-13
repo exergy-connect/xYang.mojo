@@ -1,0 +1,64 @@
+---
+description: Mojo AST and ownership patterns for xYang.mojo
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo AST & Ownership Patterns
+
+## 1. Lists of shared pointers (`ArcPointer`)
+
+When you need shared, heap-allocated AST nodes in lists, use `ArcPointer` (aliased as `Arc`) rather than trying to store raw `Movable` nodes directly in `List`.
+
+```mojo
+from std.memory import ArcPointer
+
+comptime Arc = ArcPointer
+
+@fieldwise_init
+struct YangContainer(Movable):
+    var name: String
+    var description: String
+    var leaves: List[Arc[YangLeaf]]
+    var containers: List[Arc[YangContainer]]
+```
+
+- **Do**: store `Arc[T]` in `List[...]` for shared ownership.
+- **Don't**: store `OwnedPointer[T]` or raw `Movable` types directly in `List` when they must be shared.
+
+## 2. `Movable` AST types with pointer indirection
+
+AST node structs (`YangType`, `YangLeaf`, `YangContainer`, `YangModule`, etc.) should:
+
+- Conform to `Movable` (not `Copyable`) to avoid accidental copying of large graphs.
+- Use `Arc[...]` in list fields to satisfy `List`'s `Copyable` element constraint indirectly via the pointer type.
+
+```mojo
+@fieldwise_init
+struct YangModule(Movable):
+    var name: String
+    var namespace: String
+    var prefix: String
+    var top_level_containers: List[Arc[YangContainer]]
+```
+
+## 3. Parser construction of `Arc`-wrapped nodes
+
+When building AST nodes in parsers:
+
+- Construct the concrete `Movable` node.
+- Immediately wrap it in `Arc[...]` before appending to `List`.
+
+```mojo
+var yc = YangContainer(
+    name = name,
+    description = desc,
+    leaves = List[Arc[YangLeaf]](),
+    containers = List[Arc[YangContainer]](),
+)
+
+containers.append(Arc[YangContainer](yc^))
+```
+
+This keeps parsing code consistent and prevents `List` / `Copyable` trait errors.
+
