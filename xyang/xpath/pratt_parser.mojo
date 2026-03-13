@@ -1,6 +1,6 @@
 from std.collections import List
 from std.memory import ArcPointer, UnsafePointer, alloc
-from xyang.xpath.tokens import Token
+from xyang.xpath.token import Token
 from xyang.xpath.tokenizer import XPathTokenizer
 
 comptime Arc = ArcPointer

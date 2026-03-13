@@ -3,7 +3,7 @@
 from std.collections import List
 from std.collections.string import Codepoint
 from std.memory import ArcPointer
-from xyang.xpath.tokens import Token
+from xyang.xpath.token import Token
 
 comptime Arc = ArcPointer
 
