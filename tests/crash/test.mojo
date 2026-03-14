@@ -8,21 +8,21 @@ from xyang.xpath.evaluator import XPathNode, EvalContext, XPathEvaluator
 
 comptime Arc = ArcPointer
 
-
-def _free_expr(ptr: Expr.ExprPointer):
-    ptr[].free_tree()
-    ptr.destroy_pointee()
-    ptr.free()
-
-
 def test_eval_string():
     var ex = "'hello'"
     # var ptr = parse_xpath(ex)
-    var ptr = Expr.name(Token(type=Token.STRING, start=0, length=5, line=1))
+    # var ptr = Expr.name(Token(type=Token.STRING, start=0, length=5, line=1))
+    # STRING token: start=0, length=7 for "'hello'"
+    var tok = Token(type=Token.STRING, start=0, length=7, line=1)
+    var ptr = Expr.string(tok)
     var root = XPathNode("/")
     var root_arc = Arc[XPathNode](root^)
     var ctx = EvalContext(root_arc, ex, "")
     var ev = XPathEvaluator()
+
+    #
+    # THIS CRASHES
+    #
     var result = ev.eval(ptr, ctx, root_arc)
     # _free_expr(ptr)
     assert_true(result.isa[String]())
