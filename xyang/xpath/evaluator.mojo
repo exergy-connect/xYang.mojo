@@ -50,13 +50,16 @@ comptime EvalResult = EvalResultVariant
 
 
 struct EvalContext:
-    """Fixed for one expression evaluation: root node and source expression (for Token.text). Current node is passed to eval_accept."""
+    """Fixed for one expression evaluation: root node and source expression (for Token.text). Current node is passed to eval_accept.
+    When validating a leaf, set current_leaf_value to the leaf's string value so '.' evaluates to it."""
     var root: Arc[XPathNode]
     var expression: String
+    var current_leaf_value: String
 
-    fn __init__(out self, root: Arc[XPathNode], expression: String = ""):
+    fn __init__(out self, root: Arc[XPathNode], expression: String = "", current_leaf_value: String = ""):
         self.root = root
         self.expression = expression
+        self.current_leaf_value = current_leaf_value
 
 
 # -----------------------------
@@ -195,7 +198,7 @@ struct XPathEvaluator(ExprEvalVisitor):
     ) -> EvalResult:
         var v = node.value.text(ctx.expression)
         try:
-            return EvalResult(Float64(Int(v)))
+            return EvalResult(Float64(atol(v)))
         except:
             return EvalResult(Float64(0.0))
 
@@ -209,6 +212,8 @@ struct XPathEvaluator(ExprEvalVisitor):
     ) -> EvalResult:
         var text = node.value.text(ctx.expression)
         if text == ".":
+            if len(ctx.current_leaf_value) > 0:
+                return EvalResult(ctx.current_leaf_value)
             var single = List[Arc[XPathNode]]()
             single.append(current.copy())
             return EvalResult(single^)
@@ -376,7 +381,17 @@ struct XPathEvaluator(ExprEvalVisitor):
             return EvalResult(1.0)
         if name == "last":
             return EvalResult(1.0)
+        if name == "string-length":
+            if len(node.args) == 1:
+                var a = eval_accept(self, node.args[0][], ctx, current)
+                return EvalResult(Float64(len(_result_to_string(_first_value(a)))))
+            return EvalResult(0.0)
         return EvalResult(0.0)
+
+
+def eval_result_to_bool(result: EvalResult) -> Bool:
+    """YANG boolean coercion of an EvalResult. Use after eval for must/when."""
+    return _yang_bool(result)
 
 
 def _compare_eq(left: EvalResult, right: EvalResult) -> Bool:

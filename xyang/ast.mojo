@@ -19,11 +19,13 @@ struct YangType(Movable, JsonDeserializable):
 struct YangMust(Movable):
     ## Represents a YANG `must` expression attached to a leaf.
     ## - expression: raw XPath string from the schema (x-yang.must[].must)
-    ## - xpath_ast: parsed XPath AST root; empty when parse failed. YangMust owns and frees it.
+    ## - xpath_ast: parsed XPath AST root when parsed=True; do not dereference when parsed=False.
+    ## - parsed: True when parse_xpath succeeded; validator only evaluates when parsed.
     var expression: String
     var error_message: String
     var description: String
     var xpath_ast: Expr.ExprPointer
+    var parsed: Bool
 
     fn __del__(deinit self):
         if self.xpath_ast:
@@ -31,8 +33,8 @@ struct YangMust(Movable):
                 self.xpath_ast[].free_tree()
                 self.xpath_ast.destroy_pointee()
                 self.xpath_ast.free()
-            except:
-                pass
+            except e:
+                print("[YangMust.__del__] error freeing xpath_ast: ", String(e))
 
 
 @fieldwise_init

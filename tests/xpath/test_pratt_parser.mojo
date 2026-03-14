@@ -98,10 +98,10 @@ def test_parse_binary_plus():
     assert_equal(_val(ptr[], ex), "+")
     assert_true(ptr[].left)
     assert_true(ptr[].right)
-    assert_equal(ptr[].left[].kind, Expr.NUMBER)
-    assert_equal(_val(ptr[].left[], ex), "1")
-    assert_equal(ptr[].right[].kind, Expr.NUMBER)
-    assert_equal(_val(ptr[].right[], ex), "2")
+    assert_equal(ptr[].left.value()[].kind, Expr.NUMBER)
+    assert_equal(_val(ptr[].left.value()[], ex), "1")
+    assert_equal(ptr[].right.value()[].kind, Expr.NUMBER)
+    assert_equal(_val(ptr[].right.value()[], ex), "2")
     _free_expr(ptr)
 
 
@@ -110,8 +110,8 @@ def test_parse_binary_and():
     var ptr = parse_xpath(ex)
     assert_equal(ptr[].kind, Expr.BINARY)
     assert_equal(_val(ptr[], ex), "and")
-    assert_equal(_val(ptr[].left[], ex), "a")
-    assert_equal(_val(ptr[].right[], ex), "b")
+    assert_equal(_val(ptr[].left.value()[], ex), "a")
+    assert_equal(_val(ptr[].right.value()[], ex), "b")
     _free_expr(ptr)
 
 
@@ -137,11 +137,11 @@ def test_parse_binary_precedence_plus_times():
     var ptr = parse_xpath(ex)
     assert_equal(ptr[].kind, Expr.BINARY)
     assert_equal(_val(ptr[], ex), "+")
-    assert_equal(_val(ptr[].left[], ex), "3")
-    assert_equal(ptr[].right[].kind, Expr.BINARY)
-    assert_equal(_val(ptr[].right[], ex), "*")
-    assert_equal(_val(ptr[].right[].left[], ex), "4")
-    assert_equal(_val(ptr[].right[].right[], ex), "5")
+    assert_equal(_val(ptr[].left.value()[], ex), "3")
+    assert_equal(ptr[].right.value()[].kind, Expr.BINARY)
+    assert_equal(_val(ptr[].right.value()[], ex), "*")
+    assert_equal(_val(ptr[].right.value()[].left.value()[], ex), "4")
+    assert_equal(_val(ptr[].right.value()[].right.value()[], ex), "5")
     _free_expr(ptr)
 
 
@@ -151,9 +151,9 @@ def test_parse_binary_precedence_parens():
     var ptr = parse_xpath(ex)
     assert_equal(ptr[].kind, Expr.BINARY)
     assert_equal(_val(ptr[], ex), "*")
-    assert_equal(ptr[].left[].kind, Expr.BINARY)
-    assert_equal(_val(ptr[].left[], ex), "+")
-    assert_equal(_val(ptr[].right[], ex), "3")
+    assert_equal(ptr[].left.value()[].kind, Expr.BINARY)
+    assert_equal(_val(ptr[].left.value()[], ex), "+")
+    assert_equal(_val(ptr[].right.value()[], ex), "3")
     _free_expr(ptr)
 
 
@@ -250,8 +250,8 @@ def test_parse_step_with_predicate_expression():
     ref pred = ptr[].steps[0][].args[0][]
     assert_equal(pred.kind, Expr.BINARY)
     assert_equal(_val(pred, ex), "=")
-    assert_equal(_val(pred.left[], ex), ".")
-    assert_equal(pred.right[].value.text(ex, strip_quotes=True), "x")
+    assert_equal(_val(pred.left.value()[], ex), ".")
+    assert_equal(pred.right.value()[].value.text(ex, strip_quotes=True), "x")
     _free_expr(ptr)
 
 
@@ -279,9 +279,9 @@ def test_parse_path_position_predicate():
     ref pred = ptr[].steps[0][].args[0][]
     assert_equal(pred.kind, Expr.BINARY)
     assert_equal(_val(pred, ex), "=")
-    assert_equal(pred.left[].kind, Expr.CALL)
-    assert_equal(_val(pred.left[], ex), "position")
-    assert_equal(_val(pred.right[], ex), "1")
+    assert_equal(pred.left.value()[].kind, Expr.CALL)
+    assert_equal(_val(pred.left.value()[], ex), "position")
+    assert_equal(_val(pred.right.value()[], ex), "1")
     _free_expr(ptr)
 
 
@@ -302,8 +302,8 @@ def test_parse_xpath_string_binary():
     var ptr = parse_xpath(ex)
     assert_equal(ptr[].kind, Expr.BINARY)
     assert_equal(_val(ptr[], ex), "+")
-    assert_equal(_val(ptr[].left[], ex), "1")
-    assert_equal(_val(ptr[].right[], ex), "2")
+    assert_equal(_val(ptr[].left.value()[], ex), "1")
+    assert_equal(_val(ptr[].right.value()[], ex), "2")
     _free_expr(ptr)
 
 

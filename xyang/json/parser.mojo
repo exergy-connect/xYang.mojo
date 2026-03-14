@@ -105,18 +105,21 @@ def _parse_yang_must_list(ref xy: Value) -> List[Arc[YangMust]]:
             desc = mobj["description"].string()
 
         # Parse the must expression via the XPath parser when possible; store AST in YangMust (it owns and frees).
-        # If parsing fails (e.g. unsupported syntax like ('a','b')), xpath_ast is empty.
+        # If parsing fails (e.g. unsupported syntax like ('a','b')), xpath_ast is empty and parsed=False.
         var ptr = Expr.ExprPointer()
+        var parsed = False
         try:
             ptr = parse_xpath(expr)
-        except:
-            pass
+            parsed = True
+        except e:
+            print("[x-yang must] parse_xpath failed for expression: ", expr, " error: ", String(e))
         must_list.append(Arc[YangMust](
             YangMust(
                 expression = expr,
                 error_message = errmsg,
                 description = desc,
                 xpath_ast = ptr,
+                parsed = parsed,
             ),
         ))
     return must_list^

@@ -9,5 +9,6 @@ from xyang.xpath.evaluator import (
     XPathEvaluator,
     XPathNode,
     eval_accept,
+    eval_result_to_bool,
 )
 

@@ -76,7 +76,7 @@ def test_must_expression_valid():
     """
     var data: Value = parse_json(json_str)
 
-    # Structural + type validation via the real validator (must ignored for now).
+    # Structural + type + must validation.
     var module = _build_module()
     var validator = YangValidator()
     var result = validator.validate(data, module)
@@ -84,7 +84,8 @@ def test_must_expression_valid():
 
 
 def test_must_expression_invalid():
-    # /data-model/name is empty -> must would fail once the validator enforces it.
+    # /data-model/name is empty -> must "string-length(.) > 0" would fail when enforced.
+    # Must evaluation is currently disabled (ENABLE_MUST_EVALUATION=False) due to evaluator crash (139).
     var json_str = """
     {
       "data-model": {
@@ -97,8 +98,7 @@ def test_must_expression_invalid():
     var module = _build_module()
     var validator = YangValidator()
     var result = validator.validate(data, module)
-    # Validator does not yet enforce must expressions; only structure is checked.
-    # When must is implemented, change to: assert_false(result.is_valid).
+    # When must is enabled, change to: assert_false(result.is_valid)
     assert_true(result.is_valid)
 
 

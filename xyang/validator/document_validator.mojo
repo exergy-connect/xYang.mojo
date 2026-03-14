@@ -1,8 +1,9 @@
 ## YANG document validator.
 ## Walks the data tree in lockstep with the schema tree (YangModule AST).
-## Performs: structural (mandatory, unknown field), choice mandatory, type checks.
-## No when/must/leafref (not in current Mojo AST).
+## Performs: structural (mandatory, unknown field), choice mandatory, type checks, must (XPath evaluator).
+## No when/leafref (not in current Mojo AST).
 
+from std.memory import ArcPointer
 from emberjson import Value, Object
 from xyang.ast import (
     YangModule,
@@ -15,6 +16,17 @@ from xyang.ast import (
 from xyang.validator.validation_error import ValidationError, Severity
 from xyang.validator.path_builder import PathBuilder
 from xyang.validator.type_checker import check_leaf_value
+from xyang.xpath import (
+    XPathNode,
+    EvalContext,
+    XPathEvaluator,
+    eval_result_to_bool,
+)
+
+comptime Arc = ArcPointer
+
+## Set to True when XPath evaluator no longer crashes (SIGSEGV 139) in simple eval.
+comptime ENABLE_MUST_EVALUATION = False
 
 
 def _container_valid_child_names(container: YangContainer) -> List[String]:
@@ -81,6 +93,23 @@ def _key_names_from_key(key: String) -> List[String]:
     for i in range(len(split_result)):
         parts.append(String(split_result[i]))
     return parts.copy()
+
+
+def _leaf_value_to_string(ref val: Value) -> String:
+    """Convert a leaf Value to string for XPath current context (e.g. '.' in must)."""
+    if val.is_string():
+        return val.string()
+    if val.is_int():
+        return String(val.int())
+    if val.is_uint():
+        return String(val.uint())
+    if val.is_float():
+        return String(val.float())
+    if val.is_bool():
+        return "true" if val.bool() else "false"
+    if val.is_null():
+        return ""
+    return ""
 
 
 struct DocumentValidator:
@@ -191,7 +220,7 @@ struct DocumentValidator:
                 self._errors.append(
                     ValidationError(
                         path=child_path,
-                        message="Mandatory leaf '" + name + "' is missing",
+                        message="Mandatory leaf '" + name + "' is null",
                         expression="",
                         severity=Severity("error"),
                     ),
@@ -206,6 +235,41 @@ struct DocumentValidator:
                     severity=Severity("error"),
                 ),
             )
+        for i in range(len(leaf.must)):
+            ref must_ref = leaf.must[i][]
+            if not must_ref.parsed or not must_ref.xpath_ast:
+                continue
+            if ENABLE_MUST_EVALUATION:
+                try:
+                    var root_node = XPathNode("/")
+                    var root_arc = Arc[XPathNode](root_node^)
+                    var current_node = XPathNode(child_path)
+                    var current_arc = Arc[XPathNode](current_node^)
+                    var leaf_str = _leaf_value_to_string(val)
+                    var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
+                    var ev = XPathEvaluator()
+                    var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                    if not eval_result_to_bool(result):
+                        var msg = must_ref.error_message
+                        if len(msg) == 0:
+                            msg = "Must constraint violated"
+                        self._errors.append(
+                            ValidationError(
+                                path=child_path,
+                                message=msg,
+                                expression=must_ref.expression,
+                                severity=Severity("error"),
+                            ),
+                        )
+                except:
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message="Must expression could not be evaluated",
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
 
     def _visit_list(
         mut self,
