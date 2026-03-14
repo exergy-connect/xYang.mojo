@@ -9,17 +9,18 @@ struct Token(Copyable):
 
     comptime IDENTIFIER: Self.Type    = 0
     comptime NUMBER: Self.Type        = 1
-    comptime STRING: Self.Type        = 2
-    comptime OPERATOR: Self.Type      = 3
-    comptime PAREN_OPEN: Self.Type    = 4
-    comptime PAREN_CLOSE: Self.Type   = 5
-    comptime BRACKET_OPEN: Self.Type  = 6
-    comptime BRACKET_CLOSE: Self.Type = 7
-    comptime DOT: Self.Type           = 8
-    comptime DOTDOT: Self.Type        = 9
-    comptime SLASH: Self.Type         = 10
-    comptime COMMA: Self.Type         = 11
-    comptime EOF: Self.Type           = 12
+    comptime FLOAT_NUMBER: Self.Type  = 2
+    comptime STRING: Self.Type        = 3
+    comptime OPERATOR: Self.Type      = 4
+    comptime PAREN_OPEN: Self.Type    = 5
+    comptime PAREN_CLOSE: Self.Type   = 6
+    comptime BRACKET_OPEN: Self.Type  = 7
+    comptime BRACKET_CLOSE: Self.Type = 8
+    comptime DOT: Self.Type           = 9
+    comptime DOTDOT: Self.Type        = 10
+    comptime SLASH: Self.Type         = 11
+    comptime COMMA: Self.Type         = 12
+    comptime EOF: Self.Type           = 13
 
     var type: Self.Type
     var start: Int
@@ -40,6 +41,8 @@ struct Token(Copyable):
             return "IDENTIFIER"
         if type_value == Self.NUMBER:
             return "NUMBER"
+        if type_value == Self.FLOAT_NUMBER:
+            return "FLOAT_NUMBER"
         if type_value == Self.STRING:
             return "STRING"
         if type_value == Self.OPERATOR:

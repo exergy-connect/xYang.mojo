@@ -203,15 +203,18 @@ def _is_identifier_part(c: Codepoint) -> Bool:
 def _read_number(mut self: XPathTokenizer) -> Token:
     var start = self.pos
     var line_start = self.line
+    var is_float = False
     while not _at_end(self) and _is_digit(_peek(self)):
         _advance(self)
     if not _at_end(self) and _peek(self) == CP_DOT:
         var next = _peek_next(self)
         if _is_digit(next):
             _advance(self)
+            is_float = True
             while not _at_end(self) and _is_digit(_peek(self)):
                 _advance(self)
-    return Token(type=Token.NUMBER, start=start, length=self.pos - start, line=line_start)
+    var tok_type = Token.FLOAT_NUMBER if is_float else Token.NUMBER
+    return Token(type=tok_type, start=start, length=self.pos - start, line=line_start)
 
 
 def _read_string(mut self: XPathTokenizer) -> Token:

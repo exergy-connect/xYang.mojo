@@ -260,7 +260,7 @@ struct Parser:
 
         var tok = self.advance()
 
-        if tok.type == Token.NUMBER:
+        if tok.type == Token.NUMBER or tok.type == Token.FLOAT_NUMBER:
             return Expr.number(self._lexeme(tok))
 
         if tok.type == Token.STRING:

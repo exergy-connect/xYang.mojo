@@ -3,8 +3,9 @@
 
 from std.collections import List
 from std.collections.optional import Optional
-from std.memory import ArcPointer
+from std.memory import ArcPointer, UnsafePointer, alloc
 from std.utils import Variant
+from xyang.xpath.token import Token
 
 comptime Arc = ArcPointer
 
@@ -31,16 +32,16 @@ trait ASTNode:
 
 @fieldwise_init
 struct LiteralNode(ASTNode, Movable):
-    var value: String
+    var value: Token
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
-        return ASTNodeVariant(value = LiteralNode(value = self.value))
+        return ASTNodeVariant(value = self.value.copy())
 
 
 @fieldwise_init
 struct PathSegment(Movable):
-    var step: String
-    var predicate: Optional[String]
+    var step: Token
+    var predicate: Optional[ASTNodeVariant]
 
 
 @fieldwise_init
@@ -49,30 +50,47 @@ struct PathNode(ASTNode, Movable):
     var is_absolute: Bool
     var is_cacheable: Bool
 
-    def copy(self) -> PathNode:
-        return PathNode(segments=self.segments.copy(), is_absolute=self.is_absolute, is_cacheable=self.is_cacheable)
-
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("PathNode.accept not implemented")
 
-    def to_string(self) -> String:
+    def to_string(self, source: String) -> String:
         var prefix = "/" if self.is_absolute else ""
         var out = String(prefix)
         for i in range(len(self.segments)):
             if i > 0:
                 out += "/"
-            out += self.segments[i][].step
+            out += self.segments[i][].step.text(source)
         return out
 
 
 @fieldwise_init
 struct BinaryOpNode(ASTNode, Movable):
-    var left: ASTNodeVariant
+    comptime ASTNodePointer = UnsafePointer[ASTNodeVariant, MutExternalOrigin]
+    var left: Self.ASTNodePointer
     var operator: String
-    var right: ASTNodeVariant
+    var right: Self.ASTNodePointer
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("BinaryOpNode.accept not implemented")
+
+
+def alloc_node(var n: ASTNodeVariant) -> UnsafePointer[ASTNodeVariant, MutExternalOrigin]:
+    var p = alloc[ASTNodeVariant](1)
+    p.init_pointee_move(n^)
+    return p
+
+## Recursively free heap memory owned by the tree. Only BinaryOpNode owns alloc'd
+## left/right; LiteralNode, PathNode, FunctionCallNode do not. Call when done with
+## an AST returned from the parser (e.g. parse()).
+def free_tree(mut node: ASTNodeVariant):
+    if node.isa[BinaryOpNode]():
+        ref bin = node[BinaryOpNode]
+        free_tree(bin.left[])
+        bin.left.destroy_pointee()
+        bin.left.free()
+        free_tree(bin.right[])
+        bin.right.destroy_pointee()
+        bin.right.free()
 
 
 @fieldwise_init

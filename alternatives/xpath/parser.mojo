@@ -8,6 +8,7 @@ from xyang.xpath.tokenizer import XPathTokenizer
 from std.memory import ArcPointer
 from alternatives.xpath.ast import (
     ASTNodeVariant,
+    alloc_node,
     BinaryOpNode,
     FunctionCallNode,
     LiteralNode,
@@ -19,7 +20,7 @@ comptime Arc = ArcPointer
 
 @fieldwise_init
 struct _PathResult(Movable):
-    var path: PathNode
+    var path: Arc[PathNode]  # Wrapped in Arc makes moving easier
     var cacheable: Bool
 
 
@@ -53,7 +54,7 @@ struct XPathParser:
             raise Error("Unexpected token in expression: " + self._token_text(t))
         return node
 
-    def parse_path(mut self) -> PathNode:
+    def parse_path(mut self) -> Arc[PathNode]:
         """Parse the expression strictly as a path and return a PathNode."""
         if self.current_token.type == Token.EOF:
             raise Error("Empty path expression")
@@ -62,14 +63,16 @@ struct XPathParser:
         if is_absolute:
             self._expect(Token.SLASH)
         var res = self._parse_path(is_absolute=is_absolute, first_step=None, allow_predicate=False)
-        var path = res.path.copy()
-        if self._current().type != Token.EOF:
+        if self._currentType() != Token.EOF:
             t = self._current()
             raise Error("Unexpected token after path: " + self._token_text(t))
-        return path^
+        return res.path
 
     def _current(self) -> Token:
         return self.current_token.copy()
+
+    def _currentType(self) -> Token.Type:
+        return self.current_token.type
 
     ## Lexeme for token t (span-based tokens use expression).
     def _token_text(self, t: Token) -> String:
@@ -115,7 +118,9 @@ struct XPathParser:
             var right: ASTNodeVariant
             var rc: Bool
             (right, rc) = self._parse_logical_and()
-            left = BinaryOpNode(left = left, operator = "or", right = right)
+            var left_ptr = alloc_node(left)
+            var right_ptr = alloc_node(right)
+            left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "or", right = right_ptr))
             cacheable = cacheable and rc
         return (left, cacheable)
 
@@ -128,7 +133,9 @@ struct XPathParser:
             var right: ASTNodeVariant
             var rc: Bool
             (right, rc) = self._parse_comparison()
-            left = BinaryOpNode(left = left, operator = "and", right = right)
+            var left_ptr = alloc_node(left)
+            var right_ptr = alloc_node(right)
+            left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "and", right = right_ptr))
             cacheable = cacheable and rc
         return (left, cacheable)
 
@@ -151,7 +158,9 @@ struct XPathParser:
             var right: ASTNodeVariant
             var rc: Bool
             (right, rc) = self._parse_additive()
-            return (BinaryOpNode(left = left, operator = op, right = right), cacheable and rc)
+            var left_ptr = alloc_node(left)
+            var right_ptr = alloc_node(right)
+            return (ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = op, right = right_ptr)), cacheable and rc)
         return (left, cacheable)
 
     def _parse_additive(mut self) -> Tuple[ASTNodeVariant, Bool]:
@@ -167,7 +176,9 @@ struct XPathParser:
                 var right: ASTNodeVariant
                 var rc: Bool
                 (right, rc) = self._parse_multiplicative()
-                left = BinaryOpNode(left = left, operator = op, right = right)
+                var left_ptr = alloc_node(left)
+                var right_ptr = alloc_node(right)
+                left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = op, right = right_ptr))
                 cacheable = cacheable and rc
             else:
                 break
@@ -182,15 +193,20 @@ struct XPathParser:
             if t.type == Token.SLASH:
                 self._expect(Token.SLASH)
                 var rres = self._parse_path(is_absolute=False, first_step=None)
-                var right_path = rres.path.copy()
-                left = BinaryOpNode(left = left, operator = "/", right = ASTNodeVariant(right_path^))
-                cacheable = cacheable and rres.cacheable
+                var rc = rres.cacheable
+                var right_var = rres.path
+                var left_ptr = alloc_node(left)
+                var right_ptr = alloc_node(right_var)
+                left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "/", right = right_ptr))
+                cacheable = cacheable and rc
             elif t.type == Token.OPERATOR and self._token_text(t) == "*":
-                _ = self._advance()
+                self._advance()
                 var right: ASTNodeVariant
                 var rc2: Bool
                 (right, rc2) = self._parse_unary()
-                left = BinaryOpNode(left = left, operator = "*", right = right)
+                var left_ptr = alloc_node(left)
+                var right_ptr = alloc_node(right)
+                left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "*", right = right_ptr))
                 cacheable = cacheable and rc2
             else:
                 break
@@ -203,7 +219,10 @@ struct XPathParser:
             var operand: ASTNodeVariant
             var _c: Bool
             (operand, _c) = self._parse_unary()
-            return (BinaryOpNode(left = ASTNodeVariant(LiteralNode(value = "0")), operator = "-", right = operand), False)
+            var zero = ASTNodeVariant(LiteralNode(value = Token(type=Token.NUMBER, start=0, length=1, line=1)))
+            var left_ptr = alloc_node(zero)
+            var right_ptr = alloc_node(operand)
+            return (ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "-", right = right_ptr)), False)
         if t.type == Token.OPERATOR and self._token_text(t) == "+":
             self._advance()
             return self._parse_unary()
@@ -222,45 +241,40 @@ struct XPathParser:
     def _parse_primary(mut self) -> Tuple[ASTNodeVariant, Bool]:
         var t = self._current()
         if t.type == Token.STRING:
-            var value = self._token_string_value(t)
-            self._advance()
-            return (LiteralNode(value = value), False)
-        if t.type == Token.NUMBER:
-            var raw = self._token_text(t)
-            self._advance()
-            var is_int = True
-            if raw.find(".") >= 0:
-                is_int = False
-            # very simple number handling; rely on caller to interpret
-            return (LiteralNode(value = raw), is_int)
+            var tok = self._consume(Token.STRING)
+            return (LiteralNode(value = tok^), False)
+        if t.type == Token.NUMBER or t.type == Token.FLOAT_NUMBER:
+            var tok = self._consume(t.type)
+            var is_int = t.type == Token.NUMBER
+            return (LiteralNode(value = tok.copy()), is_int)
         if t.type == Token.IDENTIFIER:
             if self._is_keyword("true"):
-                _ = self._advance()
-                return (LiteralNode(value = "true"), False)
+                var tok = self._current().copy()
+                self._advance()
+                return (LiteralNode(value = tok.copy()), False)
             if self._is_keyword("false"):
-                _ = self._advance()
-                return (LiteralNode(value = "false"), False)
+                var tok = self._current().copy()
+                self._advance()
+                return (LiteralNode(value = tok.copy()), False)
             # function call vs path (peek next token)
             if self._peek_next() == Token.PAREN_OPEN:
                 return self._parse_function_call()
             var pres = self._parse_path(is_absolute=False, first_step=None)
-            var p = pres.path.copy()
-            return (ASTNodeVariant(p^), pres.cacheable)
+            return (pres.path, pres.cacheable)
         if t.type == Token.DOT:
+            var dot_tok = self._current()
             self._advance()
-            var pres = self._parse_path(is_absolute=False, first_step=".")
-            var p = pres.path.copy()
-            return (ASTNodeVariant(p^), pres.cacheable)
+            var pres = self._parse_path(is_absolute=False, first_step=Optional(dot_tok.copy()))
+            return (pres.path, pres.cacheable)
         if t.type == Token.DOTDOT:
+            var dotdot_tok = self._current()
             self._advance()
-            var pres = self._parse_path(is_absolute=False, first_step="..")
-            var p = pres.path.copy()
-            return (ASTNodeVariant(p^), pres.cacheable)
+            var pres = self._parse_path(is_absolute=False, first_step=Optional(dotdot_tok.copy()))
+            return (pres.path, pres.cacheable)
         if t.type == Token.SLASH:
             self._advance()
             var pres = self._parse_path(is_absolute=True, first_step=None)
-            var p = pres.path.copy()
-            return (ASTNodeVariant(p^), pres.cacheable)
+            return (pres.path, pres.cacheable)
         if t.type == Token.PAREN_OPEN:
             self._advance()
             var expr: ASTNodeVariant
@@ -275,51 +289,47 @@ struct XPathParser:
         self._advance()
         self._expect(Token.PAREN_OPEN)
         var args = List[Arc[ASTNodeVariant]]()
-        if self._current().type != Token.PAREN_CLOSE:
+        while self._currentType() != Token.PAREN_CLOSE:
             var node: ASTNodeVariant
             var _c: Bool
             (node, _c) = self._parse_expression()
             args.append(Arc[ASTNodeVariant](node^))
-            while self._current().type == Token.COMMA:
-                self._advance()
-                var node2: ASTNodeVariant
-                var _c2: Bool
-                (node2, _c2) = self._parse_expression()
-                args.append(Arc[ASTNodeVariant](node2^))
+            if self._currentType() == Token.PAREN_CLOSE:
+                break
+            self._expect(Token.COMMA)
         self._expect(Token.PAREN_CLOSE)
-        return (FunctionCallNode(name = name, args = args^), False)
+        return (ASTNodeVariant(FunctionCallNode(name = name, args = args^)), False)
 
     def _parse_path(
         mut self,
         is_absolute: Bool,
-        first_step: Optional[String] = None,
+        first_step: Optional[Token] = None,
         allow_predicate: Bool = True,
     ) -> _PathResult:
         var segments = List[Arc[PathSegment]]()
         var cacheable = is_absolute
-        var no_predicate = Optional[String]()
+        var no_predicate = Optional[ASTNodeVariant]()
 
         if first_step:
-            var seg = PathSegment(step = first_step.value(), predicate = no_predicate)
+            var seg = PathSegment(step = first_step.value().copy(), predicate = no_predicate)
             segments.append(Arc[PathSegment](seg^))
-            if self._current().type == Token.SLASH:
+            if self._currentType() == Token.SLASH:
                 self._advance()
             else:
                 var p = PathNode(segments = segments^, is_absolute = is_absolute, is_cacheable = cacheable)
-                return _PathResult(p^, cacheable)
+                return _PathResult(Arc[PathNode](p^), cacheable)
 
         while True:
-            var t = self._current()
-            if t.type != Token.DOT and t.type != Token.DOTDOT and t.type != Token.IDENTIFIER:
+            var tt = self._currentType()
+            if tt != Token.DOT and tt != Token.DOTDOT and tt != Token.IDENTIFIER:
                 break
-            var consumed = self._consume(t.type)
-            var step = self._token_text(consumed)
-            var seg = PathSegment(step = step, predicate = no_predicate)
+            var consumed = self._consume(tt)
+            var seg = PathSegment(step = consumed.copy(), predicate = no_predicate)
             segments.append(Arc[PathSegment](seg^))
-            if self._current().type != Token.SLASH:
+            if self._currentType() != Token.SLASH:
                 break
             self._advance()
 
         var p = PathNode(segments = segments^, is_absolute = is_absolute, is_cacheable = cacheable)
-        return _PathResult(p^, cacheable)
+        return _PathResult(Arc[PathNode](p^), cacheable)
 
