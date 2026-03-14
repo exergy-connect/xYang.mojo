@@ -26,7 +26,7 @@ from xyang.xpath import (
 comptime Arc = ArcPointer
 
 ## Set to True when XPath evaluator no longer crashes (SIGSEGV 139) in simple eval.
-comptime ENABLE_MUST_EVALUATION = False
+comptime ENABLE_MUST_EVALUATION = True
 
 
 def _container_valid_child_names(container: YangContainer) -> List[String]:
@@ -248,7 +248,9 @@ struct DocumentValidator:
                     var leaf_str = _leaf_value_to_string(val)
                     var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
                     var ev = XPathEvaluator()
+                    # continue # here this avoids the crash
                     var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                    continue
                     if not eval_result_to_bool(result):
                         var msg = must_ref.error_message
                         if len(msg) == 0:

@@ -14,18 +14,10 @@ comptime Arc = ArcPointer
 # Evaluation value and context
 # -----------------------------
 
+@fieldwise_init
 struct XPathNode(Movable):
     """Minimal node for path evaluation: path string only. Parent derived via _parent_path() for '..'. Extensible with data/schema later."""
     var path: String
-
-    fn __init__(out self, path: String):
-        self.path = path
-
-    fn __copyinit__(out self, other: Self):
-        self.path = other.path.copy()
-
-    fn __moveinit__(out self, deinit other: Self):
-        self.path = other.path ^
 
 
 def _parent_path(path: String) -> String:
@@ -49,17 +41,13 @@ comptime EvalResultVariant = Variant[Float64, String, Bool, List[Arc[XPathNode]]
 comptime EvalResult = EvalResultVariant
 
 
+@fieldwise_init
 struct EvalContext:
     """Fixed for one expression evaluation: root node and source expression (for Token.text). Current node is passed to eval_accept.
     When validating a leaf, set current_leaf_value to the leaf's string value so '.' evaluates to it."""
     var root: Arc[XPathNode]
     var expression: String
     var current_leaf_value: String
-
-    fn __init__(out self, root: Arc[XPathNode], expression: String = "", current_leaf_value: String = ""):
-        self.root = root
-        self.expression = expression
-        self.current_leaf_value = current_leaf_value
 
 
 # -----------------------------

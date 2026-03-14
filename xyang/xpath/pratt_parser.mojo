@@ -2,6 +2,7 @@ from std.collections import List
 from std.memory import ArcPointer, UnsafePointer, alloc
 from xyang.xpath.token import Token
 from xyang.xpath.tokenizer import XPathTokenizer
+from sys.intrinsics import likely, unlikely
 
 comptime Arc = ArcPointer
 
@@ -297,34 +298,47 @@ struct Parser:
     # Token Cursor (parser asks for next token via advance)
     # -----------------------------
 
-    def current(self) -> Token:
-        return self._current.copy()
-
-    def peek(self, offset: Int = 1) -> Token:
-        if offset == 0:
-            return self._current.copy()
-        return self._current.copy()
+    def current(self) -> ref[self._current] Token:
+        return self._current
 
     def advance(mut self) -> Token:
-        var out = self._current.copy()
-        self._current = self._tokenizer.next_token()
-        return out.copy()
+        var next = self._tokenizer.next_token()  # Need to do this first!
+        var move_current = self._current^
+        self._current = next^
+        return move_current^
 
     def skip(mut self):
         self._current = self._tokenizer.next_token()
 
     def match(mut self, t: Token.Type) -> Bool:
-        if self._current.type == t:
+        if self.current().type == t:
             self.skip()
             return True
         return False
 
     def expect(mut self, t: Token.Type) -> Token:
-        var out = self._current.copy()
-        if out.type != t:
-            raise Error("Unexpected token type " + String(out.type) + " (expected " + String(t) + ")")
+        var curType = self.current().type
+        if curType != t:
+            raise Error("Unexpected token type " + Token.type_name(curType) + 
+                        " (expected " + Token.type_name(t) + ")")
+        return self.advance()
+    
+    # def expect[ReturnToken: Bool = False](
+    #     mut self, 
+    #     t: Token.Type
+    # ) -> Token if ReturnToken else None:
+    #     ref cur = self.current()
+    #     if unlikely(cur.type != t):
+    #         raise Error("Unexpected token type " + Token.type_name(cur.type) + " (expected " + Token.type_name(t) + ")")
+    #     self.skip()
+    #     if ReturnToken:
+    #         return cur.copy()
+
+    def skip_or_raise(mut self, t: Token.Type) -> None:
+        """Skip current token if its type is t; otherwise raise. Does not return the token."""
+        if self._current.type != t:
+            raise Error("Unexpected token type " + Token.type_name(self._current.type) + " (expected " + Token.type_name(t) + ")")
         self.skip()
-        return out.copy()
 
     ## Return the lexeme string for token t (span-based tokens reference expression via tokenizer).
     def _lexeme(ref self, t: Token) -> String:
@@ -344,7 +358,7 @@ struct Parser:
 
         while True:
 
-            var tok = self.current()
+            ref tok = self.current()
 
             var bp = self.infix_binding_power(tok)
             var lbp = bp[0]
@@ -383,7 +397,7 @@ struct Parser:
 
         if tok.type == Token.PAREN_OPEN:
             var expr = self.parse_expression()
-            _ = self.expect(Token.PAREN_CLOSE)
+            self.skip_or_raise(Token.PAREN_CLOSE)
             return expr
 
         if tok.type == Token.SLASH:
@@ -450,7 +464,7 @@ struct Parser:
 
     def parse_function_call(mut self, name_tok: Token) -> Expr.ExprPointer:
 
-        _ = self.expect(Token.PAREN_OPEN)
+        self.skip_or_raise(Token.PAREN_OPEN)
 
         var args = List[Arc[Expr]]()
 
@@ -465,7 +479,7 @@ struct Parser:
                 if not self.match(Token.COMMA):
                     break
 
-        _ = self.expect(Token.PAREN_CLOSE)
+        self.skip_or_raise(Token.PAREN_CLOSE)
 
         return Expr.call(name_tok.copy(), args^)
 
@@ -487,7 +501,7 @@ struct Parser:
             if self.current().type != Token.SLASH:
                 break
 
-            _ = self.advance()
+            self.skip()
 
         return Expr.path(steps^)
 
@@ -516,11 +530,11 @@ struct Parser:
 
     def parse_predicate(mut self) -> Expr.ExprPointer:
 
-        _ = self.expect(Token.BRACKET_OPEN)
+        self.skip_or_raise(Token.BRACKET_OPEN)
 
         var expr = self.parse_expression()
 
-        _ = self.expect(Token.BRACKET_CLOSE)
+        self.skip_or_raise(Token.BRACKET_CLOSE)
 
         return expr
 
