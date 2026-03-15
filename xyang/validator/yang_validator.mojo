@@ -17,8 +17,8 @@ struct ValidationResult:
 struct YangValidator:
     var _doc_validator: DocumentValidator
 
-    def __init__(out self):
-        self._doc_validator = DocumentValidator()
+    def __init__(out self, use_alt_xpath: Bool = False):
+        self._doc_validator = DocumentValidator(use_alt_xpath=use_alt_xpath)
 
     def validate(mut self, data: Value, module: YangModule) -> ValidationResult:
         var doc_errors = self._doc_validator.validate(module, data)

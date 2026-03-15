@@ -22,6 +22,13 @@ from xyang.xpath import (
     XPathEvaluator,
     eval_result_to_bool,
 )
+from alternatives.xpath.parser import XPathParser
+from alternatives.xpath.evaluator import (
+    AltXPathEvaluator,
+    EvalContext as AltEvalContext,
+    XPathNode as AltXPathNode,
+    eval_result_to_bool as alt_eval_result_to_bool,
+)
 
 comptime Arc = ArcPointer
 
@@ -114,9 +121,11 @@ def _leaf_value_to_string(ref val: Value) -> String:
 
 struct DocumentValidator:
     var _errors: List[ValidationError]
+    var use_alt_xpath: Bool
 
-    def __init__(out self):
+    def __init__(out self, use_alt_xpath: Bool = False):
         self._errors = List[ValidationError]()
+        self.use_alt_xpath = use_alt_xpath
 
     def validate(mut self, module: YangModule, data: Value) -> List[ValidationError]:
         """Validate root data (object) against the module. Returns list of errors."""
@@ -237,21 +246,19 @@ struct DocumentValidator:
             )
         for i in range(len(leaf.must)):
             ref must_ref = leaf.must[i][]
-            if not must_ref.parsed or not must_ref.xpath_ast:
-                continue
-            if ENABLE_MUST_EVALUATION:
-                try:
-                    var root_node = XPathNode("/")
-                    var root_arc = Arc[XPathNode](root_node^)
-                    var current_node = XPathNode(child_path)
-                    var current_arc = Arc[XPathNode](current_node^)
-                    var leaf_str = _leaf_value_to_string(val)
-                    var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
-                    var ev = XPathEvaluator()
-                    # continue # here this avoids the crash
-                    var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+            if self.use_alt_xpath:
+                if not ENABLE_MUST_EVALUATION:
                     continue
-                    if not eval_result_to_bool(result):
+                try:
+                    var parser = XPathParser(must_ref.expression)
+                    var ast = parser.parse()
+                    var root_alt = Arc[AltXPathNode](AltXPathNode("/"))
+                    var current_alt = Arc[AltXPathNode](AltXPathNode(child_path))
+                    var leaf_str = _leaf_value_to_string(val)
+                    var ctx_alt = AltEvalContext(root=root_alt, expression=must_ref.expression, current_leaf_value=leaf_str)
+                    var ev_alt = AltXPathEvaluator()
+                    var result = ev_alt.eval(ast, ctx_alt, current_alt)
+                    if not alt_eval_result_to_bool(result):
                         var msg = must_ref.error_message
                         if len(msg) == 0:
                             msg = "Must constraint violated"
@@ -263,7 +270,7 @@ struct DocumentValidator:
                                 severity=Severity("error"),
                             ),
                         )
-                except:
+                except e:
                     self._errors.append(
                         ValidationError(
                             path=child_path,
@@ -272,6 +279,40 @@ struct DocumentValidator:
                             severity=Severity("error"),
                         ),
                     )
+            else:
+                if not must_ref.parsed or not must_ref.xpath_ast:
+                    continue
+                if ENABLE_MUST_EVALUATION:
+                    try:
+                        var root_node = XPathNode("/")
+                        var root_arc = Arc[XPathNode](root_node^)
+                        var current_node = XPathNode(child_path)
+                        var current_arc = Arc[XPathNode](current_node^)
+                        var leaf_str = _leaf_value_to_string(val)
+                        var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
+                        var ev = XPathEvaluator()
+                        var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                        if not eval_result_to_bool(result):
+                            var msg = must_ref.error_message
+                            if len(msg) == 0:
+                                msg = "Must constraint violated"
+                            self._errors.append(
+                                ValidationError(
+                                    path=child_path,
+                                    message=msg,
+                                    expression=must_ref.expression,
+                                    severity=Severity("error"),
+                                ),
+                            )
+                    except:
+                        self._errors.append(
+                            ValidationError(
+                                path=child_path,
+                                message="Must expression could not be evaluated",
+                                expression=must_ref.expression,
+                                severity=Severity("error"),
+                            ),
+                        )
 
     def _visit_list(
         mut self,

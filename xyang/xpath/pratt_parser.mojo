@@ -1,5 +1,5 @@
 from std.collections import List
-from std.memory import ArcPointer, OwnedPointer, alloc
+from std.memory import ArcPointer, UnsafePointer, alloc
 from xyang.xpath.token import Token
 from xyang.xpath.tokenizer import XPathTokenizer
 from sys.intrinsics import likely, unlikely
@@ -16,7 +16,9 @@ struct Expr(Movable):
     Uses UnsafePointer per https://docs.modular.com/mojo/manual/structs/reference/.
     """
 
-    comptime ExprPointer = OwnedPointer[Self]
+    comptime _DEBUG_LOG = "/tmp/expr-pratt-debug.log"
+
+    comptime ExprPointer = UnsafePointer[Self, MutExternalOrigin]
 
     comptime Kind = UInt8
     comptime NUMBER: Self.Kind = 0
@@ -55,6 +57,16 @@ struct Expr(Movable):
         self.right = right
         self.args = args^
         self.steps = steps^
+
+    fn __del__(deinit self):
+        try:
+            with open(Self._DEBUG_LOG, "a") as f:
+                var null_p: Self.ExprPointer = Self.ExprPointer()
+                var left_s = "null" if self.left == null_p else "set"
+                var right_s = "null" if self.right == null_p else "set"
+                f.write("Expr destroyed kind=" + String(self.kind) + " left=" + left_s + " right=" + right_s + "\n")
+        except:
+            pass
 
     @staticmethod
     def number(v: Token) -> Self.ExprPointer:
