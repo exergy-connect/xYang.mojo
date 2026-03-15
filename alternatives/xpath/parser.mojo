@@ -167,12 +167,12 @@ struct XPathParser:
             (right, rc) = self._parse_additive()
 
             # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
-            var root = ASTNode(BinaryOpNode(
+            left = ASTNode(BinaryOpNode(
                 left = left,
                 operator = op_tok^,
                 right = right
             ))
-            return (ASTNode(root^), cacheable and rc)
+            return (left, cacheable and rc)
         return (left, cacheable)
 
     def _parse_additive(mut self) -> Self.ParseResult:
