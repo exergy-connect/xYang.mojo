@@ -1,5 +1,5 @@
 from std.collections import List
-from std.memory import ArcPointer, UnsafePointer, alloc
+from std.memory import ArcPointer, OwnedPointer, alloc
 from xyang.xpath.token import Token
 from xyang.xpath.tokenizer import XPathTokenizer
 from sys.intrinsics import likely, unlikely
@@ -16,7 +16,7 @@ struct Expr(Movable):
     Uses UnsafePointer per https://docs.modular.com/mojo/manual/structs/reference/.
     """
 
-    comptime ExprPointer = UnsafePointer[Self, MutExternalOrigin]
+    comptime ExprPointer = OwnedPointer[Self]
 
     comptime Kind = UInt8
     comptime NUMBER: Self.Kind = 0

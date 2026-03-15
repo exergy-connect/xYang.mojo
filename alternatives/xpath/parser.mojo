@@ -8,7 +8,6 @@ from xyang.xpath.tokenizer import XPathTokenizer
 from std.memory import ArcPointer
 from alternatives.xpath.ast import (
     ASTNodeVariant,
-    alloc_node,
     BinaryOpNode,
     FunctionCallNode,
     LiteralNode,
@@ -17,6 +16,7 @@ from alternatives.xpath.ast import (
 )
 
 comptime Arc = ArcPointer
+comptime ASTNode = Arc[ASTNodeVariant]
 
 @fieldwise_init
 struct _PathResult(Movable):
@@ -25,6 +25,8 @@ struct _PathResult(Movable):
 
 
 struct XPathParser:
+    comptime ParseResult = Tuple[ASTNode, Bool]
+
     var expression: String
     var tokenizer: XPathTokenizer
     var current_token: Token
@@ -42,34 +44,32 @@ struct XPathParser:
             self._lookahead = Optional(self.tokenizer.next_token())
         return self._lookahead.value().type
 
-    def parse(mut self) -> ASTNodeVariant:
+    def parse(mut self) -> ASTNode:
         """Parse a full XPath expression into a generic AST value."""
         if self.current_token.type == Token.EOF:
             raise Error("Empty expression")
-        var node: ASTNodeVariant
-        var _cacheable: Bool
-        (node, _cacheable) = self._parse_expression()
-        var t = self._current()
+        var (node, _) = self._parse_expression()
+        ref t = self._current()
         if t.type != Token.EOF:
             raise Error("Unexpected token in expression: " + self._token_text(t))
-        return node
+        return node^
 
     def parse_path(mut self) -> Arc[PathNode]:
         """Parse the expression strictly as a path and return a PathNode."""
         if self.current_token.type == Token.EOF:
             raise Error("Empty path expression")
-        var t = self._current()
+        ref t = self._current()
         var is_absolute = t.type == Token.SLASH
         if is_absolute:
             self._expect(Token.SLASH)
         var res = self._parse_path(is_absolute=is_absolute, first_step=None, allow_predicate=False)
         if self._currentType() != Token.EOF:
-            t = self._current()
-            raise Error("Unexpected token after path: " + self._token_text(t))
+            ref t2 = self._current()
+            raise Error("Unexpected token after path: " + self._token_text(t2))
         return res.path
 
-    def _current(self) -> Token:
-        return self.current_token.copy()
+    def _current(self) -> ref[self.current_token] Token:
+        return self.current_token
 
     def _currentType(self) -> Token.Type:
         return self.current_token.type
@@ -103,47 +103,64 @@ struct XPathParser:
             self.current_token = self.tokenizer.next_token()
 
     def _is_keyword(self, keyword: String) -> Bool:
-        var t = self._current()
+        ref t = self._current()
         return t.type == Token.IDENTIFIER and self._token_text(t).lower() == keyword.lower()
 
-    def _parse_expression(mut self) -> Tuple[ASTNodeVariant, Bool]:
+    def _parse_expression(mut self) -> Self.ParseResult:
         return self._parse_logical_or()
 
-    def _parse_logical_or(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var left: ASTNodeVariant
-        var cacheable: Bool
-        (left, cacheable) = self._parse_logical_and()
-        while self._is_keyword("or"):
-            self._advance()
-            var right: ASTNodeVariant
-            var rc: Bool
-            (right, rc) = self._parse_logical_and()
-            var left_ptr = alloc_node(left)
-            var right_ptr = alloc_node(right)
-            left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "or", right = right_ptr))
-            cacheable = cacheable and rc
-        return (left, cacheable)
-
-    def _parse_logical_and(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var left: ASTNodeVariant
+    def _parse_logical_or(mut self) -> Self.ParseResult:
+        var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_comparison()
-        while self._is_keyword("and"):
+
+        while self._is_keyword("or"):
+            var op_tok = self._current().copy()
             self._advance()
-            var right: ASTNodeVariant
+            var right: ASTNode
             var rc: Bool
             (right, rc) = self._parse_comparison()
-            var left_ptr = alloc_node(left)
-            var right_ptr = alloc_node(right)
-            left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "and", right = right_ptr))
+
+            # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
+            var root = ASTNode(BinaryOpNode(
+                left = left,
+                operator = op_tok^,
+                right = right
+            ))
+            left = ASTNode(root^)  # now left is Arc[ASTNodeVariant]
+
             cacheable = cacheable and rc
+
+        return (left, cacheable)
+    def _parse_logical_and(mut self) -> Self.ParseResult:
+        var left: ASTNode
+        var cacheable: Bool
+        (left, cacheable) = self._parse_comparison()
+
+        while self._is_keyword("and"):
+            var op_tok = self._current().copy()
+            self._advance()
+            var right: ASTNode
+            var rc: Bool
+            (right, rc) = self._parse_comparison()
+
+            # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
+            var root = ASTNode(BinaryOpNode(
+                left = left,
+                operator = op_tok^,
+                right = right
+            ))
+            left = ASTNode(root^)  # now left is Arc[ASTNodeVariant]
+
+            cacheable = cacheable and rc
+
         return (left, cacheable)
 
-    def _parse_comparison(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var left: ASTNodeVariant
+    def _parse_comparison(mut self) -> Self.ParseResult:
+        var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_additive()
-        var t = self._current()
+        ref t = self._current()
         var op_str = self._token_text(t)
         if t.type == Token.OPERATOR and (
             op_str == "="
@@ -153,152 +170,180 @@ struct XPathParser:
             or op_str == "<="
             or op_str == ">="
         ):
+            var op_tok = self._current().copy()
             self._advance()
-            var op = op_str
-            var right: ASTNodeVariant
+            var right: ASTNode
             var rc: Bool
             (right, rc) = self._parse_additive()
-            var left_ptr = alloc_node(left)
-            var right_ptr = alloc_node(right)
-            return (ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = op, right = right_ptr)), cacheable and rc)
+
+            # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
+            var root = ASTNode(BinaryOpNode(
+                left = left,
+                operator = op_tok^,
+                right = right
+            ))
+            return (ASTNode(root^), cacheable and rc)
         return (left, cacheable)
 
-    def _parse_additive(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var left: ASTNodeVariant
+    def _parse_additive(mut self) -> Self.ParseResult:
+        var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_multiplicative()
         while True:
-            var t = self._current()
+            ref t = self._current()
             var op_str = self._token_text(t)
             if t.type == Token.OPERATOR and (op_str == "+" or op_str == "-"):
+                var op_tok = self._current().copy()
                 self._advance()
-                var op = op_str
-                var right: ASTNodeVariant
+                var right: ASTNode
                 var rc: Bool
                 (right, rc) = self._parse_multiplicative()
-                var left_ptr = alloc_node(left)
-                var right_ptr = alloc_node(right)
-                left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = op, right = right_ptr))
+
+                # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
+                var root = ASTNode(BinaryOpNode(
+                    left = left,
+                    operator = op_tok^,
+                    right = right
+                ))
+                left = ASTNode(root^)
                 cacheable = cacheable and rc
             else:
                 break
         return (left, cacheable)
 
-    def _parse_multiplicative(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var left: ASTNodeVariant
+    def _parse_multiplicative(mut self) -> Self.ParseResult:
+        var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_unary()
         while True:
-            var t = self._current()
+            ref t = self._current()
             if t.type == Token.SLASH:
+                var op_tok = self._current().copy()
                 self._expect(Token.SLASH)
                 var rres = self._parse_path(is_absolute=False, first_step=None)
                 var rc = rres.cacheable
-                var right_var = rres.path
-                var left_ptr = alloc_node(left)
-                var right_ptr = alloc_node(right_var)
-                left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "/", right = right_ptr))
+                ref path_ref = rres.path[]
+                var path_copy = PathNode(segments = path_ref.segments.copy(), is_absolute = path_ref.is_absolute, is_cacheable = path_ref.is_cacheable)
+                var right = ASTNode(ASTNodeVariant(path_copy^))
+                var root = ASTNode(BinaryOpNode(
+                    left = left,
+                    operator = op_tok^,
+                    right = right
+                ))
+                left = ASTNode(root^)
                 cacheable = cacheable and rc
             elif t.type == Token.OPERATOR and self._token_text(t) == "*":
+                var op_tok = self._current().copy()
                 self._advance()
-                var right: ASTNodeVariant
+                var right: ASTNode
                 var rc2: Bool
                 (right, rc2) = self._parse_unary()
-                var left_ptr = alloc_node(left)
-                var right_ptr = alloc_node(right)
-                left = ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "*", right = right_ptr))
+                var root = ASTNode(BinaryOpNode(
+                    left = left,
+                    operator = op_tok^,
+                    right = right
+                ))
+                left = ASTNode(root^)
                 cacheable = cacheable and rc2
             else:
                 break
         return (left, cacheable)
 
-    def _parse_unary(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var t = self._current()
+    def _parse_unary(mut self) -> Self.ParseResult:
+        ref t = self._current()
         if t.type == Token.OPERATOR and self._token_text(t) == "-":
+            var op_tok = self._current().copy()
             self._advance()
-            var operand: ASTNodeVariant
+            var operand: ASTNode
             var _c: Bool
             (operand, _c) = self._parse_unary()
-            var zero = ASTNodeVariant(LiteralNode(value = Token(type=Token.NUMBER, start=0, length=1, line=1)))
-            var left_ptr = alloc_node(zero)
-            var right_ptr = alloc_node(operand)
-            return (ASTNodeVariant(BinaryOpNode(left = left_ptr, operator = "-", right = right_ptr)), False)
+            var zero = ASTNode(ASTNodeVariant(LiteralNode(value = Token(type=Token.NUMBER, start=0, length=1, line=1))))
+            var root = ASTNode(BinaryOpNode(
+                left = zero,
+                operator = op_tok^,
+                right = operand
+            ))
+            return (ASTNode(root^), False)
         if t.type == Token.OPERATOR and self._token_text(t) == "+":
             self._advance()
             return self._parse_unary()
         if self._is_keyword("not"):
+            var op_tok = self._current().copy()
             self._advance()
             self._expect(Token.PAREN_OPEN)
-            var operand2: ASTNodeVariant
+            var operand2: ASTNode
             var _c2: Bool
             (operand2, _c2) = self._parse_expression()
             self._expect(Token.PAREN_CLOSE)
             var not_args = List[Arc[ASTNodeVariant]]()
-            not_args.append(Arc[ASTNodeVariant](operand2^))
-            return (FunctionCallNode(name = "not", args = not_args^), False)
+            not_args.append(operand2)
+            var v = ASTNodeVariant(FunctionCallNode(name = op_tok^, args = not_args^))
+            return (ASTNode(v^), False)
         return self._parse_primary()
 
-    def _parse_primary(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var t = self._current()
+    def _parse_primary(mut self) -> Self.ParseResult:
+        ref t = self._current()
+
+        def _literal_node(value: Token, cacheable: Bool) -> Self.ParseResult:
+            return ( ASTNode(ASTNodeVariant(LiteralNode(value = value.copy()))), cacheable )
+
         if t.type == Token.STRING:
             var tok = self._consume(Token.STRING)
-            return (LiteralNode(value = tok^), False)
+            return _literal_node(tok^, True )
         if t.type == Token.NUMBER or t.type == Token.FLOAT_NUMBER:
             var tok = self._consume(t.type)
-            var is_int = t.type == Token.NUMBER
-            return (LiteralNode(value = tok.copy()), is_int)
+            return _literal_node(tok^, True)
         if t.type == Token.IDENTIFIER:
             if self._is_keyword("true"):
                 var tok = self._current().copy()
                 self._advance()
-                return (LiteralNode(value = tok.copy()), False)
+                return _literal_node(tok^, True)
             if self._is_keyword("false"):
                 var tok = self._current().copy()
                 self._advance()
-                return (LiteralNode(value = tok.copy()), False)
+                return _literal_node(tok^, True)
             # function call vs path (peek next token)
             if self._peek_next() == Token.PAREN_OPEN:
                 return self._parse_function_call()
             var pres = self._parse_path(is_absolute=False, first_step=None)
-            return (pres.path, pres.cacheable)
-        if t.type == Token.DOT:
-            var dot_tok = self._current()
+            ref path_ref = pres.path[]
+            var path_copy = PathNode(segments = path_ref.segments.copy(), is_absolute = path_ref.is_absolute, is_cacheable = path_ref.is_cacheable)
+            return ( ASTNode(ASTNodeVariant(path_copy^)), pres.cacheable )
+        if t.type == Token.DOT or t.type == Token.DOTDOT or t.type == Token.SLASH:
+            var is_absolute = t.type == Token.SLASH
+            var first_step: Optional[Token] = None
+            if t.type == Token.DOT or t.type == Token.DOTDOT:
+                first_step = Optional(self._current().copy())
             self._advance()
-            var pres = self._parse_path(is_absolute=False, first_step=Optional(dot_tok.copy()))
-            return (pres.path, pres.cacheable)
-        if t.type == Token.DOTDOT:
-            var dotdot_tok = self._current()
-            self._advance()
-            var pres = self._parse_path(is_absolute=False, first_step=Optional(dotdot_tok.copy()))
-            return (pres.path, pres.cacheable)
-        if t.type == Token.SLASH:
-            self._advance()
-            var pres = self._parse_path(is_absolute=True, first_step=None)
-            return (pres.path, pres.cacheable)
+            var pres = self._parse_path(is_absolute=is_absolute, first_step=first_step)
+            ref path_ref = pres.path[]
+            var path_copy = PathNode(segments = path_ref.segments.copy(), is_absolute = path_ref.is_absolute, is_cacheable = path_ref.is_cacheable)
+            return ( ASTNode(ASTNodeVariant(path_copy^)), pres.cacheable )
         if t.type == Token.PAREN_OPEN:
             self._advance()
-            var expr: ASTNodeVariant
+            var expr: ASTNode
             var cacheable: Bool
             (expr, cacheable) = self._parse_expression()
             self._expect(Token.PAREN_CLOSE)
             return (expr, cacheable)
         raise Error("Unexpected token in primary: " + self._token_text(t))
 
-    def _parse_function_call(mut self) -> Tuple[ASTNodeVariant, Bool]:
-        var name = self._token_text(self._current())
+    def _parse_function_call(mut self) -> Self.ParseResult:
+        var name = self._current().copy()
         self._advance()
         self._expect(Token.PAREN_OPEN)
         var args = List[Arc[ASTNodeVariant]]()
         while self._currentType() != Token.PAREN_CLOSE:
-            var node: ASTNodeVariant
+            var node: ASTNode
             var _c: Bool
             (node, _c) = self._parse_expression()
-            args.append(Arc[ASTNodeVariant](node^))
+            args.append(node)
             if self._currentType() == Token.PAREN_CLOSE:
                 break
             self._expect(Token.COMMA)
         self._expect(Token.PAREN_CLOSE)
-        return (ASTNodeVariant(FunctionCallNode(name = name, args = args^)), False)
+        var v = ASTNodeVariant(FunctionCallNode(name = name^, args = args^))
+        return ( ASTNode(v^), False )
 
     def _parse_path(
         mut self,
@@ -308,7 +353,7 @@ struct XPathParser:
     ) -> _PathResult:
         var segments = List[Arc[PathSegment]]()
         var cacheable = is_absolute
-        var no_predicate = Optional[ASTNodeVariant]()
+        var no_predicate = Optional[Arc[ASTNodeVariant]]()
 
         if first_step:
             var seg = PathSegment(step = first_step.value().copy(), predicate = no_predicate)

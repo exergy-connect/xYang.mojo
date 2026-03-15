@@ -23,6 +23,8 @@ struct Node:
 ## Discriminated union of all concrete AST node types.
 comptime ASTNodeVariant = Variant[LiteralNode, PathNode, BinaryOpNode, FunctionCallNode]
 
+comptime ASTNodePointer = ArcPointer[ASTNodeVariant]
+
 
 ## Visitor for walking the AST. Implement this to evaluate or transform the tree.
 ## Use accept(visitor, node, ctx) to dispatch; inside visit_* recurse by calling accept(visitor, child, ctx).
@@ -86,7 +88,7 @@ struct LiteralNode(Movable):
 @fieldwise_init
 struct PathSegment(Movable):
     var step: Token
-    var predicate: Optional[ASTNodeVariant]
+    var predicate: Optional[ASTNodePointer]
 
 
 @fieldwise_init
@@ -110,38 +112,18 @@ struct PathNode(Movable):
 
 @fieldwise_init
 struct BinaryOpNode(Movable):
-    comptime ASTNodePointer = UnsafePointer[ASTNodeVariant, MutExternalOrigin]
-    var left: Self.ASTNodePointer
-    var operator: String
-    var right: Self.ASTNodePointer
+    var left: ASTNodePointer
+    var operator: Token
+    var right: ASTNodePointer
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("BinaryOpNode.accept not implemented")
 
 
-def alloc_node(var n: ASTNodeVariant) -> UnsafePointer[ASTNodeVariant, MutExternalOrigin]:
-    var p = alloc[ASTNodeVariant](1)
-    p.init_pointee_move(n^)
-    return p
-
-## Recursively free heap memory owned by the tree. Only BinaryOpNode owns alloc'd
-## left/right; LiteralNode, PathNode, FunctionCallNode do not. Call when done with
-## an AST returned from the parser (e.g. parse()).
-def free_tree(mut node: ASTNodeVariant):
-    if node.isa[BinaryOpNode]():
-        ref bin = node[BinaryOpNode]
-        free_tree(bin.left[])
-        bin.left.destroy_pointee()
-        bin.left.free()
-        free_tree(bin.right[])
-        bin.right.destroy_pointee()
-        bin.right.free()
-
-
 @fieldwise_init
 struct FunctionCallNode(Movable):
-    var name: String
-    var args: List[Arc[ASTNodeVariant]]
+    var name: Token
+    var args: List[ASTNodePointer]
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("FunctionCallNode.accept not implemented")
