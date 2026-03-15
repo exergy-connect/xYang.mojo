@@ -18,12 +18,6 @@ from alternatives.xpath.ast import (
 comptime Arc = ArcPointer
 comptime ASTNode = Arc[ASTNodeVariant]
 
-@fieldwise_init
-struct _PathResult(Movable):
-    var path: Arc[PathNode]  # Wrapped in Arc makes moving easier
-    var cacheable: Bool
-
-
 struct XPathParser:
     comptime ParseResult = Tuple[ASTNode, Bool]
 
@@ -62,11 +56,11 @@ struct XPathParser:
         var is_absolute = t.type == Token.SLASH
         if is_absolute:
             self._expect(Token.SLASH)
-        var res = self._parse_path(is_absolute=is_absolute, first_step=None, allow_predicate=False)
+        ( path, _c ) = self._parse_path(is_absolute=is_absolute, first_step=None, allow_predicate=False)
         if self._currentType() != Token.EOF:
             ref t2 = self._current()
             raise Error("Unexpected token after path: " + self._token_text(t2))
-        return res.path
+        return path
 
     def _current(self) -> ref[self.current_token] Token:
         return self.current_token
@@ -122,13 +116,11 @@ struct XPathParser:
             (right, rc) = self._parse_comparison()
 
             # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
-            var root = ASTNode(BinaryOpNode(
+            left = ASTNode(BinaryOpNode(
                 left = left,
                 operator = op_tok^,
                 right = right
             ))
-            left = ASTNode(root^)  # now left is Arc[ASTNodeVariant]
-
             cacheable = cacheable and rc
 
         return (left, cacheable)
@@ -145,13 +137,11 @@ struct XPathParser:
             (right, rc) = self._parse_comparison()
 
             # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
-            var root = ASTNode(BinaryOpNode(
+            left = ASTNode(BinaryOpNode(
                 left = left,
                 operator = op_tok^,
                 right = right
             ))
-            left = ASTNode(root^)  # now left is Arc[ASTNodeVariant]
-
             cacheable = cacheable and rc
 
         return (left, cacheable)
@@ -200,12 +190,11 @@ struct XPathParser:
                 (right, rc) = self._parse_multiplicative()
 
                 # Wrap the BinaryOpNode in ASTNodeVariant, then in Arc
-                var root = ASTNode(BinaryOpNode(
+                left = ASTNode(BinaryOpNode(
                     left = left,
                     operator = op_tok^,
                     right = right
                 ))
-                left = ASTNode(root^)
                 cacheable = cacheable and rc
             else:
                 break
@@ -220,17 +209,12 @@ struct XPathParser:
             if t.type == Token.SLASH:
                 var op_tok = self._current().copy()
                 self._expect(Token.SLASH)
-                var rres = self._parse_path(is_absolute=False, first_step=None)
-                var rc = rres.cacheable
-                ref path_ref = rres.path[]
-                var path_copy = PathNode(segments = path_ref.segments.copy(), is_absolute = path_ref.is_absolute, is_cacheable = path_ref.is_cacheable)
-                var right = ASTNode(ASTNodeVariant(path_copy^))
-                var root = ASTNode(BinaryOpNode(
+                (path, rc) = self._parse_path(is_absolute=False, first_step=None)
+                left = ASTNode(BinaryOpNode(
                     left = left,
                     operator = op_tok^,
-                    right = right
+                    right = ASTNode(path^)
                 ))
-                left = ASTNode(root^)
                 cacheable = cacheable and rc
             elif t.type == Token.OPERATOR and self._token_text(t) == "*":
                 var op_tok = self._current().copy()
@@ -305,20 +289,16 @@ struct XPathParser:
             # function call vs path (peek next token)
             if self._peek_next() == Token.PAREN_OPEN:
                 return self._parse_function_call()
-            var pres = self._parse_path(is_absolute=False, first_step=None)
-            ref path_ref = pres.path[]
-            var path_copy = PathNode(segments = path_ref.segments.copy(), is_absolute = path_ref.is_absolute, is_cacheable = path_ref.is_cacheable)
-            return ( ASTNode(ASTNodeVariant(path_copy^)), pres.cacheable )
+            ( path, cacheable ) = self._parse_path(is_absolute=False, first_step=None)
+            return ( ASTNode(path^), cacheable )
         if t.type == Token.DOT or t.type == Token.DOTDOT or t.type == Token.SLASH:
             var is_absolute = t.type == Token.SLASH
             var first_step: Optional[Token] = None
             if t.type == Token.DOT or t.type == Token.DOTDOT:
                 first_step = Optional(self._current().copy())
             self._advance()
-            var pres = self._parse_path(is_absolute=is_absolute, first_step=first_step)
-            ref path_ref = pres.path[]
-            var path_copy = PathNode(segments = path_ref.segments.copy(), is_absolute = path_ref.is_absolute, is_cacheable = path_ref.is_cacheable)
-            return ( ASTNode(ASTNodeVariant(path_copy^)), pres.cacheable )
+            ( path, cacheable ) = self._parse_path(is_absolute=is_absolute, first_step=first_step)
+            return ( ASTNode(path^), cacheable )
         if t.type == Token.PAREN_OPEN:
             self._advance()
             var expr: ASTNode
@@ -350,7 +330,7 @@ struct XPathParser:
         is_absolute: Bool,
         first_step: Optional[Token] = None,
         allow_predicate: Bool = True,
-    ) -> _PathResult:
+    ) -> Tuple[Arc[PathNode], Bool]:
         var segments = List[Arc[PathSegment]]()
         var cacheable = is_absolute
         var no_predicate = Optional[Arc[ASTNodeVariant]]()
@@ -362,7 +342,7 @@ struct XPathParser:
                 self._advance()
             else:
                 var p = PathNode(segments = segments^, is_absolute = is_absolute, is_cacheable = cacheable)
-                return _PathResult(Arc[PathNode](p^), cacheable)
+                return (Arc[PathNode](p^), cacheable)
 
         while True:
             var tt = self._currentType()
@@ -376,5 +356,5 @@ struct XPathParser:
             self._advance()
 
         var p = PathNode(segments = segments^, is_absolute = is_absolute, is_cacheable = cacheable)
-        return _PathResult(Arc[PathNode](p^), cacheable)
+        return (Arc[PathNode](p^), cacheable)
 
