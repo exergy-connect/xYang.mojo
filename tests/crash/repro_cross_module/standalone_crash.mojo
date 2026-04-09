@@ -1,7 +1,6 @@
-## Trimmed for `tests/crash/repro_cross_module/main.mojo` while keeping cross-module SIGSEGV (exit 139).
-## Full `visit_call` body is load-bearing for SIGSEGV; a stub (`return EvalResult(0.0)`) → exit 0.
-## Do not replace with `cp xyang/xpath/evaluator.mojo` — that discards this minimization.
-## Minimal `Token` + `Expr` live here (same module as visitor) so `main` avoids extra imports.
+## Standalone SIGSEGV repro (exit 139). Only paths/types needed for `Expr.string` + load-bearing `visit_call`.
+##
+##   pixi run mojo -I tests/crash tests/crash/repro_cross_module/standalone_crash.mojo
 
 from std.collections import List
 from std.memory import ArcPointer, UnsafePointer, alloc
@@ -18,7 +17,6 @@ struct Token(Copyable):
     var type: Self.Type
     var start: Int
     var length: Int
-    var line: Int
 
     def text(self, source: String, strip_quotes: Bool = False) raises -> String:
         if strip_quotes and self.type == Self.STRING:
@@ -31,13 +29,8 @@ struct Token(Copyable):
 struct Expr(Movable):
     comptime ExprPointer = UnsafePointer[Self, MutExternalOrigin]
     comptime Kind = UInt8
-    comptime NUMBER: Self.Kind = 0
     comptime STRING: Self.Kind = 1
-    comptime NAME: Self.Kind = 2
-    comptime BINARY: Self.Kind = 3
-    comptime CALL: Self.Kind = 4
-    comptime PATH: Self.Kind = 5
-    comptime STEP: Self.Kind = 6
+    comptime CALL: Self.Kind = 2
 
     var kind: Self.Kind
     var value: Token
@@ -60,8 +53,7 @@ struct XPathNode(Movable):
     var path: String
 
 
-comptime EvalResultVariant = Variant[Float64, String, Bool, List[Arc[XPathNode]]]
-comptime EvalResult = EvalResultVariant
+comptime EvalResult = Variant[Float64, String, Bool, List[Arc[XPathNode]]]
 
 
 @fieldwise_init
@@ -70,14 +62,18 @@ struct EvalContext:
 
 
 trait ExprEvalVisitor:
-    def visit_string(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
+    def visit_string(
+        self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
+    ) raises -> EvalResult:
         return EvalResult("")
 
-    def visit_call(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
+    def visit_call(
+        self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
+    ) raises -> EvalResult:
         return EvalResult(0.0)
 
 
-def eval_accept[V: ExprEvalVisitor](
+def dispatch_expr[V: ExprEvalVisitor](
     visitor: V, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
 ) raises -> EvalResult:
     if node.kind == Expr.STRING:
@@ -90,7 +86,7 @@ def eval_accept[V: ExprEvalVisitor](
 def eval_accept[V: ExprEvalVisitor](
     visitor: V, root: Expr.ExprPointer, ctx: EvalContext, current: Arc[XPathNode]
 ) raises -> EvalResult:
-    return eval_accept(visitor, root[], ctx, current)
+    return dispatch_expr(visitor, root[], ctx, current)
 
 
 struct XPathEvaluator(ExprEvalVisitor):
@@ -114,7 +110,7 @@ struct XPathEvaluator(ExprEvalVisitor):
         var name = node.value.text(ctx.expression)
         if name == "string":
             if len(node.args) == 1:
-                var a = eval_accept(self, node.args[0][], ctx, current)
+                var a = dispatch_expr(self, node.args[0][], ctx, current)
                 var fv = a
                 if fv.isa[List[Arc[XPathNode]]]():
                     ref nodes = fv[List[Arc[XPathNode]]]
@@ -122,3 +118,12 @@ struct XPathEvaluator(ExprEvalVisitor):
                         # Crash happens here
                         fv = EvalResult(nodes[0].copy())
         return EvalResult(0.0)
+
+
+def main() raises:
+    var root = ArcPointer[XPathNode](XPathNode("/"))
+    var ex = "'hello'"
+    var tok = Token(type=Token.STRING, start=0, length=7)
+    var ptr = Expr.string(tok)
+    var ev = XPathEvaluator()
+    _ = ev.eval(ptr, root, ex)
