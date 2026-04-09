@@ -37,8 +37,10 @@ struct Token(Copyable):
 
     def text(self, source: String, strip_quotes: Bool = False) -> String:
         if strip_quotes and self.type == Self.STRING:
-            return String(source[self.start + 1:self.start + self.length - 1])
-        return String(source[self.start:self.start + self.length])
+            return String(
+                source[byte=self.start + 1 : self.start + self.length - 1]
+            )
+        return String(source[byte=self.start : self.start + self.length])
 
 # -----------------------------
 # Expr (from xyang.xpath.pratt_parser, minimal)
@@ -205,7 +207,7 @@ def _free_expr(ptr: Expr.ExprPointer):
     ptr.destroy_pointee()
     ptr.free()
 
-def test_eval_string():
+def test_eval_string() raises:
     var ex = "'hello'"
     # STRING token: start=0, length=7 for "'hello'"
     var tok = Token(type=Token.STRING, start=0, length=7, line=1)
@@ -223,5 +225,5 @@ def test_eval_string():
     assert_true(result.isa[String]())
     assert_equal(result[String], "hello")
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

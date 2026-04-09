@@ -8,7 +8,7 @@ from xyang.xpath.evaluator import XPathNode, EvalContext, XPathEvaluator
 
 comptime Arc = ArcPointer
 
-def test_eval_string():
+def test_eval_string() raises:
     var ex = "'hello'"
     # var ptr = parse_xpath(ex)
     # var ptr = Expr.name(Token(type=Token.STRING, start=0, length=5, line=1))
@@ -29,5 +29,5 @@ def test_eval_string():
     assert_equal(result[String], "hello")
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
