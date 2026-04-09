@@ -55,31 +55,31 @@ struct EvalContext:
 # -----------------------------
 
 trait ExprEvalVisitor:
-    def visit_number(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_number(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(0.0)
 
-    def visit_string(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_string(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult("")
 
-    def visit_name(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_name(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult("")
 
-    def visit_binary(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_binary(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(0.0)
 
-    def visit_call(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_call(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(0.0)
 
-    def visit_path(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_path(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(List[Arc[XPathNode]]())
 
-    def visit_step(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_step(self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(List[Arc[XPathNode]]())
 
 
 def eval_accept[V: ExprEvalVisitor](
     visitor: V, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-) -> EvalResult:
+) raises -> EvalResult:
     if node.kind == Expr.NUMBER:
         return visitor.visit_number(node, ctx, current)
     if node.kind == Expr.STRING:
@@ -99,7 +99,7 @@ def eval_accept[V: ExprEvalVisitor](
 
 def eval_accept[V: ExprEvalVisitor](
     visitor: V, root: Expr.ExprPointer, ctx: EvalContext, current: Arc[XPathNode]
-) -> EvalResult:
+) raises -> EvalResult:
     return eval_accept(visitor, root[], ctx, current)
 
 
@@ -178,12 +178,12 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def eval(
         self, expr: Expr.ExprPointer, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         return eval_accept(self, expr, ctx, current)
 
     def visit_number(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var v = node.value.text(ctx.expression)
         try:
             return EvalResult(Float64(atol(v)))
@@ -192,12 +192,12 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def visit_string(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         return EvalResult(node.value.text(ctx.expression, strip_quotes=True))
 
     def visit_name(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var text = node.value.text(ctx.expression)
         if text == ".":
             if len(ctx.current_leaf_value) > 0:
@@ -216,7 +216,7 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def visit_binary(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var op = node.value.text(ctx.expression)
         if op == "or":
             var left = eval_accept(self, node.left[], ctx, current)
@@ -252,7 +252,7 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def _eval_composition(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var left_res = eval_accept(self, node.left[], ctx, current)
         var left_nodes = _node_set_to_list(left_res)
         if not left_res.isa[List[Arc[XPathNode]]]():
@@ -268,7 +268,7 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def visit_path(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var nodes = List[Arc[XPathNode]]()
         nodes.append(ctx.root.copy())
         for i in range(len(node.steps)):
@@ -297,7 +297,7 @@ struct XPathEvaluator(ExprEvalVisitor):
         nodes: List[Arc[XPathNode]],
         ref predicate: Expr,
         ctx: EvalContext,
-    ) -> List[Arc[XPathNode]]:
+    ) raises -> List[Arc[XPathNode]]:
         var results = List[Arc[XPathNode]]()
         for i in range(len(nodes)):
             var val = eval_accept(self, predicate, ctx, nodes[i])
@@ -313,7 +313,7 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def visit_step(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var nodes = List[Arc[XPathNode]]()
         var step_name = node.value.text(ctx.expression)
         if step_name == ".":
@@ -332,7 +332,7 @@ struct XPathEvaluator(ExprEvalVisitor):
 
     def visit_call(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var name = node.value.text(ctx.expression)
         if name == "current":
             return EvalResult(current.copy())

@@ -4,7 +4,7 @@ from std.collections import List
 from std.collections.string import Codepoint
 from std.memory import ArcPointer
 from xyang.xpath.token import Token
-from sys.intrinsics import likely, unlikely
+from std.sys.intrinsics import likely, unlikely
 
 comptime Arc = ArcPointer
 
@@ -43,21 +43,21 @@ struct XPathTokenizer(Movable):
 
     ## Return the next token and advance. Parser calls this repeatedly (incremental).
     ## Tokens are span-based (start, length, line); use .text(expression) or token_text() for lexeme.
-    def next_token(mut self) -> Token:
+    def next_token(mut self) raises -> Token:
         if unlikely(_skip_whitespace(self)):
             return Token(type=Token.EOF, start=self.pos, length=0, line=self.line)
         return _scan_one_token(self)
 
     ## Return the lexeme string for token t from the expression this tokenizer was built from.
-    def token_text(ref self, t: Token) -> String:
+    def token_text(ref self, t: Token) raises -> String:
         return t.text(self.expression)
 
     ## Return the lexeme with quotes stripped; for STRING tokens gives the inner value.
-    def token_unquoted_string_text(ref self, t: Token) -> String:
+    def token_unquoted_string_text(ref self, t: Token) raises -> String:
         return t.text(self.expression, strip_quotes=True)
 
     ## Tokenize the whole expression into a list (e.g. for tests). Uses next_token() internally.
-    def tokenize(mut self) -> List[Arc[Token]]:
+    def tokenize(mut self) raises -> List[Arc[Token]]:
         var tokens = List[Arc[Token]]()
         while True:
             var t = self.next_token()
@@ -76,28 +76,28 @@ def _at_end(ref self: XPathTokenizer) -> Bool:
 
 comptime CP_EOF = Codepoint(0)
 
-def _peek(ref self: XPathTokenizer) -> Codepoint:
+def _peek(ref self: XPathTokenizer) raises -> Codepoint:
     if _at_end(self):
         return CP_EOF
-    return Codepoint.ord(self.expression[self.pos:self.pos + 1])
+    return Codepoint.ord(self.expression[byte=self.pos : self.pos + 1])
 
-def _peek_next(ref self: XPathTokenizer) -> Codepoint:
+def _peek_next(ref self: XPathTokenizer) raises -> Codepoint:
     if unlikely(self.pos + 1 >= len(self.expression)):
         return CP_EOF
-    return Codepoint.ord(self.expression[self.pos + 1:self.pos + 2])
+    return Codepoint.ord(self.expression[byte=self.pos + 1 : self.pos + 2])
 
 
-def _advance(mut self: XPathTokenizer, delta: Int = 1):
+def _advance(mut self: XPathTokenizer, delta: Int = 1) raises:
     for _ in range(delta):
         if not _at_end(self) and _peek(self) == CP_NEWLINE:
             self.line += 1
         self.pos += 1
 
 
-def _skip_whitespace(mut self: XPathTokenizer) -> Bool:
+def _skip_whitespace(mut self: XPathTokenizer) raises -> Bool:
     var n = len(self.expression)
     while self.pos < n:
-        var c = Codepoint.ord(self.expression[self.pos:self.pos + 1])
+        var c = Codepoint.ord(self.expression[byte=self.pos : self.pos + 1])
         if not _is_space(c):
             return False
         if c == CP_NEWLINE:
@@ -106,7 +106,7 @@ def _skip_whitespace(mut self: XPathTokenizer) -> Bool:
     return True
 
 
-def _scan_one_token(mut self: XPathTokenizer) -> Token:
+def _scan_one_token(mut self: XPathTokenizer) raises -> Token:
     var start = self.pos
     var line_start = self.line
     var c = _peek(self)
@@ -200,7 +200,7 @@ def _is_identifier_part(c: Codepoint) -> Bool:
 # Lexemes
 # -----------------------------
 
-def _read_number(mut self: XPathTokenizer) -> Token:
+def _read_number(mut self: XPathTokenizer) raises -> Token:
     var start = self.pos
     var line_start = self.line
     var is_float = False
@@ -217,7 +217,7 @@ def _read_number(mut self: XPathTokenizer) -> Token:
     return Token(type=tok_type, start=start, length=self.pos - start, line=line_start)
 
 
-def _read_string(mut self: XPathTokenizer) -> Token:
+def _read_string(mut self: XPathTokenizer) raises -> Token:
     var start = self.pos
     var line_start = self.line
     var quote = _peek(self)
@@ -234,7 +234,7 @@ def _read_string(mut self: XPathTokenizer) -> Token:
     return Token(type=Token.STRING, start=start, length=self.pos - start, line=line_start)
 
 
-def _read_identifier(mut self: XPathTokenizer) -> Token:
+def _read_identifier(mut self: XPathTokenizer) raises -> Token:
     var start = self.pos
     var line_start = self.line
     while not _at_end(self) and _is_identifier_part(_peek(self)):

@@ -7,10 +7,12 @@ version = "0.1.0"
 
 [tasks]
 # Run all Mojo tests with module imports resolved from the repo root.
-tests = "mojo -I . tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/yang/test_must_expression.mojo"
+tests = "mojo -I . tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/yang/test_must_expression.mojo tests/crash/test.mojo"
+
+crash_test = "mojo -I . tests/crash/test.mojo"
 
 yang_tests = "mojo -I . tests/yang/*.mojo"  # To run: pixi run yang_tests
 [dependencies]
-mblack = "==26.1.0"
-mojo = "0.26.1.0.*"
-emberjson = ">=0.3.0,<0.4"
+mblack = "==26.2.0"
+mojo = "0.26.2.0.*"
+emberjson = ">=0.3.1,<0.4"

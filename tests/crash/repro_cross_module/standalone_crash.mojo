@@ -116,7 +116,7 @@ struct XPathEvaluator(ExprEvalVisitor):
                     ref nodes = fv[List[Arc[XPathNode]]]
                     if len(nodes) > 0:
                         # Crash happens here
-                        fv = EvalResult(nodes[0].copy())
+                        _ = EvalResult(nodes[0].copy())
         return EvalResult(0.0)
 
 

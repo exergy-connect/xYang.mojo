@@ -29,10 +29,12 @@ struct Token(Copyable):
 
     ## Return the lexeme string for this token from the original expression (span [start, start+length)).
     ## If strip_quotes is True and this is a STRING token, returns the inner value (without surrounding quotes).
-    def text(self, source: String, strip_quotes: Bool = False) -> String:
+    def text(self, source: String, strip_quotes: Bool = False) raises -> String:
         if strip_quotes and self.type == Self.STRING:
-            return String(source[self.start + 1:self.start + self.length - 1])
-        return String(source[self.start:self.start + self.length])
+            return String(
+                source[byte=self.start + 1 : self.start + self.length - 1]
+            )
+        return String(source[byte=self.start : self.start + self.length])
 
     ## Return the type name string for the given type constant (e.g. "IDENTIFIER", "EOF").
     @staticmethod

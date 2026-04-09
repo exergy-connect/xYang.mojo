@@ -2,7 +2,7 @@ from std.collections import List
 from std.memory import ArcPointer, UnsafePointer, alloc
 from xyang.xpath.token import Token
 from xyang.xpath.tokenizer import XPathTokenizer
-from sys.intrinsics import likely, unlikely
+from std.sys.intrinsics import likely, unlikely
 
 comptime Arc = ArcPointer
 
@@ -198,30 +198,30 @@ struct ExprContext:
 ## Visitor for walking the Expr AST. Implement this to evaluate or transform the tree.
 ## Use accept(visitor, node, ctx) to dispatch; inside visit_* recurse by calling accept(visitor, child_ref, ctx).
 trait ExprVisitor:
-    def visit_number(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_number(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
-    def visit_string(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_string(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
-    def visit_name(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_name(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
-    def visit_binary(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_binary(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
-    def visit_call(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_call(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
-    def visit_path(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_path(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
-    def visit_step(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_step(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return ""
 
 
 ## Dispatch to the appropriate visitor method. Recurse from within visit_* by calling this again with child refs (e.g. node.left[], node.args[i][]).
-def accept[V: ExprVisitor](visitor: V, ref node: Expr, ctx: ExprContext) -> String:
+def accept[V: ExprVisitor](visitor: V, ref node: Expr, ctx: ExprContext) raises -> String:
     if node.kind == Expr.PATH:
         return visitor.visit_path(node, ctx)
     if node.kind == Expr.STEP:
@@ -240,7 +240,7 @@ def accept[V: ExprVisitor](visitor: V, ref node: Expr, ctx: ExprContext) -> Stri
 
 
 ## Convenience: dispatch from root pointer. Use when you have the result of parse_xpath().
-def accept[V: ExprVisitor](visitor: V, root: Expr.ExprPointer, ctx: ExprContext) -> String:
+def accept[V: ExprVisitor](visitor: V, root: Expr.ExprPointer, ctx: ExprContext) raises -> String:
     return accept(visitor, root[], ctx)
 
 
@@ -250,16 +250,16 @@ struct ExprStringifier(ExprVisitor):
     fn __init__(out self):
         pass
 
-    def visit_number(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_number(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return node.value.text(ctx.expression)
 
-    def visit_string(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_string(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return "\"" + node.value.text(ctx.expression, strip_quotes=True) + "\""
 
-    def visit_name(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_name(self, ref node: Expr, ctx: ExprContext) raises -> String:
         return node.value.text(ctx.expression)
 
-    def visit_binary(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_binary(self, ref node: Expr, ctx: ExprContext) raises -> String:
         var left_val = ""
         var right_val = ""
         if node.left:
@@ -268,7 +268,7 @@ struct ExprStringifier(ExprVisitor):
             right_val = accept(self, node.right[], ctx)
         return "(" + left_val + " " + node.value.text(ctx.expression) + " " + right_val + ")"
 
-    def visit_call(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_call(self, ref node: Expr, ctx: ExprContext) raises -> String:
         var out = node.value.text(ctx.expression) + "("
         for i in range(len(node.args)):
             if i > 0:
@@ -277,7 +277,7 @@ struct ExprStringifier(ExprVisitor):
         out += ")"
         return out
 
-    def visit_path(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_path(self, ref node: Expr, ctx: ExprContext) raises -> String:
         var out = ""
         for i in range(len(node.steps)):
             if i > 0:
@@ -285,7 +285,7 @@ struct ExprStringifier(ExprVisitor):
             out += accept(self, node.steps[i][], ctx)
         return out
 
-    def visit_step(self, ref node: Expr, ctx: ExprContext) -> String:
+    def visit_step(self, ref node: Expr, ctx: ExprContext) raises -> String:
         var out = node.value.text(ctx.expression)
         for i in range(len(node.args)):
             out += "[" + accept(self, node.args[i][], ctx) + "]"
@@ -302,7 +302,7 @@ struct Parser:
     var _tokenizer: XPathTokenizer
     var _current: Token
 
-    def __init__(out self, var tokenizer: XPathTokenizer):
+    def __init__(out self, var tokenizer: XPathTokenizer) raises:
         self._tokenizer = tokenizer^
         self._current = self._tokenizer.next_token()
 
@@ -313,22 +313,22 @@ struct Parser:
     def current(self) -> ref[self._current] Token:
         return self._current
 
-    def advance(mut self) -> Token:
+    def advance(mut self) raises -> Token:
         var next = self._tokenizer.next_token()  # Need to do this first!
         var move_current = self._current^
         self._current = next^
         return move_current^
 
-    def skip(mut self):
+    def skip(mut self) raises:
         self._current = self._tokenizer.next_token()
 
-    def match(mut self, t: Token.Type) -> Bool:
+    def match(mut self, t: Token.Type) raises -> Bool:
         if self.current().type == t:
             self.skip()
             return True
         return False
 
-    def expect(mut self, t: Token.Type) -> Token:
+    def expect(mut self, t: Token.Type) raises -> Token:
         var curType = self.current().type
         if curType != t:
             raise Error("Unexpected token type " + Token.type_name(curType) + 
@@ -346,25 +346,25 @@ struct Parser:
     #     if ReturnToken:
     #         return cur.copy()
 
-    def skip_or_raise(mut self, t: Token.Type) -> None:
+    def skip_or_raise(mut self, t: Token.Type) raises -> None:
         """Skip current token if its type is t; otherwise raise. Does not return the token."""
         if self._current.type != t:
             raise Error("Unexpected token type " + Token.type_name(self._current.type) + " (expected " + Token.type_name(t) + ")")
         self.skip()
 
     ## Return the lexeme string for token t (span-based tokens reference expression via tokenizer).
-    def _lexeme(ref self, t: Token) -> String:
+    def _lexeme(ref self, t: Token) raises -> String:
         return self._tokenizer.token_text(t)
 
     ## Return the string value for token t (lexeme with surrounding quotes stripped).
-    def _unquoted_string_text(ref self, t: Token) -> String:
+    def _unquoted_string_text(ref self, t: Token) raises -> String:
         return self._tokenizer.token_unquoted_string_text(t)
 
     # -----------------------------
     # Pratt Expression Parser
     # -----------------------------
 
-    def parse_expression(mut self, min_bp: Int = 0) -> Expr.ExprPointer:
+    def parse_expression(mut self, min_bp: Int = 0) raises -> Expr.ExprPointer:
 
         var lhs = self.parse_prefix()
 
@@ -392,7 +392,7 @@ struct Parser:
     # Prefix Expressions
     # -----------------------------
 
-    def parse_prefix(mut self) -> Expr.ExprPointer:
+    def parse_prefix(mut self) raises -> Expr.ExprPointer:
 
         var tok = self.advance()
 
@@ -428,7 +428,7 @@ struct Parser:
     # Infix Operator Precedence
     # -----------------------------
 
-    def infix_binding_power(self, tok: Token) -> Tuple[Int, Int]:
+    def infix_binding_power(self, tok: Token) raises -> Tuple[Int, Int]:
 
         var op = self._lexeme(tok)
 
@@ -460,7 +460,7 @@ struct Parser:
     # Name or step with optional predicates (e.g. entities[1] or .[position()=1])
     # -----------------------------
 
-    def _name_or_step_with_predicates(mut self, tok: Token) -> Expr.ExprPointer:
+    def _name_or_step_with_predicates(mut self, tok: Token) raises -> Expr.ExprPointer:
         var predicates = List[Arc[Expr]]()
         while self.current().type == Token.BRACKET_OPEN:
             var pred_ptr = self.parse_predicate()
@@ -474,7 +474,7 @@ struct Parser:
     # Function Calls
     # -----------------------------
 
-    def parse_function_call(mut self, name_tok: Token) -> Expr.ExprPointer:
+    def parse_function_call(mut self, name_tok: Token) raises -> Expr.ExprPointer:
 
         self.skip_or_raise(Token.PAREN_OPEN)
 
@@ -500,7 +500,7 @@ struct Parser:
     # Location Paths
     # -----------------------------
 
-    def parse_location_path(mut self) -> Expr.ExprPointer:
+    def parse_location_path(mut self) raises -> Expr.ExprPointer:
 
         var steps = List[Arc[Expr]]()
 
@@ -522,7 +522,7 @@ struct Parser:
     # Path Steps
     # -----------------------------
 
-    def parse_step(mut self) -> Expr.ExprPointer:
+    def parse_step(mut self) raises -> Expr.ExprPointer:
 
         var tok = self.expect(Token.IDENTIFIER)
 
@@ -540,7 +540,7 @@ struct Parser:
     # Predicates
     # -----------------------------
 
-    def parse_predicate(mut self) -> Expr.ExprPointer:
+    def parse_predicate(mut self) raises -> Expr.ExprPointer:
 
         self.skip_or_raise(Token.BRACKET_OPEN)
 
@@ -555,7 +555,7 @@ struct Parser:
 # Entry Point
 # -----------------------------
 
-def parse_xpath(var expression: String) -> Expr.ExprPointer:
+def parse_xpath(var expression: String) raises -> Expr.ExprPointer:
     """Parse an XPath expression string. Parser pulls tokens incrementally from the tokenizer."""
     var tokenizer = XPathTokenizer(expression)
     var parser = Parser(tokenizer^)
