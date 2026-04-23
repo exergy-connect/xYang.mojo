@@ -51,6 +51,8 @@ from xyang.yang.tokens import (
     YANG_STMT_UNION,
     YANG_STMT_USES,
     YANG_STMT_WHEN,
+    YANG_TYPE_ENUMERATION,
+    YANG_TYPE_UNKNOWN,
 )
 
 comptime Arc = ArcPointer
@@ -289,7 +291,7 @@ struct _YangParser(Movable):
         var name = self._consume_name()
 
         var type_stmt = YangType(
-            name = "unknown",
+            name = YANG_TYPE_UNKNOWN,
             has_range = False,
             range_min = 0,
             range_max = 0,
@@ -351,7 +353,7 @@ struct _YangParser(Movable):
         var name = self._consume_name()
 
         var type_stmt = YangType(
-            name = "unknown",
+            name = YANG_TYPE_UNKNOWN,
             has_range = False,
             range_min = 0,
             range_max = 0,
@@ -684,7 +686,7 @@ struct _YangParser(Movable):
             self._expect("}")
         self._skip_if(";")
 
-        if type_name == "enumeration" and len(enum_values) == 0:
+        if type_name == YANG_TYPE_ENUMERATION and len(enum_values) == 0:
             self._error(
                 "enumeration type requires at least one '" + YANG_STMT_ENUM + "' statement",
             )

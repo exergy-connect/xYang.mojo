@@ -1,6 +1,8 @@
 ## Shared YANG parser/validator token and keyword constants.
 
 comptime YANG_TYPE_LEAFREF = "leafref"
+comptime YANG_TYPE_UNKNOWN = "unknown"
+comptime YANG_TYPE_ENUMERATION = "enumeration"
 
 comptime YANG_BOOL_TRUE = "true"
 comptime YANG_BOOL_FALSE = "false"
