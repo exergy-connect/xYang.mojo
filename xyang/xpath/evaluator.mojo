@@ -36,6 +36,15 @@ def _parent_path(path: String) -> String:
     return out
 
 
+def _path_child(parent_path: String, child_segment: String) -> String:
+    """One XPath step under parent — avoids `//` when `parent` is the document root `/` or empty."""
+    if parent_path == "":
+        return child_segment
+    if parent_path == "/":
+        return "/" + child_segment
+    return parent_path + "/" + child_segment
+
+
 ## Result of evaluating an XPath expression: number, string, boolean, or node-set.
 comptime EvalResultVariant = Variant[Float64, String, Bool, List[Arc[XPathNode]]]
 
@@ -44,10 +53,15 @@ comptime EvalResult = EvalResultVariant
 
 @fieldwise_init
 struct EvalContext:
-    """Fixed for one expression evaluation: validation-anchor current node, root node, and source expression."""
+    """Fixed for one expression evaluation: validation-anchor current node, root node, and source expression.
+    `pred_index` (1-based) and `pred_size` are set only while evaluating a location-step predicate;
+    they drive `position()` and `last()`. Use `0, 0` when not inside a step predicate.
+    """
     var current: Arc[XPathNode]
     var root: Arc[XPathNode]
     var expression: String
+    var pred_index: Int
+    var pred_size: Int
 
 
 # -----------------------------
@@ -226,7 +240,7 @@ struct XPathEvaluator(ExprEvalVisitor):
             if not _yang_bool(left):
                 return EvalResult(False)
             return EvalResult(_yang_bool(eval_accept(self, node.right[], ctx, current)))
-        if op == "/":
+        if op == "/" or op == "//":
             return self._eval_composition(node, ctx, current)
         var left = eval_accept(self, node.left[], ctx, current)
         var right = eval_accept(self, node.right[], ctx, current)
@@ -258,7 +272,7 @@ struct XPathEvaluator(ExprEvalVisitor):
             if left_res.isa[String]():
                 var step_name = left_res[String]
                 if len(step_name) > 0:
-                    var child_path = current[].path + "/" + step_name
+                    var child_path = _path_child(current[].path, step_name)
                     var child = XPathNode(child_path, child_path)
                     left_nodes.append(Arc[XPathNode](child^))
 
@@ -271,7 +285,7 @@ struct XPathEvaluator(ExprEvalVisitor):
             if r.isa[String]():
                 var step_name = r[String]
                 if len(step_name) > 0:
-                    var child_path = left_nodes[i][].path + "/" + step_name
+                    var child_path = _path_child(left_nodes[i][].path, step_name)
                     var child = XPathNode(child_path, child_path)
                     results.append(Arc[XPathNode](child^))
         return EvalResult(results^)
@@ -279,12 +293,19 @@ struct XPathEvaluator(ExprEvalVisitor):
     def visit_path(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
     ) raises -> EvalResult:
+        var path_ctx = EvalContext(
+            ctx.current,
+            ctx.root,
+            ctx.expression,
+            0,
+            0,
+        )
         var nodes = List[Arc[XPathNode]]()
         nodes.append(ctx.root.copy())
         for i in range(len(node.steps)):
             var next_nodes = List[Arc[XPathNode]]()
             ref step_expr = node.steps[i][]
-            var step_name = step_expr.value.text(ctx.expression)
+            var step_name = step_expr.value.text(path_ctx.expression)
             if step_name == ".":
                 next_nodes = nodes.copy()
             elif step_name == "..":
@@ -294,12 +315,12 @@ struct XPathEvaluator(ExprEvalVisitor):
                         next_nodes.append(Arc[XPathNode](XPathNode(pp, pp)))
             else:
                 for j in range(len(nodes)):
-                    var child_path = nodes[j][].path + "/" + step_name
+                    var child_path = _path_child(nodes[j][].path, step_name)
                     var child = XPathNode(child_path, child_path)
                     next_nodes.append(Arc[XPathNode](child^))
             nodes = next_nodes.copy()
             for k in range(len(step_expr.args)):
-                nodes = self._apply_predicate(nodes, step_expr.args[k][], ctx)
+                nodes = self._apply_predicate(nodes, step_expr.args[k][], path_ctx)
         return EvalResult(nodes^)
 
     def _apply_predicate(
@@ -308,9 +329,17 @@ struct XPathEvaluator(ExprEvalVisitor):
         ref predicate: Expr,
         ctx: EvalContext,
     ) raises -> List[Arc[XPathNode]]:
+        var n = len(nodes)
         var results = List[Arc[XPathNode]]()
-        for i in range(len(nodes)):
-            var val = eval_accept(self, predicate, ctx, nodes[i])
+        for i in range(n):
+            var pred_ctx = EvalContext(
+                ctx.current,
+                ctx.root,
+                ctx.expression,
+                i + 1,
+                n,
+            )
+            var val = eval_accept(self, predicate, pred_ctx, nodes[i])
             var keep = False
             if val.isa[Float64]():
                 if Int(val[Float64]) == i + 1:
@@ -333,7 +362,7 @@ struct XPathEvaluator(ExprEvalVisitor):
             if len(pp) > 0:
                 nodes.append(Arc[XPathNode](XPathNode(pp, pp)))
         else:
-            var child_path = current[].path + "/" + step_name
+            var child_path = _path_child(current[].path, step_name)
             var child = XPathNode(child_path, child_path)
             nodes.append(Arc[XPathNode](child^))
         for i in range(len(node.args)):
@@ -378,8 +407,12 @@ struct XPathEvaluator(ExprEvalVisitor):
                 return EvalResult(_yang_bool(a))
             return EvalResult(False)
         if name == "position":
+            if ctx.pred_size > 0:
+                return EvalResult(Float64(ctx.pred_index))
             return EvalResult(1.0)
         if name == "last":
+            if ctx.pred_size > 0:
+                return EvalResult(Float64(ctx.pred_size))
             return EvalResult(1.0)
         if name == "string-length":
             if len(node.args) == 1:

@@ -29,8 +29,8 @@ Scope:
 | `container` | Supported | Parsed, represented, validated structurally. |
 | `list` | Supported | Parsed, represented, basic structural validation. |
 | `leaf` | Supported | Parsed, represented, type/constraint checks apply. |
-| `choice` | Supported | Parsed; mandatory choice check implemented. |
-| `case` | Supported | Parsed under choice as case-name set. |
+| `choice` | Supported | Parsed; `when` on the choice is captured and evaluated in the validator; mandatory choice check implemented. |
+| `case` | Supported | Parsed under choice as case-name set. Explicit `case { ... }` blocks may include `when` in the text parser (as well as JSON Schema / JSON round-trip); validator evaluates case `when` when that case is active. |
 | `leaf-list` | Supported | Dedicated AST node and text-parser support; validator enforces array shape plus per-item type/leafref/must checks. |
 | `anydata`, `anyxml` | Not yet | Not modeled in current Mojo AST/validator path. |
 | `grouping` | Supported | Text parser parses and stores groupings and supports grouped schema nodes used by this project (`leaf`, `leaf-list`, `container`, `list`, `choice`). |
@@ -54,20 +54,21 @@ Scope:
 |---|---|---|
 | `must` on leaf | Supported | Parsed, XPath AST compiled (when parseable), evaluated at validation. |
 | `must` `error-message` | Supported | Used in reported validation errors. |
-| `when` on leaf | Supported | Parsed and enforced for present leaves. |
+| `when` on `leaf` | Supported | Parsed and enforced for present leaves. |
+| `when` on `choice` / `case` | Supported | Parsed from text YANG and JSON metadata; `x-yang` in generated JSON Schema carries the expressions; validator evaluates against the parent object (choice: before branch resolution; case: when the case is the active branch). |
 | `mandatory` (leaf) | Supported | Missing/null checks implemented. |
 | `default` (`leaf`, `leaf-list`, `choice` default case) | Partial | Parser captures defaults; validator realizes leaf/leaf-list effective defaults and treats choice default case as active when no explicit case is present. |
 | `key` (list) | Supported | Parsed and used for list-path formatting in diagnostics. |
 | `min-elements`, `max-elements`, `unique`, `ordered-by` | Not yet | Not implemented. |
-| Choice/case full RFC semantics | Partial | Mandatory choice check exists; broader case semantics are simplified. |
+| Choice/case full RFC semantics | Partial | Mandatory choice, default case, and `when` on `choice`/`case` are implemented in parser + validator; other subtleties of RFC 7950 `choice`/`case` are still simplified. |
 
 ### XPath support used by `must`/`when`
 | Construct | Status | Notes |
 |---|---|---|
 | Literals (number/string), names | Supported | Parsed/evaluated. |
-| Operators `or`, `and`, comparisons, `+`, `-`, path composition `/` | Supported | Implemented in current evaluator. |
-| Path steps `.`, `..`, `/a/b`, predicates | Partial | Works for current simplified path model, not full data-model node semantics. |
-| Functions: `current`, `true`, `false`, `not`, `count`, `string`, `number`, `boolean`, `position`, `last`, `string-length` | Partial | Implemented with simplified behavior. |
+| Operators `or`, `and`, comparisons, `+`, `-`, path composition `/` and `//` | Supported | `//` is treated like `/` (no true descendant axis; paths are a single string trail per the validator’s `XPathNode` model). |
+| Path steps `.`, `..`, `/a/b`, relative `a/b`, and `[` `]` predicates | Supported | Location paths start at the context root; steps join without spurious `//` under `/`. Boolean and numeric (1-based index) predicates; `position()` and `last()` match the current predicate’s node set. Still not a real XML tree: no document-order sibling sets beyond what the model materializes. |
+| Functions: `current`, `true`, `false`, `not`, `count`, `string`, `number`, `boolean`, `position`, `last`, `string-length` | Partial | `position`/`last` are correct inside step predicates; `count`/`string`/`not`/etc. follow the string/path model above. |
 | Full XPath 1.0 compatibility | Not yet | Many functions/semantics are missing or simplified. |
 
 ## Validator Coverage (Current)
@@ -81,6 +82,7 @@ Implemented:
 - Leaf-level `must` and `when` evaluation.
 - Leaf-list per-item `must` and type checks.
 - Basic choice mandatory check.
+- `when` on `choice` and `case` (evaluated in validator when the choice or active case is in play).
 - Effective default realization for missing `leaf` / `leaf-list` values.
 - Choice default-case handling when no explicit case is active.
 - Leafref referential integrity checks (`require-instance`): value must match at least one resolved target from leafref `path` (supports absolute and relative paths in current implementation).
@@ -105,7 +107,7 @@ Supported:
 - Emit `x-yang` annotations for module metadata and node-level semantics used by this project (`type`, `key`, `mandatory`, `must`, `when`, leafref path/require-instance).
 - Encode integer types and explicit `range` as JSON Schema `minimum`/`maximum`.
 - Encode defaults for `leaf` and `leaf-list` when values are representable.
-- Emit choice structure with `oneOf` branches and `x-yang` choice metadata.
+- Emit choice structure with `oneOf` branches and `x-yang` choice metadata (including `when` on the choice and on each `case` when set).
 - Round-trip path covered by tests: text YANG → AST → JSON Schema JSON text → `parse_json_schema`.
 
 Partial:
@@ -117,7 +119,7 @@ Partial:
 Good fit today:
 - Lightweight schema/data experimentation.
 - Basic structural + scalar validation.
-- Simple `must` / `when` checks.
+- Simple `must` / `when` checks (leaves, and `when` on choices and explicit cases where modeled).
 - Integer range enforcement.
 
 Not production-complete yet for:

@@ -272,7 +272,7 @@ def _eval_leafref_target_paths(path_ast: Expr.ExprPointer, path_expr: String, cu
     var root_arc = Arc[XPathNode](root_node^)
     var current_node = XPathNode(current_path, current_path)
     var current_arc = Arc[XPathNode](current_node^)
-    var ctx = EvalContext(current_arc, root_arc, expr)
+    var ctx = EvalContext(current_arc, root_arc, expr, 0, 0)
     var ev = XPathEvaluator()
     try:
         var result = ev.eval(path_ast, ctx, current_arc)

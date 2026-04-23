@@ -851,7 +851,7 @@ struct DocumentValidator:
                     var leaf_str = _leaf_value_to_string(val)
                     var current_node = XPathNode(child_path, leaf_str)
                     var current_arc = Arc[XPathNode](current_node^)
-                    var ctx = EvalContext(current_arc, root_arc, when_ref.expression)
+                    var ctx = EvalContext(current_arc, root_arc, when_ref.expression, 0, 0)
                     var ev = XPathEvaluator()
                     var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
                     if not eval_result_to_bool(when_result):
@@ -913,7 +913,7 @@ struct DocumentValidator:
                 var leaf_str = _leaf_value_to_string(val)
                 var current_node = XPathNode(child_path, leaf_str)
                 var current_arc = Arc[XPathNode](current_node^)
-                var ctx = EvalContext(current_arc, root_arc, must_ref.expression)
+                var ctx = EvalContext(current_arc, root_arc, must_ref.expression, 0, 0)
                 var ev = XPathEvaluator()
                 var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
                 if not eval_result_to_bool(result):
@@ -957,7 +957,7 @@ struct DocumentValidator:
                 var root_arc = Arc[XPathNode](root_node^)
                 var current_node = XPathNode(when_path, when_path)
                 var current_arc = Arc[XPathNode](current_node^)
-                var ctx = EvalContext(current_arc, root_arc, when_ref.expression)
+                var ctx = EvalContext(current_arc, root_arc, when_ref.expression, 0, 0)
                 var ev = XPathEvaluator()
                 var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
                 return eval_result_to_bool(when_result)
@@ -1132,7 +1132,7 @@ struct DocumentValidator:
                     var root_arc = Arc[XPathNode](root_node^)
                     var current_node = XPathNode(child_path, child_path)
                     var current_arc = Arc[XPathNode](current_node^)
-                    var ctx = EvalContext(current_arc, root_arc, when_ref.expression)
+                    var ctx = EvalContext(current_arc, root_arc, when_ref.expression, 0, 0)
                     var ev = XPathEvaluator()
                     var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
                     if not eval_result_to_bool(when_result):
@@ -1223,7 +1223,7 @@ struct DocumentValidator:
                     var item_str = _leaf_value_to_string(item)
                     var current_node = XPathNode(item_path, item_str)
                     var current_arc = Arc[XPathNode](current_node^)
-                    var ctx = EvalContext(current_arc, root_arc, must_ref.expression)
+                    var ctx = EvalContext(current_arc, root_arc, must_ref.expression, 0, 0)
                     var ev = XPathEvaluator()
                     var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
                     if not eval_result_to_bool(result):

@@ -25,7 +25,7 @@ def test_eval_number() raises:
     var ptr = parse_xpath(ex)
     var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, root_arc, ex)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
@@ -38,7 +38,7 @@ def test_eval_string() raises:
     var ptr = parse_xpath(ex)
     var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, root_arc, ex)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
@@ -51,7 +51,7 @@ def test_eval_binary_plus() raises:
     var ptr = parse_xpath(ex)
     var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, root_arc, ex)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
@@ -64,12 +64,69 @@ def test_eval_true() raises:
     var ptr = parse_xpath(ex)
     var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, root_arc, ex)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
     assert_true(result.isa[Bool]())
     assert_true(result[Bool])
+
+
+def test_eval_absolute_path_no_double_slash() raises:
+    # Root path is document root "/"; first segment must be "/a", not "//a".
+    var ex = "/a/b"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[List[Arc[XPathNode]]]())
+    ref nodes = result[List[Arc[XPathNode]]]
+    assert_equal(len(nodes), 1)
+    assert_equal(nodes[0][].path, "/a/b")
+
+
+def test_eval_position_in_step_predicate() raises:
+    var ex = "/a[position() = 1]"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[List[Arc[XPathNode]]]())
+    assert_equal(len(result[List[Arc[XPathNode]]]), 1)
+    assert_equal(result[List[Arc[XPathNode]]][0][].path, "/a")
+
+
+def test_eval_last_in_step_predicate() raises:
+    var ex = "/a[position() = last()]"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[List[Arc[XPathNode]]]())
+    assert_equal(len(result[List[Arc[XPathNode]]]), 1)
+
+
+def test_eval_slash_slash_composition() raises:
+    # `//` has no true descendant axis in this path model; it behaves like `/` for YANG use.
+    var ex = "a//b"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[List[Arc[XPathNode]]]())
+    assert_equal(result[List[Arc[XPathNode]]][0][].path, "/a/b")
 
 
 def main() raises:
