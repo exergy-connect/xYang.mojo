@@ -56,22 +56,22 @@ struct EvalContext:
 # -----------------------------
 
 trait AltExprEvalVisitor:
-    def visit_literal(self, ref node: LiteralNode, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_literal(self, ref node: LiteralNode, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(0.0)
 
-    def visit_path(self, ref node: PathNode, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_path(self, ref node: PathNode, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(List[Arc[XPathNode]]())
 
-    def visit_binary_op(self, ref node: BinaryOpNode, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_binary_op(self, ref node: BinaryOpNode, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(0.0)
 
-    def visit_function_call(self, ref node: FunctionCallNode, ctx: EvalContext, current: Arc[XPathNode]) -> EvalResult:
+    def visit_function_call(self, ref node: FunctionCallNode, ctx: EvalContext, current: Arc[XPathNode]) raises -> EvalResult:
         return EvalResult(0.0)
 
 
 def eval_accept[V: AltExprEvalVisitor](
     visitor: V, ref node: ASTNodeVariant, ctx: EvalContext, current: Arc[XPathNode]
-) -> EvalResult:
+) raises -> EvalResult:
     if node.isa[LiteralNode]():
         return visitor.visit_literal(node[LiteralNode], ctx, current)
     if node.isa[PathNode]():
@@ -85,7 +85,7 @@ def eval_accept[V: AltExprEvalVisitor](
 
 def eval_accept[V: AltExprEvalVisitor](
     visitor: V, node: Arc[ASTNodeVariant], ctx: EvalContext, current: Arc[XPathNode]
-) -> EvalResult:
+) raises -> EvalResult:
     return eval_accept(visitor, node[], ctx, current)
 
 
@@ -171,12 +171,12 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
 
     def eval(
         self, node: Arc[ASTNodeVariant], ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         return eval_accept(self, node, ctx, current)
 
     def visit_literal(
         self, ref node: LiteralNode, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var tt = node.value.type
         if tt == Token.STRING:
             return EvalResult(node.value.text(ctx.expression, strip_quotes=True))
@@ -196,7 +196,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
 
     def visit_path(
         self, ref node: PathNode, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var nodes = List[Arc[XPathNode]]()
         if node.is_absolute:
             nodes.append(ctx.root.copy())
@@ -232,7 +232,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
         nodes: List[Arc[XPathNode]],
         predicate: Arc[ASTNodeVariant],
         ctx: EvalContext,
-    ) -> List[Arc[XPathNode]]:
+    ) raises -> List[Arc[XPathNode]]:
         var results = List[Arc[XPathNode]]()
         for i in range(len(nodes)):
             var val = eval_accept(self, predicate, ctx, nodes[i])
@@ -248,7 +248,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
 
     def visit_binary_op(
         self, ref node: BinaryOpNode, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var op = node.operator.text(ctx.expression)
         if op == "or":
             var left = eval_accept(self, node.left, ctx, current)
@@ -286,7 +286,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
 
     def _eval_composition(
         self, ref node: BinaryOpNode, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var left_res = eval_accept(self, node.left, ctx, current)
         var left_nodes = _node_set_to_list(left_res)
         if not left_res.isa[List[Arc[XPathNode]]]():
@@ -302,7 +302,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
 
     def visit_function_call(
         self, ref node: FunctionCallNode, ctx: EvalContext, current: Arc[XPathNode]
-    ) -> EvalResult:
+    ) raises -> EvalResult:
         var name = node.name.text(ctx.expression)
         if name == "current":
             return EvalResult(current.copy())

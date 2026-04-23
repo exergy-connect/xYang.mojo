@@ -1,0 +1,54 @@
+module basic-device {
+  yang-version 1.1;
+  namespace "urn:example:basic-device";
+  prefix bd;
+
+  organization "Example";
+  contact "example@example.com";
+  description
+    "A minimal YANG module used as a basic example.";
+
+  revision 2026-04-23 {
+    description
+      "Initial revision.";
+  }
+
+  container system {
+    description
+      "Simple system configuration data.";
+
+    leaf hostname {
+      type string;
+      description "Device hostname.";
+    }
+
+    leaf enabled {
+      type boolean;
+      default true;
+      description "Whether the system is enabled.";
+    }
+
+    list interface {
+      key "name";
+      description "List of network interfaces.";
+
+      leaf name {
+        type string;
+        description "Interface name.";
+      }
+
+      leaf mtu {
+        type uint16 {
+          range "576..9216";
+        }
+        description "Interface MTU.";
+      }
+
+      leaf admin-up {
+        type boolean;
+        default true;
+        description "Administrative state of the interface.";
+      }
+    }
+  }
+}

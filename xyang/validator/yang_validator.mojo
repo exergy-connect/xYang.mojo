@@ -20,7 +20,7 @@ struct YangValidator:
     def __init__(out self, use_alt_xpath: Bool = False):
         self._doc_validator = DocumentValidator(use_alt_xpath=use_alt_xpath)
 
-    def validate(mut self, data: Value, module: YangModule) -> ValidationResult:
+    def validate(mut self, data: Value, module: YangModule) raises -> ValidationResult:
         var doc_errors = self._doc_validator.validate(module, data)
         var errors = List[String]()
         var warnings = List[String]()

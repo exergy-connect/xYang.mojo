@@ -32,10 +32,6 @@ from alternatives.xpath.evaluator import (
 
 comptime Arc = ArcPointer
 
-## Set to True when XPath evaluator no longer crashes (SIGSEGV 139) in simple eval.
-comptime ENABLE_MUST_EVALUATION = True
-
-
 def _container_valid_child_names(container: YangContainer) -> List[String]:
     """Return set of valid child names for a container (for unknown-field check)."""
     var names = List[String]()
@@ -67,7 +63,7 @@ def _list_valid_child_names(list_node: YangList) -> List[String]:
     return names.copy()
 
 
-def _entry_key_string(entry: Value, key_names: List[String]) -> String:
+def _entry_key_string(entry: Value, key_names: List[String]) raises -> String:
     """Format list entry key for path, e.g. name='foo' or name='a', entity='b'."""
     if len(key_names) == 0:
         return ""
@@ -127,7 +123,7 @@ struct DocumentValidator:
         self._errors = List[ValidationError]()
         self.use_alt_xpath = use_alt_xpath
 
-    def validate(mut self, module: YangModule, data: Value) -> List[ValidationError]:
+    def validate(mut self, module: YangModule, data: Value) raises -> List[ValidationError]:
         """Validate root data (object) against the module. Returns list of errors."""
         self._errors = List[ValidationError]()
         if not data.is_object():
@@ -148,7 +144,8 @@ struct DocumentValidator:
                 path.push(cont.name)
                 self._visit_container(root_obj[cont.name], cont, path)
                 path.pop()
-        for key in root_obj.keys():
+        for ref pair in root_obj.items():
+            var key = pair.key
             var found = False
             for i in range(len(module.top_level_containers)):
                 if module.top_level_containers[i][].name == key:
@@ -170,12 +167,13 @@ struct DocumentValidator:
         data: Value,
         container: YangContainer,
         mut path: PathBuilder,
-    ) -> None:
+    ) raises:
         if not data.is_object():
             return
         ref obj = data.object()
         var valid_names = _container_valid_child_names(container)
-        for key in obj.keys():
+        for ref pair in obj.items():
+            var key = pair.key
             var known = False
             for j in range(len(valid_names)):
                 if valid_names[j] == key:
@@ -208,7 +206,7 @@ struct DocumentValidator:
         obj: Object,
         leaf: YangLeaf,
         path: PathBuilder,
-    ) -> None:
+    ) raises:
         var name = leaf.name
         var child_path = path.child(name)
         var present = name in obj
@@ -247,8 +245,6 @@ struct DocumentValidator:
         for i in range(len(leaf.must)):
             ref must_ref = leaf.must[i][]
             if self.use_alt_xpath:
-                if not ENABLE_MUST_EVALUATION:
-                    continue
                 try:
                     var parser = XPathParser(must_ref.expression)
                     var ast = parser.parse()
@@ -282,44 +278,43 @@ struct DocumentValidator:
             else:
                 if not must_ref.parsed or not must_ref.xpath_ast:
                     continue
-                if ENABLE_MUST_EVALUATION:
-                    try:
-                        var root_node = XPathNode("/")
-                        var root_arc = Arc[XPathNode](root_node^)
-                        var current_node = XPathNode(child_path)
-                        var current_arc = Arc[XPathNode](current_node^)
-                        var leaf_str = _leaf_value_to_string(val)
-                        var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
-                        var ev = XPathEvaluator()
-                        var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
-                        if not eval_result_to_bool(result):
-                            var msg = must_ref.error_message
-                            if len(msg) == 0:
-                                msg = "Must constraint violated"
-                            self._errors.append(
-                                ValidationError(
-                                    path=child_path,
-                                    message=msg,
-                                    expression=must_ref.expression,
-                                    severity=Severity("error"),
-                                ),
-                            )
-                    except:
+                try:
+                    var root_node = XPathNode("/")
+                    var root_arc = Arc[XPathNode](root_node^)
+                    var current_node = XPathNode(child_path)
+                    var current_arc = Arc[XPathNode](current_node^)
+                    var leaf_str = _leaf_value_to_string(val)
+                    var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
+                    var ev = XPathEvaluator()
+                    var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                    if not eval_result_to_bool(result):
+                        var msg = must_ref.error_message
+                        if len(msg) == 0:
+                            msg = "Must constraint violated"
                         self._errors.append(
                             ValidationError(
                                 path=child_path,
-                                message="Must expression could not be evaluated",
+                                message=msg,
                                 expression=must_ref.expression,
                                 severity=Severity("error"),
                             ),
                         )
+                except:
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message="Must expression could not be evaluated",
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
 
     def _visit_list(
         mut self,
         obj: Object,
         list_node: YangList,
         mut path: PathBuilder,
-    ) -> None:
+    ) raises:
         var name = list_node.name
         if name not in obj:
             return
@@ -349,9 +344,10 @@ struct DocumentValidator:
         obj: Object,
         list_node: YangList,
         mut path: PathBuilder,
-    ) -> None:
+    ) raises:
         var valid_names = _list_valid_child_names(list_node)
-        for key in obj.keys():
+        for ref pair in obj.items():
+            var key = pair.key
             var known = False
             for j in range(len(valid_names)):
                 if valid_names[j] == key:
@@ -384,7 +380,7 @@ struct DocumentValidator:
         obj: Object,
         choice: YangChoice,
         path: PathBuilder,
-    ) -> None:
+    ) raises:
         var active = False
         for i in range(len(choice.case_names)):
             if choice.case_names[i] in obj:

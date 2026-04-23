@@ -1,0 +1,18 @@
+{
+  "system": {
+    "hostname": "edge-router-1",
+    "enabled": true,
+    "interface": [
+      {
+        "name": "eth0",
+        "mtu": 1500,
+        "admin-up": true
+      },
+      {
+        "name": "eth1",
+        "mtu": 9000,
+        "admin-up": false
+      }
+    ]
+  }
+}

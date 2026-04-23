@@ -23,8 +23,6 @@ struct Node:
 ## Discriminated union of all concrete AST node types.
 comptime ASTNodeVariant = Variant[LiteralNode, PathNode, BinaryOpNode, FunctionCallNode]
 
-comptime ASTNodePointer = ArcPointer[ASTNodeVariant]
-
 
 ## Visitor for walking the AST. Implement this to evaluate or transform the tree.
 ## Use accept(visitor, node, ctx) to dispatch; inside visit_* recurse by calling accept(visitor, child, ctx).
@@ -88,7 +86,7 @@ struct LiteralNode(Movable):
 @fieldwise_init
 struct PathSegment(Movable):
     var step: Token
-    var predicate: Optional[ASTNodePointer]
+    var predicate: Optional[ArcPointer[ASTNodeVariant]]
 
 
 @fieldwise_init
@@ -112,9 +110,9 @@ struct PathNode(Movable):
 
 @fieldwise_init
 struct BinaryOpNode(Movable):
-    var left: ASTNodePointer
+    var left: ArcPointer[ASTNodeVariant]
     var operator: Token
-    var right: ASTNodePointer
+    var right: ArcPointer[ASTNodeVariant]
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("BinaryOpNode.accept not implemented")
@@ -123,7 +121,7 @@ struct BinaryOpNode(Movable):
 @fieldwise_init
 struct FunctionCallNode(Movable):
     var name: Token
-    var args: List[ASTNodePointer]
+    var args: List[ArcPointer[ASTNodeVariant]]
 
     def accept(self, ev: XPathEvaluator, ctx: Context, node: Node) -> ASTNodeVariant:
         raise Error("FunctionCallNode.accept not implemented")

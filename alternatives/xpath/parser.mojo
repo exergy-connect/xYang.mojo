@@ -26,19 +26,19 @@ struct XPathParser:
     var current_token: Token
     var _lookahead: Optional[Token]
 
-    def __init__(out self, expression: String):
+    def __init__(out self, expression: String) raises:
         self.expression = expression
         self.tokenizer = XPathTokenizer(expression)
         self.current_token = self.tokenizer.next_token()
         self._lookahead = None
 
     ## Peek at the next token (pulls from tokenizer if not already cached).
-    def _peek_next(mut self) -> Token.Type:
+    def _peek_next(mut self) raises -> Token.Type:
         if not self._lookahead:
             self._lookahead = Optional(self.tokenizer.next_token())
         return self._lookahead.value().type
 
-    def parse(mut self) -> ASTNode:
+    def parse(mut self) raises -> ASTNode:
         """Parse a full XPath expression into a generic AST value."""
         if self.current_token.type == Token.EOF:
             raise Error("Empty expression")
@@ -69,41 +69,41 @@ struct XPathParser:
         return self.current_token.type
 
     ## Lexeme for token t (span-based tokens use expression).
-    def _token_text(self, t: Token) -> String:
+    def _token_text(self, t: Token) raises -> String:
         return t.text(self.expression)
 
     ## Lexeme with quotes stripped; for STRING tokens.
-    def _token_string_value(self, t: Token) -> String:
+    def _token_string_value(self, t: Token) raises -> String:
         return t.text(self.expression, strip_quotes=True)
 
     ## Consume and return the current token if it matches expected_type.
     ## Expect current token to match expected_type; advance. No token copy returned.
-    def _expect(mut self, expected_type: Token.Type):
+    def _expect(mut self, expected_type: Token.Type) raises:
         if self.current_token.type != expected_type:
             raise Error("Expected {}, got {} ('{}') at line {}".format(Token.type_name(expected_type), Token.type_name(self.current_token.type), self._token_text(self.current_token), self.current_token.line))
         self._advance()
 
-    def _consume(mut self, expected_type: Token.Type) -> Token:
+    def _consume(mut self, expected_type: Token.Type) raises -> Token:
         var t = self.current_token.copy()
         self._expect(expected_type)
         return t^
 
     ## Advance to the next token (use lookahead if set, else pull from tokenizer).
-    def _advance(mut self):
+    def _advance(mut self) raises:
         if self._lookahead:
             self.current_token = self._lookahead.value().copy()
             self._lookahead = None
         else:
             self.current_token = self.tokenizer.next_token()
 
-    def _is_keyword(self, keyword: String) -> Bool:
+    def _is_keyword(self, keyword: String) raises -> Bool:
         ref t = self._current()
         return t.type == Token.IDENTIFIER and self._token_text(t).lower() == keyword.lower()
 
-    def _parse_expression(mut self) -> Self.ParseResult:
+    def _parse_expression(mut self) raises -> Self.ParseResult:
         return self._parse_logical_or()
 
-    def _parse_logical_or(mut self) -> Self.ParseResult:
+    def _parse_logical_or(mut self) raises -> Self.ParseResult:
         var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_comparison()
@@ -124,7 +124,7 @@ struct XPathParser:
             cacheable = cacheable and rc
 
         return (left, cacheable)
-    def _parse_logical_and(mut self) -> Self.ParseResult:
+    def _parse_logical_and(mut self) raises -> Self.ParseResult:
         var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_comparison()
@@ -146,7 +146,7 @@ struct XPathParser:
 
         return (left, cacheable)
 
-    def _parse_comparison(mut self) -> Self.ParseResult:
+    def _parse_comparison(mut self) raises -> Self.ParseResult:
         var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_additive()
@@ -175,7 +175,7 @@ struct XPathParser:
             return (left, cacheable and rc)
         return (left, cacheable)
 
-    def _parse_additive(mut self) -> Self.ParseResult:
+    def _parse_additive(mut self) raises -> Self.ParseResult:
         var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_multiplicative()
@@ -200,7 +200,7 @@ struct XPathParser:
                 break
         return (left, cacheable)
 
-    def _parse_multiplicative(mut self) -> Self.ParseResult:
+    def _parse_multiplicative(mut self) raises -> Self.ParseResult:
         var left: ASTNode
         var cacheable: Bool
         (left, cacheable) = self._parse_unary()
@@ -233,7 +233,7 @@ struct XPathParser:
                 break
         return (left, cacheable)
 
-    def _parse_unary(mut self) -> Self.ParseResult:
+    def _parse_unary(mut self) raises -> Self.ParseResult:
         ref t = self._current()
         if t.type == Token.OPERATOR and self._token_text(t) == "-":
             var op_tok = self._current().copy()
@@ -265,10 +265,10 @@ struct XPathParser:
             return (ASTNode(v^), False)
         return self._parse_primary()
 
-    def _parse_primary(mut self) -> Self.ParseResult:
+    def _parse_primary(mut self) raises -> Self.ParseResult:
         ref t = self._current()
 
-        def _literal_node(value: Token, cacheable: Bool) -> Self.ParseResult:
+        def _literal_node(value: Token, cacheable: Bool) raises -> Self.ParseResult:
             return ( ASTNode(ASTNodeVariant(LiteralNode(value = value.copy()))), cacheable )
 
         if t.type == Token.STRING:
@@ -308,7 +308,7 @@ struct XPathParser:
             return (expr, cacheable)
         raise Error("Unexpected token in primary: " + self._token_text(t))
 
-    def _parse_function_call(mut self) -> Self.ParseResult:
+    def _parse_function_call(mut self) raises -> Self.ParseResult:
         var name = self._current().copy()
         self._advance()
         self._expect(Token.PAREN_OPEN)
@@ -330,7 +330,7 @@ struct XPathParser:
         is_absolute: Bool,
         first_step: Optional[Token] = None,
         allow_predicate: Bool = True,
-    ) -> Tuple[Arc[PathNode], Bool]:
+    ) raises -> Tuple[Arc[PathNode], Bool]:
         var segments = List[Arc[PathSegment]]()
         var cacheable = is_absolute
         var no_predicate = Optional[Arc[ASTNodeVariant]]()

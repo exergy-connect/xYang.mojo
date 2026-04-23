@@ -324,20 +324,23 @@ struct _YangParser(Movable):
         self._consume_if(";")
 
         var xpath_ast = Expr.ExprPointer()
-        var parsed = False
         try:
             xpath_ast = parse_xpath(expression)
-            parsed = True
+            return YangMust(
+                expression = expression,
+                error_message = error_message,
+                description = description,
+                xpath_ast = xpath_ast,
+                parsed = True,
+            )
         except:
-            parsed = False
-
-        return YangMust(
-            expression = expression,
-            error_message = error_message,
-            description = description,
-            xpath_ast = xpath_ast,
-            parsed = parsed,
-        )
+            return YangMust(
+                expression = expression,
+                error_message = error_message,
+                description = description,
+                xpath_ast = xpath_ast,
+                parsed = False,
+            )
 
     def _parse_boolean_value(mut self) raises -> Bool:
         var value = self._consume_value()

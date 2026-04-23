@@ -12,6 +12,8 @@ tests = "mojo -I . tests/test_ast_deserialize.mojo tests/test_validator.mojo tes
 crash_test = "mojo -I . tests/crash/test.mojo"
 
 yang_tests = "mojo -I . tests/yang/*.mojo"  # To run: pixi run yang_tests
+
+basic-yang-example = "mojo -I . examples/basic_yang/main.mojo"
 [dependencies]
 mblack = "==26.2.0"
 mojo = "0.26.2.0.*"

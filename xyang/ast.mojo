@@ -33,8 +33,8 @@ struct YangMust(Movable):
                 self.xpath_ast[].free_tree()
                 self.xpath_ast.destroy_pointee()
                 self.xpath_ast.free()
-            except e:
-                print("[YangMust.__del__] error freeing xpath_ast: ", String(e))
+            except:
+                print("[YangMust.__del__] error freeing xpath_ast")
 
 
 @fieldwise_init
@@ -116,4 +116,3 @@ struct YangModule(Movable, JsonDeserializable):
 
     def __str__(self) -> String:
         return "YangModule(" + self.name + ", namespace=" + self.namespace + ", prefix=" + self.prefix + ", containers=" + String(len(self.top_level_containers)) + ")"
-
