@@ -23,9 +23,9 @@ def _free_expr(ptr: Expr.ExprPointer):
 def test_eval_number() raises:
     var ex = "42"
     var ptr = parse_xpath(ex)
-    var root = XPathNode("/")
+    var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, ex, "")
+    var ctx = EvalContext(root_arc, root_arc, ex)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
@@ -36,9 +36,9 @@ def test_eval_number() raises:
 def test_eval_string() raises:
     var ex = "'hello'"
     var ptr = parse_xpath(ex)
-    var root = XPathNode("/")
+    var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, ex, "")
+    var ctx = EvalContext(root_arc, root_arc, ex)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
@@ -49,9 +49,9 @@ def test_eval_string() raises:
 def test_eval_binary_plus() raises:
     var ex = "1 + 2"
     var ptr = parse_xpath(ex)
-    var root = XPathNode("/")
+    var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, ex, "")
+    var ctx = EvalContext(root_arc, root_arc, ex)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)
@@ -62,9 +62,9 @@ def test_eval_binary_plus() raises:
 def test_eval_true() raises:
     var ex = "true()"
     var ptr = parse_xpath(ex)
-    var root = XPathNode("/")
+    var root = XPathNode("/", "/")
     var root_arc = Arc[XPathNode](root^)
-    var ctx = EvalContext(root_arc, ex, "")
+    var ctx = EvalContext(root_arc, root_arc, ex)
     var ev = XPathEvaluator()
     var result = ev.eval(ptr, ctx, root_arc)
     _free_expr(ptr)

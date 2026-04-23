@@ -112,9 +112,8 @@ struct DocumentValidator:
     var _errors: List[ValidationError]
     var debug_trace: Bool
 
-    def __init__(out self, use_alt_xpath: Bool = False, debug_trace: Bool = False):
+    def __init__(out self, debug_trace: Bool = False):
         self._errors = List[ValidationError]()
-        _ = use_alt_xpath  # Compatibility: alternative XPath engine removed.
         self.debug_trace = debug_trace
 
     def _trace(ref self, message: String):
@@ -257,12 +256,12 @@ struct DocumentValidator:
             if not must_ref.parsed or not must_ref.xpath_ast:
                 continue
             try:
-                var root_node = XPathNode("/")
+                var root_node = XPathNode("/", "/")
                 var root_arc = Arc[XPathNode](root_node^)
-                var current_node = XPathNode(child_path)
-                var current_arc = Arc[XPathNode](current_node^)
                 var leaf_str = _leaf_value_to_string(val)
-                var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
+                var current_node = XPathNode(child_path, leaf_str)
+                var current_arc = Arc[XPathNode](current_node^)
+                var ctx = EvalContext(current_arc, root_arc, must_ref.expression)
                 var ev = XPathEvaluator()
                 var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
                 if not eval_result_to_bool(result):

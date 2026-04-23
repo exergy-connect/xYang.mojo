@@ -24,6 +24,7 @@ comptime Arc = ArcPointer
 @fieldwise_init
 struct XPathNode(Movable):
     var path: String
+    var value: String
 
 
 def _parent_path(path: String) -> String:
@@ -46,9 +47,9 @@ comptime EvalResult = EvalResultVariant
 
 @fieldwise_init
 struct EvalContext:
+    var current: Arc[XPathNode]
     var root: Arc[XPathNode]
     var expression: String
-    var current_leaf_value: String
 
 
 # -----------------------------
@@ -111,7 +112,7 @@ def _first_value(result: EvalResult) -> EvalResult:
     if r.isa[List[Arc[XPathNode]]]():
         ref nodes = r[List[Arc[XPathNode]]]
         if len(nodes) > 0:
-            return EvalResult(nodes[0].copy())
+            return EvalResult(nodes[0][].value)
     return result
 
 
@@ -147,7 +148,7 @@ def _result_to_string(result: EvalResult) -> String:
         ref nodes = r[List[Arc[XPathNode]]]
         if len(nodes) == 0:
             return ""
-        return nodes[0][].path
+        return nodes[0][].value
     return ""
 
 
@@ -212,19 +213,14 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
                 for j in range(len(nodes)):
                     var pp = _parent_path(nodes[j][].path)
                     if len(pp) > 0:
-                        next_nodes.append(Arc[XPathNode](XPathNode(pp)))
+                        next_nodes.append(Arc[XPathNode](XPathNode(pp, pp)))
             else:
                 for j in range(len(nodes)):
                     var child_path = nodes[j][].path + "/" + step_name
-                    next_nodes.append(Arc[XPathNode](XPathNode(child_path)))
+                    next_nodes.append(Arc[XPathNode](XPathNode(child_path, child_path)))
             nodes = next_nodes.copy()
             if seg.predicate:
                 nodes = self._apply_predicate(nodes, seg.predicate.value(), ctx)
-        # For must/when, "." as single step means current leaf value when set.
-        if len(node.segments) == 1:
-            ref first_seg = node.segments[0][]
-            if first_seg.step.text(ctx.expression) == "." and len(ctx.current_leaf_value) > 0:
-                return EvalResult(ctx.current_leaf_value)
         return EvalResult(nodes^)
 
     def _apply_predicate(
@@ -305,7 +301,9 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
     ) raises -> EvalResult:
         var name = node.name.text(ctx.expression)
         if name == "current":
-            return EvalResult(current.copy())
+            var single = List[Arc[XPathNode]]()
+            single.append(ctx.current.copy())
+            return EvalResult(single^)
         if name == "true":
             return EvalResult(True)
         if name == "false":

@@ -16,8 +16,9 @@ comptime Arc = ArcPointer
 
 @fieldwise_init
 struct XPathNode(Movable):
-    """Minimal node for path evaluation: path string only. Parent derived via _parent_path() for '..'. Extensible with data/schema later."""
+    """Minimal eval node: path plus string value used by first-value/string() on node-sets."""
     var path: String
+    var value: String
 
 
 def _parent_path(path: String) -> String:
@@ -43,11 +44,10 @@ comptime EvalResult = EvalResultVariant
 
 @fieldwise_init
 struct EvalContext:
-    """Fixed for one expression evaluation: root node and source expression (for Token.text). Current node is passed to eval_accept.
-    When validating a leaf, set current_leaf_value to the leaf's string value so '.' evaluates to it."""
+    """Fixed for one expression evaluation: validation-anchor current node, root node, and source expression."""
+    var current: Arc[XPathNode]
     var root: Arc[XPathNode]
     var expression: String
-    var current_leaf_value: String
 
 
 # -----------------------------
@@ -125,7 +125,7 @@ def _first_value(result: EvalResult) -> EvalResult:
     if r.isa[List[Arc[XPathNode]]]():
         ref nodes = r[List[Arc[XPathNode]]]
         if len(nodes) > 0:
-            return EvalResult(nodes[0][].path) # TODO resolve the path
+            return EvalResult(nodes[0][].value)
     return result
 
 
@@ -162,7 +162,7 @@ def _result_to_string(result: EvalResult) -> String:
         ref nodes = r[List[Arc[XPathNode]]]
         if len(nodes) == 0:
             return ""
-        return nodes[0][].path
+        return nodes[0][].value
     return ""
 
 
@@ -200,8 +200,6 @@ struct XPathEvaluator(ExprEvalVisitor):
     ) raises -> EvalResult:
         var text = node.value.text(ctx.expression)
         if text == ".":
-            if len(ctx.current_leaf_value) > 0:
-                return EvalResult(ctx.current_leaf_value)
             var single = List[Arc[XPathNode]]()
             single.append(current.copy())
             return EvalResult(single^)
@@ -209,7 +207,7 @@ struct XPathEvaluator(ExprEvalVisitor):
             var pp = _parent_path(current[].path)
             if len(pp) > 0:
                 var single = List[Arc[XPathNode]]()
-                single.append(Arc[XPathNode](XPathNode(pp)))
+                single.append(Arc[XPathNode](XPathNode(pp, pp)))
                 return EvalResult(single^)
             return EvalResult(List[Arc[XPathNode]]())
         return EvalResult(text)
@@ -281,11 +279,11 @@ struct XPathEvaluator(ExprEvalVisitor):
                 for j in range(len(nodes)):
                     var pp = _parent_path(nodes[j][].path)
                     if len(pp) > 0:
-                        next_nodes.append(Arc[XPathNode](XPathNode(pp)))
+                        next_nodes.append(Arc[XPathNode](XPathNode(pp, pp)))
             else:
                 for j in range(len(nodes)):
                     var child_path = nodes[j][].path + "/" + step_name
-                    var child = XPathNode(child_path)
+                    var child = XPathNode(child_path, child_path)
                     next_nodes.append(Arc[XPathNode](child^))
             nodes = next_nodes.copy()
             for k in range(len(step_expr.args)):
@@ -321,10 +319,10 @@ struct XPathEvaluator(ExprEvalVisitor):
         elif step_name == "..":
             var pp = _parent_path(current[].path)
             if len(pp) > 0:
-                nodes.append(Arc[XPathNode](XPathNode(pp)))
+                nodes.append(Arc[XPathNode](XPathNode(pp, pp)))
         else:
             var child_path = current[].path + "/" + step_name
-            var child = XPathNode(child_path)
+            var child = XPathNode(child_path, child_path)
             nodes.append(Arc[XPathNode](child^))
         for i in range(len(node.args)):
             nodes = self._apply_predicate(nodes, node.args[i][], ctx)
@@ -335,7 +333,9 @@ struct XPathEvaluator(ExprEvalVisitor):
     ) raises -> EvalResult:
         var name = node.value.text(ctx.expression)
         if name == "current":
-            return EvalResult(current[].path) # TODO resolve the path
+            var single = List[Arc[XPathNode]]()
+            single.append(ctx.current.copy())
+            return EvalResult(single^)
         if name == "true":
             return EvalResult(True)
         if name == "false":
