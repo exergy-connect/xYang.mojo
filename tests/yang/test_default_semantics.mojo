@@ -83,6 +83,30 @@ def _module_leaf_list_default() raises -> YangModule:
     )
 
 
+def _module_union_default() raises -> YangModule:
+    return parse_yang_string(
+        """
+        module test-union-default {
+          yang-version 1.1;
+          namespace "urn:test:union-default";
+          prefix t;
+
+          container data {
+            leaf id {
+              type union {
+                type uint16;
+                type enumeration {
+                  enum abc;
+                }
+              }
+              default "42";
+            }
+          }
+        }
+        """
+    )
+
+
 def test_text_parser_extracts_leaf_defaults() raises:
     var module = parse_yang_file("examples/basic_yang/basic-device.yang")
     ref system = module.top_level_containers[0][]
@@ -156,6 +180,20 @@ def test_choice_multiple_active_cases_invalid() raises:
 
 def test_leaf_list_defaults_realized() raises:
     var module = _module_leaf_list_default()
+    var data: Value = parse_json(
+        """
+        {
+          "data": {}
+        }
+        """
+    )
+    var validator = YangValidator()
+    var result = validator.validate(data, module)
+    assert_true(result.is_valid)
+
+
+def test_union_default_realized_with_member_type() raises:
+    var module = _module_union_default()
     var data: Value = parse_json(
         """
         {

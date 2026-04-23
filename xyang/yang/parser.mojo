@@ -6,6 +6,7 @@
 ## - leaf/list details: type, mandatory, key
 ## - must on leaves with optional error-message/description block
 
+from std.collections import Dict
 from std.collections.string import Codepoint
 from std.memory import ArcPointer
 from xyang.ast import (
@@ -51,6 +52,10 @@ from xyang.yang.tokens import (
     YANG_STMT_UNION,
     YANG_STMT_USES,
     YANG_STMT_WHEN,
+    YANG_STMT_MIN_ELEMENTS,
+    YANG_STMT_MAX_ELEMENTS,
+    YANG_STMT_ORDERED_BY,
+    YANG_STMT_UNIQUE,
     YANG_TYPE_ENUMERATION,
     YANG_TYPE_UNKNOWN,
 )
@@ -230,6 +235,10 @@ struct _YangParser(Movable):
 
         var key = ""
         var desc = ""
+        var min_el = -1
+        var max_el = -1
+        var ordered_by = ""
+        var unique_specs = List[List[String]]()
         var leaves = List[Arc[YangLeaf]]()
         var leaf_lists = List[Arc[YangLeafList]]()
         var containers = List[Arc[YangContainer]]()
@@ -242,6 +251,25 @@ struct _YangParser(Movable):
                 if stmt == YANG_STMT_KEY:
                     self._consume()
                     key = self._consume_argument_value()
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MIN_ELEMENTS:
+                    self._consume()
+                    min_el = self._parse_non_negative_int("min-elements")
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MAX_ELEMENTS:
+                    self._consume()
+                    max_el = self._parse_non_negative_int("max-elements")
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_ORDERED_BY:
+                    self._consume()
+                    ordered_by = self._parse_ordered_by_argument()
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_UNIQUE:
+                    self._consume()
+                    var uarg = self._consume_argument_value()
+                    var ucomp = self._unique_components_from_argument(uarg)
+                    if len(ucomp) > 0:
+                        unique_specs.append(ucomp^)
                     self._skip_if(";")
                 elif stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
@@ -284,6 +312,10 @@ struct _YangParser(Movable):
             containers = containers^,
             lists = lists^,
             choices = choices^,
+            min_elements = min_el,
+            max_elements = max_el,
+            ordered_by = ordered_by,
+            unique_specs = unique_specs^,
         )
 
     def _parse_leaf_statement(mut self) raises -> YangLeaf:
@@ -306,6 +338,7 @@ struct _YangParser(Movable):
         var mandatory = False
         var has_default = False
         var default_value = ""
+        var default_argument_was_quoted = False
         var must = List[Arc[YangMust]]()
         var when = Optional[YangWhen]()
 
@@ -320,7 +353,15 @@ struct _YangParser(Movable):
                     self._skip_if(";")
                 elif stmt == YANG_STMT_DEFAULT:
                     self._consume()
-                    default_value = self._consume_argument_value()
+                    var any_quoted = False
+                    if self._has_more():
+                        any_quoted = self.tokens[self.index].quoted
+                    default_value = self._consume_value()
+                    while self._consume_if("+"):
+                        if self._has_more() and self.tokens[self.index].quoted:
+                            any_quoted = True
+                        default_value += self._consume_value()
+                    default_argument_was_quoted = any_quoted
                     has_default = True
                     self._skip_if(";")
                 elif stmt == YANG_STMT_MUST:
@@ -344,6 +385,7 @@ struct _YangParser(Movable):
             mandatory = mandatory,
             has_default = has_default,
             default_value = default_value,
+            default_argument_was_quoted = default_argument_was_quoted,
             must_statements = must^,
             when = when^,
         )
@@ -368,12 +410,27 @@ struct _YangParser(Movable):
         var must = List[Arc[YangMust]]()
         var when = Optional[YangWhen]()
         var default_values = List[String]()
+        var min_el = -1
+        var max_el = -1
+        var ordered_by = ""
 
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
                 if stmt == YANG_STMT_TYPE:
                     type_stmt = self._parse_type_statement()
+                elif stmt == YANG_STMT_MIN_ELEMENTS:
+                    self._consume()
+                    min_el = self._parse_non_negative_int("min-elements")
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MAX_ELEMENTS:
+                    self._consume()
+                    max_el = self._parse_non_negative_int("max-elements")
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_ORDERED_BY:
+                    self._consume()
+                    ordered_by = self._parse_ordered_by_argument()
+                    self._skip_if(";")
                 elif stmt == YANG_STMT_DEFAULT:
                     self._consume()
                     default_values.append(self._consume_argument_value())
@@ -399,6 +456,9 @@ struct _YangParser(Movable):
             default_values = default_values^,
             must_statements = must^,
             when = when^,
+            min_elements = min_el,
+            max_elements = max_el,
+            ordered_by = ordered_by,
         )
 
     def _parse_choice_statement(mut self) raises -> YangChoice:
@@ -407,6 +467,7 @@ struct _YangParser(Movable):
 
         var mandatory = False
         var default_case = ""
+        var choice_when = Optional[YangWhen]()
         var case_names = List[String]()
         var cases = List[Arc[YangChoiceCase]]()
 
@@ -421,16 +482,26 @@ struct _YangParser(Movable):
                     self._consume()
                     default_case = self._consume_name()
                     self._skip_if(";")
+                elif stmt == YANG_STMT_WHEN:
+                    var w = self._parse_when_statement()
+                    choice_when = Optional(w^)
+                elif stmt == YANG_STMT_DESCRIPTION:
+                    self._consume()
+                    _ = self._consume_argument_value()
+                    self._skip_if(";")
                 elif stmt == YANG_STMT_CASE:
                     var parsed_case = self._parse_case_statement()
                     for i in range(len(parsed_case.node_names)):
                         case_names.append(parsed_case.node_names[i])
-                    cases.append(Arc[YangChoiceCase](
-                        YangChoiceCase(
-                            name=parsed_case.name,
-                            node_names=parsed_case.node_names.copy(),
+                    cases.append(
+                        Arc[YangChoiceCase](
+                            YangChoiceCase(
+                                name=parsed_case.name,
+                                node_names=parsed_case.node_names.copy(),
+                                when=Optional[YangWhen](),
+                            ),
                         ),
-                    ))
+                    )
                 elif stmt == YANG_STMT_LEAF:
                     self._consume()
                     var node_name = self._consume_name()
@@ -438,7 +509,11 @@ struct _YangParser(Movable):
                     var implicit_names = List[String]()
                     implicit_names.append(node_name)
                     cases.append(Arc[YangChoiceCase](
-                        YangChoiceCase(name=node_name, node_names=implicit_names^),
+                        YangChoiceCase(
+                            name=node_name,
+                            node_names=implicit_names^,
+                            when=Optional[YangWhen](),
+                        ),
                     ))
                     self._skip_statement_tail()
                 elif stmt == YANG_STMT_CONTAINER:
@@ -448,7 +523,11 @@ struct _YangParser(Movable):
                     var implicit_names = List[String]()
                     implicit_names.append(node_name)
                     cases.append(Arc[YangChoiceCase](
-                        YangChoiceCase(name=node_name, node_names=implicit_names^),
+                        YangChoiceCase(
+                            name=node_name,
+                            node_names=implicit_names^,
+                            when=Optional[YangWhen](),
+                        ),
                     ))
                     self._skip_statement_tail()
                 elif stmt == YANG_STMT_LIST:
@@ -458,7 +537,11 @@ struct _YangParser(Movable):
                     var implicit_names = List[String]()
                     implicit_names.append(node_name)
                     cases.append(Arc[YangChoiceCase](
-                        YangChoiceCase(name=node_name, node_names=implicit_names^),
+                        YangChoiceCase(
+                            name=node_name,
+                            node_names=implicit_names^,
+                            when=Optional[YangWhen](),
+                        ),
                     ))
                     self._skip_statement_tail()
                 elif stmt == YANG_STMT_LEAF_LIST:
@@ -468,7 +551,11 @@ struct _YangParser(Movable):
                     var implicit_names = List[String]()
                     implicit_names.append(node_name)
                     cases.append(Arc[YangChoiceCase](
-                        YangChoiceCase(name=node_name, node_names=implicit_names^),
+                        YangChoiceCase(
+                            name=node_name,
+                            node_names=implicit_names^,
+                            when=Optional[YangWhen](),
+                        ),
                     ))
                     self._skip_statement_tail()
                 else:
@@ -476,13 +563,17 @@ struct _YangParser(Movable):
             self._expect("}")
         self._skip_if(";")
 
-        return YangChoice(
+        var built = YangChoice(
             name = name,
             mandatory = mandatory,
             default_case = default_case,
             case_names = case_names^,
             cases = cases^,
+            when = choice_when^,
         )
+        if len(built.cases) > 0:
+            self._validate_choice_unique_node_names(built)
+        return built^
 
     def _parse_case_statement(mut self) raises -> ParsedChoiceCase:
         self._expect(YANG_STMT_CASE)
@@ -509,6 +600,10 @@ struct _YangParser(Movable):
                     self._consume()
                     names.append(self._consume_name())
                     self._skip_statement_tail()
+                elif stmt == YANG_STMT_DESCRIPTION:
+                    self._consume()
+                    _ = self._consume_argument_value()
+                    self._skip_if(";")
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -792,6 +887,52 @@ struct _YangParser(Movable):
                 xpath_ast = xpath_ast,
                 parsed = False,
             )
+
+    def _parse_non_negative_int(mut self, label: String) raises -> Int:
+        var raw = self._consume_argument_value().strip()
+        try:
+            var n = atol(raw)
+            if n < 0:
+                self._error(label + " must be non-negative, got '" + raw + "'")
+            return Int(n)
+        except:
+            self._error("Invalid integer for " + label + ": '" + raw + "'")
+            return 0
+
+    def _parse_ordered_by_argument(mut self) raises -> String:
+        var v = self._consume_argument_value()
+        if v != "user" and v != "system":
+            self._error("ordered-by must be 'user' or 'system', got '" + v + "'")
+        return v
+
+    def _unique_components_from_argument(mut self, arg: String) raises -> List[String]:
+        var parts = arg.strip().split()
+        var out = List[String]()
+        for i in range(len(parts)):
+            var seg = String(String(parts[i]).strip())
+            if len(seg) > 0:
+                out.append(seg^)
+        return out^
+
+    def _validate_choice_unique_node_names(mut self, read choice: YangChoice) raises:
+        var seen = Dict[String, String]()
+        for i in range(len(choice.cases)):
+            ref c = choice.cases[i][]
+            for j in range(len(c.node_names)):
+                var nm = c.node_names[j]
+                if nm in seen:
+                    self._error(
+                        "Choice '"
+                        + choice.name
+                        + "': node '"
+                        + nm
+                        + "' appears in case '"
+                        + seen[nm]
+                        + "' and case '"
+                        + c.name
+                        + "' (RFC 7950 §7.9)",
+                    )
+                seen[nm] = c.name
 
     def _parse_boolean_value(mut self) raises -> Bool:
         var value = self._consume_value()

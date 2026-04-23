@@ -126,6 +126,9 @@ struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen)
     var mandatory: Bool
     var has_default: Bool
     var default_value: String
+    ## True when the YANG `default` argument was a quoted string, or JSON Schema default is a string on a union type.
+    ## Used so JSON `default` keeps the user’s type (e.g. string `"42"` vs integer `42`) for `oneOf` unions.
+    var default_argument_was_quoted: Bool
     var must_statements: List[Arc[YangMust]]
     var when: Optional[YangWhen]
 
@@ -167,6 +170,11 @@ struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasW
     var default_values: List[String]
     var must_statements: List[Arc[YangMust]]
     var when: Optional[YangWhen]
+    ## RFC 7950: unset when `min_elements` / `max_elements` are `-1`.
+    var min_elements: Int
+    var max_elements: Int
+    ## RFC 7950 §7.7.1: `user` or `system`; empty if not specified in the model source.
+    var ordered_by: String
 
     def must_count(self) -> Int:
         return len(self.must_statements)
@@ -197,18 +205,32 @@ struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasW
 
 
 @fieldwise_init
-struct YangChoiceCase(Movable, JsonDeserializable):
+struct YangChoiceCase(Movable, JsonDeserializable, YangHasWhen):
     var name: String
     var node_names: List[String]
+    var when: Optional[YangWhen]
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
 
 
 @fieldwise_init
-struct YangChoice(Movable, JsonDeserializable):
+struct YangChoice(Movable, JsonDeserializable, YangHasWhen):
     var name: String
     var mandatory: Bool
     var default_case: String
     var case_names: List[String]
     var cases: List[Arc[YangChoiceCase]]
+    var when: Optional[YangWhen]
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
 
     def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
@@ -255,6 +277,12 @@ struct YangList(Movable, JsonDeserializable):
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
+    ## RFC 7950: unset when `min_elements` / `max_elements` are `-1`.
+    var min_elements: Int
+    var max_elements: Int
+    var ordered_by: String
+    ## Each inner list is one `unique` statement: descendant leaf names (same list entry).
+    var unique_specs: List[List[String]]
 
     def __str__(self) -> String:
         var nleaf = len(self.leaves)

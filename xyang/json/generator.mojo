@@ -23,6 +23,8 @@ from xyang.json.schema_keys import (
     JSON_SCHEMA_MAXIMUM,
     JSON_SCHEMA_MAX_PROPERTIES,
     JSON_SCHEMA_MINIMUM,
+    JSON_SCHEMA_MIN_ITEMS,
+    JSON_SCHEMA_MAX_ITEMS,
     JSON_SCHEMA_NAME,
     JSON_SCHEMA_ONE_OF,
     JSON_SCHEMA_PROPERTIES,
@@ -33,6 +35,8 @@ from xyang.json.schema_keys import (
     JSON_SCHEMA_DRAFT_2020_12,
     XYANG_CONTACT,
     XYANG_DEFAULT,
+    XYANG_ORDERED_BY,
+    XYANG_UNIQUE,
     XYANG_ERROR_MESSAGE,
     XYANG_KEY,
     XYANG_MANDATORY,
@@ -105,6 +109,8 @@ def _leaf_list_xyang(read ll: YangLeafList) raises -> Object:
     if ll.has_when():
         ref w = ll.when.value()
         xy[XYANG_WHEN] = Value(_when_object(w))
+    if len(ll.ordered_by) > 0:
+        xy[XYANG_ORDERED_BY] = Value(ll.ordered_by)
     return xy^
 
 
@@ -189,6 +195,22 @@ def _default_json_value(default_text: String, type_name: String) raises -> Optio
     return Optional(Value(default_text))
 
 
+def _default_json_value_for_type(
+    default_text: String,
+    read type_stmt: YangType,
+    default_argument_was_quoted: Bool,
+) raises -> Optional[Value]:
+    if type_stmt.name == YANG_STMT_UNION:
+        if default_argument_was_quoted:
+            return Optional(Value(default_text))
+        for i in range(len(type_stmt.union_types)):
+            var dv = _default_json_value(default_text, type_stmt.union_types[i][].name)
+            if dv:
+                return dv^
+        return Optional(Value(default_text))
+    return _default_json_value(default_text, type_stmt.name)
+
+
 def _leaf_property(read leaf: YangLeaf) raises -> Object:
     var out: Object
     if leaf.type.name == YANG_TYPE_LEAFREF:
@@ -199,7 +221,11 @@ def _leaf_property(read leaf: YangLeaf) raises -> Object:
     out[JSON_SCHEMA_DESCRIPTION] = Value("")
     out[JSON_SCHEMA_X_YANG] = Value(_leaf_xyang(leaf))
     if leaf.has_default:
-        var dv = _default_json_value(leaf.default_value, leaf.type.name)
+        var dv = _default_json_value_for_type(
+            leaf.default_value,
+            leaf.type,
+            leaf.default_argument_was_quoted,
+        )
         if dv:
             out[JSON_SCHEMA_DEFAULT] = dv.value().copy()
     return out^
@@ -225,10 +251,14 @@ def _leaf_list_property(read ll: YangLeafList) raises -> Object:
     out[JSON_SCHEMA_ITEMS] = Value(_leaf_list_items_schema(ll))
     out[JSON_SCHEMA_DESCRIPTION] = Value("")
     out[JSON_SCHEMA_X_YANG] = Value(_leaf_list_xyang(ll))
+    if ll.min_elements >= 0:
+        out[JSON_SCHEMA_MIN_ITEMS] = Value(ll.min_elements)
+    if ll.max_elements >= 0:
+        out[JSON_SCHEMA_MAX_ITEMS] = Value(ll.max_elements)
     if len(ll.default_values) > 0:
         var darr = Array()
         for i in range(len(ll.default_values)):
-            var dv = _default_json_value(ll.default_values[i], ll.type.name)
+            var dv = _default_json_value_for_type(ll.default_values[i], ll.type, False)
             if dv:
                 darr.append(dv.value().copy())
         if len(darr) > 0:
@@ -283,6 +313,9 @@ def _choice_property(
     xy[XYANG_MANDATORY] = Value(choice.mandatory)
     if len(choice.default_case) > 0:
         xy[XYANG_DEFAULT] = Value(choice.default_case)
+    if choice.has_when():
+        ref w = choice.when.value()
+        xy[XYANG_WHEN] = Value(_when_object(w))
     out[JSON_SCHEMA_X_YANG] = Value(xy^)
 
     var branches = Array()
@@ -311,6 +344,9 @@ def _choice_property(
         branch[JSON_SCHEMA_REQUIRED] = Value(req^)
         var case_xy = Object()
         case_xy[JSON_SCHEMA_NAME] = Value(case_node.name)
+        if case_node.has_when():
+            ref cw = case_node.when.value()
+            case_xy[XYANG_WHEN] = Value(_when_object(cw))
         branch[JSON_SCHEMA_X_YANG] = Value(case_xy^)
         branches.append(Value(branch^))
 
@@ -393,11 +429,26 @@ def _list_property(read lst: YangList) raises -> Object:
     var xy = Object()
     xy[XYANG_TYPE] = Value("list")
     xy[XYANG_KEY] = Value(lst.key)
+    if len(lst.ordered_by) > 0:
+        xy[XYANG_ORDERED_BY] = Value(lst.ordered_by)
+    if len(lst.unique_specs) > 0:
+        var uarr = Array()
+        for i in range(len(lst.unique_specs)):
+            ref spec = lst.unique_specs[i]
+            var inner = Array()
+            for j in range(len(spec)):
+                inner.append(Value(spec[j]))
+            uarr.append(Value(inner^))
+        xy[XYANG_UNIQUE] = Value(uarr^)
     var out = Object()
     out[JSON_SCHEMA_TYPE] = Value("array")
     out[JSON_SCHEMA_ITEMS] = Value(_list_items_schema(lst))
     out[JSON_SCHEMA_DESCRIPTION] = Value(lst.description)
     out[JSON_SCHEMA_X_YANG] = Value(xy^)
+    if lst.min_elements >= 0:
+        out[JSON_SCHEMA_MIN_ITEMS] = Value(lst.min_elements)
+    if lst.max_elements >= 0:
+        out[JSON_SCHEMA_MAX_ITEMS] = Value(lst.max_elements)
     return out^
 
 

@@ -21,6 +21,12 @@ from xyang.yang.tokens import (
     YANG_STMT_LEAF_LIST,
     YANG_STMT_UNION,
 )
+from xyang.json.schema_keys import (
+    JSON_SCHEMA_MIN_ITEMS,
+    JSON_SCHEMA_MAX_ITEMS,
+    XYANG_ORDERED_BY,
+    XYANG_UNIQUE,
+)
 
 comptime Arc = ArcPointer
 
@@ -258,12 +264,16 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
     var when = Optional[YangWhen]()
     var has_default = False
     var default_value = ""
+    var default_argument_was_quoted = False
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
     if "default" in prop.object():
-        default_value = _default_scalar_to_string(prop.object()["default"])
+        ref dv = prop.object()["default"]
+        if type_stmt.name == YANG_STMT_UNION and dv.is_string():
+            default_argument_was_quoted = True
+        default_value = _default_scalar_to_string(dv)
         has_default = len(default_value) > 0
     return YangLeaf(
         name = name,
@@ -271,6 +281,7 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
         mandatory = mandatory,
         has_default = has_default,
         default_value = default_value,
+        default_argument_was_quoted = default_argument_was_quoted,
         must_statements = must_list^,
         when = when^,
     )
@@ -281,10 +292,20 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
     var must_list = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
     var default_values = List[String]()
-    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
-        ref xy = prop.object()["x-yang"]
+    var min_e = -1
+    var max_e = -1
+    var ob = ""
+    ref po = prop.object()
+    if JSON_SCHEMA_MIN_ITEMS in po:
+        min_e = Int(po[JSON_SCHEMA_MIN_ITEMS].int())
+    if JSON_SCHEMA_MAX_ITEMS in po:
+        max_e = Int(po[JSON_SCHEMA_MAX_ITEMS].int())
+    if "x-yang" in po and po["x-yang"].is_object():
+        ref xy = po["x-yang"]
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
+        if XYANG_ORDERED_BY in xy.object() and xy[XYANG_ORDERED_BY].is_string():
+            ob = xy[XYANG_ORDERED_BY].string()
     if "default" in prop.object():
         ref default_val = prop.object()["default"]
         if default_val.is_array():
@@ -303,6 +324,9 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
         default_values = default_values^,
         must_statements = must_list^,
         when = when^,
+        min_elements = min_e,
+        max_elements = max_e,
+        ordered_by = ob,
     )
 
 
@@ -347,23 +371,27 @@ def parse_yang_choice(name: String, prop: Value) raises -> YangChoice:
     """Parse a choice definition from a JSON Schema property (oneOf)."""
     var mandatory = False
     var default_case = ""
-    if "x-yang" in prop.object() and "mandatory" in prop.object()["x-yang"].object():
-        mandatory = prop.object()["x-yang"]["mandatory"].bool()
-    if (
-        "x-yang" in prop.object()
-        and "default" in prop.object()["x-yang"].object()
-        and prop.object()["x-yang"]["default"].is_string()
-    ):
-        default_case = prop.object()["x-yang"]["default"].string()
+    var ch_when = Optional[YangWhen]()
+    ref po = prop.object()
+    if "x-yang" in po and po["x-yang"].is_object():
+        ref xy = po["x-yang"]
+        if "mandatory" in xy:
+            mandatory = xy["mandatory"].bool()
+        if "default" in xy and xy["default"].is_string():
+            default_case = xy["default"].string()
+        ch_when = _parse_yang_when(po["x-yang"])
 
     var case_names = List[String]()
     var cases = List[Arc[YangChoiceCase]]()
-    if "oneOf" in prop.object() and prop.object()["oneOf"].is_array():
-        ref one_of = prop.object()["oneOf"].array()
+    if "oneOf" in po and po["oneOf"].is_array():
+        ref one_of = po["oneOf"].array()
         for i in range(len(one_of)):
             ref branch = one_of[i].object()
             var case_name = "case-" + String(i)
             var node_names = List[String]()
+            var case_when = Optional[YangWhen]()
+            if "x-yang" in branch and branch["x-yang"].is_object():
+                case_when = _parse_yang_when(branch["x-yang"])
             if "required" in branch and branch["required"].is_array():
                 ref req = branch["required"].array()
                 if len(req) > 0:
@@ -381,13 +409,18 @@ def parse_yang_choice(name: String, prop: Value) raises -> YangChoice:
                     case_names.append(p.key)
                 if len(node_names) > 0:
                     case_name = node_names[0]
-            cases.append(Arc[YangChoiceCase](YangChoiceCase(name=case_name, node_names=node_names^)))
+            cases.append(
+                Arc[YangChoiceCase](
+                    YangChoiceCase(name=case_name, node_names=node_names^, when=case_when^),
+                ),
+            )
     return YangChoice(
         name=name,
         mandatory=mandatory,
         default_case=default_case,
         case_names=case_names^,
         cases=cases^,
+        when=ch_when^,
     )
 
 
@@ -398,8 +431,39 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
         desc = prop.object()["description"].string()
 
     var key = ""
-    if "x-yang" in prop.object() and "key" in prop.object()["x-yang"].object():
-        key = prop.object()["x-yang"]["key"].string()
+    var min_e = -1
+    var max_e = -1
+    var ob = ""
+    var unique_specs = List[List[String]]()
+    ref po = prop.object()
+    if "x-yang" in po and po["x-yang"].is_object():
+        ref xy = po["x-yang"]
+        if "key" in xy:
+            key = xy["key"].string()
+        if XYANG_ORDERED_BY in xy and xy[XYANG_ORDERED_BY].is_string():
+            ob = xy[XYANG_ORDERED_BY].string()
+        if XYANG_UNIQUE in xy and xy[XYANG_UNIQUE].is_array():
+            ref uarr = xy[XYANG_UNIQUE].array()
+            for ui in range(len(uarr)):
+                ref uv = uarr[ui]
+                var spec = List[String]()
+                if uv.is_array():
+                    ref inner = uv.array()
+                    for vi in range(len(inner)):
+                        if inner[vi].is_string():
+                            spec.append(inner[vi].string())
+                elif uv.is_string():
+                    var raw = uv.string().split()
+                    for ri in range(len(raw)):
+                        var seg = String(String(raw[ri]).strip())
+                        if len(seg) > 0:
+                            spec.append(seg^)
+                if len(spec) > 0:
+                    unique_specs.append(spec^)
+    if JSON_SCHEMA_MIN_ITEMS in po:
+        min_e = Int(po[JSON_SCHEMA_MIN_ITEMS].int())
+    if JSON_SCHEMA_MAX_ITEMS in po:
+        max_e = Int(po[JSON_SCHEMA_MAX_ITEMS].int())
 
     var leaves = List[Arc[YangLeaf]]()
     var leaf_lists = List[Arc[YangLeafList]]()
@@ -407,8 +471,8 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
 
-    if "items" in prop.object() and prop.object()["items"].is_object():
-        ref items_schema = prop.object()["items"].object()
+    if "items" in po and po["items"].is_object():
+        ref items_schema = po["items"].object()
         if "properties" in items_schema:
             ref item_props = items_schema["properties"].object()
             for ref pair in item_props.items():
@@ -449,6 +513,10 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
         containers = containers^,
         lists = lists^,
         choices = choices^,
+        min_elements = min_e,
+        max_elements = max_e,
+        ordered_by = ob,
+        unique_specs = unique_specs^,
     )
 
 
