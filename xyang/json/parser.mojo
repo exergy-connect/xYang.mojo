@@ -37,15 +37,15 @@ def parse_yang_module(source: String) raises -> YangModule:
     # Discover top-level YANG containers from root["properties"].
     var containers = List[Arc[YangContainer]]()
     ref props_obj = root.object()["properties"].object()
-    for key in props_obj.keys():
-        ref prop = props_obj[key]
+    for ref pair in props_obj.items():
+        ref prop = pair.value
         if not prop.is_object():
             continue
         var kind = ""
         if "x-yang" in prop.object():
             kind = prop.object()["x-yang"]["type"].string()
         if kind == "container":
-            var yc = parse_yang_container(key, prop)
+            var yc = parse_yang_container(pair.key, prop)
             containers.append(Arc[YangContainer](yc^))
 
     return YangModule(
@@ -56,7 +56,7 @@ def parse_yang_module(source: String) raises -> YangModule:
     )
 
 
-def _leaf_type_name_from_prop(prop: Value) -> String:
+def _leaf_type_name_from_prop(prop: Value) raises -> String:
     """Derive a YANG/type name from a JSON Schema property (type or $ref)."""
     ref obj = prop.object()
     if "type" in obj and obj["type"].is_string():
@@ -71,7 +71,7 @@ def _leaf_type_name_from_prop(prop: Value) -> String:
     return "unknown"
 
 
-def _is_required(prop_key: String, container_prop: Value) -> Bool:
+def _is_required(prop_key: String, container_prop: Value) raises -> Bool:
     """True if prop_key is in the container's required array."""
     ref obj = container_prop.object()
     if "required" not in obj or not obj["required"].is_array():
@@ -83,7 +83,7 @@ def _is_required(prop_key: String, container_prop: Value) -> Bool:
     return False
 
 
-def _parse_yang_must_list(ref xy: Value) -> List[Arc[YangMust]]:
+def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[YangMust]]:
     """Extract a list of YangMust constraints from an x-yang object."""
     var must_list = List[Arc[YangMust]]()
     if "must" not in xy.object() or not xy.object()["must"].is_array():
@@ -125,7 +125,7 @@ def _parse_yang_must_list(ref xy: Value) -> List[Arc[YangMust]]:
     return must_list^
 
 
-def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) -> YangLeaf:
+def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLeaf:
     """Parse a leaf definition from a JSON Schema property."""
     var type_name = _leaf_type_name_from_prop(prop)
     var must_list = List[Arc[YangMust]]()
@@ -146,34 +146,34 @@ def _parse_node_children(
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
-):
+) raises:
     """Parse properties of a container or list-items schema; appends into the given lists."""
     if "properties" not in parent_prop.object():
         return
 
     ref props_obj = parent_prop.object()["properties"].object()
-    for prop_key in props_obj.keys():
-        ref child = props_obj[prop_key]
+    for ref pair in props_obj.items():
+        ref child = pair.value
         var kind = ""
         if "x-yang" in child.object():
             kind = child.object()["x-yang"]["type"].string()
 
         if kind == "container":
-            var yc = parse_yang_container(prop_key, child)
+            var yc = parse_yang_container(pair.key, child)
             containers.append(Arc[YangContainer](yc^))
         elif kind == "leaf" or kind == "leafref" or kind == "leaf-list":
-            var mandatory = _is_required(prop_key, parent_prop)
-            var yl = parse_yang_leaf(prop_key, child, mandatory)
+            var mandatory = _is_required(pair.key, parent_prop)
+            var yl = parse_yang_leaf(pair.key, child, mandatory)
             leaves.append(Arc[YangLeaf](yl^))
         elif kind == "list":
-            var yl = parse_yang_list(prop_key, child)
+            var yl = parse_yang_list(pair.key, child)
             lists.append(Arc[YangList](yl^))
         elif kind == "choice":
-            var ych = parse_yang_choice(prop_key, child)
+            var ych = parse_yang_choice(pair.key, child)
             choices.append(Arc[YangChoice](ych^))
 
 
-def parse_yang_choice(name: String, prop: Value) -> YangChoice:
+def parse_yang_choice(name: String, prop: Value) raises -> YangChoice:
     """Parse a choice definition from a JSON Schema property (oneOf)."""
     var mandatory = False
     if "x-yang" in prop.object() and "mandatory" in prop.object()["x-yang"].object():
@@ -189,13 +189,14 @@ def parse_yang_choice(name: String, prop: Value) -> YangChoice:
                 if len(req) > 0 and req[0].is_string():
                     case_names.append(req[0].string())
             elif "properties" in branch:
-                for k in branch["properties"].object().keys():
-                    case_names.append(k)
+                ref branch_props = branch["properties"].object()
+                for ref p in branch_props.items():
+                    case_names.append(p.key)
                     break
     return YangChoice(name=name, mandatory=mandatory, case_names=case_names^)
 
 
-def parse_yang_list(name: String, prop: Value) -> YangList:
+def parse_yang_list(name: String, prop: Value) raises -> YangList:
     """Parse a list definition from a JSON Schema property (array with items)."""
     var desc = ""
     if "description" in prop.object():
@@ -214,30 +215,30 @@ def parse_yang_list(name: String, prop: Value) -> YangList:
         ref items_schema = prop.object()["items"].object()
         if "properties" in items_schema:
             ref item_props = items_schema["properties"].object()
-            for prop_key in item_props.keys():
-                ref child = item_props[prop_key]
+            for ref pair in item_props.items():
+                ref child = pair.value
                 var kind = ""
                 if "x-yang" in child.object():
                     kind = child.object()["x-yang"]["type"].string()
 
                 if kind == "container":
-                    var yc = parse_yang_container(prop_key, child)
+                    var yc = parse_yang_container(pair.key, child)
                     containers.append(Arc[YangContainer](yc^))
                 elif kind == "leaf" or kind == "leafref" or kind == "leaf-list":
                     var mandatory = False
                     if "required" in items_schema and items_schema["required"].is_array():
                         ref req = items_schema["required"].array()
                         for ri in range(len(req)):
-                            if req[ri].is_string() and req[ri].string() == prop_key:
+                            if req[ri].is_string() and req[ri].string() == pair.key:
                                 mandatory = True
                                 break
-                    var yl = parse_yang_leaf(prop_key, child, mandatory)
+                    var yl = parse_yang_leaf(pair.key, child, mandatory)
                     leaves.append(Arc[YangLeaf](yl^))
                 elif kind == "list":
-                    var yl = parse_yang_list(prop_key, child)
+                    var yl = parse_yang_list(pair.key, child)
                     lists.append(Arc[YangList](yl^))
                 elif kind == "choice":
-                    var ych = parse_yang_choice(prop_key, child)
+                    var ych = parse_yang_choice(pair.key, child)
                     choices.append(Arc[YangChoice](ych^))
 
     return YangList(
@@ -251,7 +252,7 @@ def parse_yang_list(name: String, prop: Value) -> YangList:
     )
 
 
-def parse_yang_container(name: String, prop: Value) -> YangContainer:
+def parse_yang_container(name: String, prop: Value) raises -> YangContainer:
     """Parse a container definition from a JSON Schema property, including its properties."""
     var desc = ""
     if "description" in prop.object():
