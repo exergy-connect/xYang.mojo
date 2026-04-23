@@ -125,7 +125,7 @@ def _first_value(result: EvalResult) -> EvalResult:
     if r.isa[List[Arc[XPathNode]]]():
         ref nodes = r[List[Arc[XPathNode]]]
         if len(nodes) > 0:
-            return EvalResult(nodes[0].copy())
+            return EvalResult(nodes[0][].path) # TODO resolve the path
     return result
 
 
@@ -335,7 +335,7 @@ struct XPathEvaluator(ExprEvalVisitor):
     ) raises -> EvalResult:
         var name = node.value.text(ctx.expression)
         if name == "current":
-            return EvalResult(current.copy())
+            return EvalResult(current[].path) # TODO resolve the path
         if name == "true":
             return EvalResult(True)
         if name == "false":
