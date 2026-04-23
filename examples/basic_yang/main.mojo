@@ -21,11 +21,10 @@ def main() raises:
         json_text = f.read()
     var data: Value = parse_json(json_text)
 
-    var validator = YangValidator()
-    var result = validator.validate(data, module)
-
     print("YANG module: " + module.name)
     print("Data file: " + DATA_PATH)
+    var validator = YangValidator(use_alt_xpath=True, debug_trace=True)
+    var result = validator.validate(data, module)
     print("Validation: " + ("valid" if result.is_valid else "invalid"))
     for i in range(len(result.errors)):
         print("  error: " + result.errors[i])
