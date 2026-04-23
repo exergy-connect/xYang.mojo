@@ -1,7 +1,7 @@
 ## YANG document validator.
 ## Walks the data tree in lockstep with the schema tree (YangModule AST).
 ## Performs: structural (mandatory, unknown field), choice mandatory, when, type checks, must (XPath evaluator).
-## No leafref (not in current Mojo AST).
+## Includes leafref referential integrity checks for configured leafref paths.
 
 from std.memory import ArcPointer
 from emberjson import Value, Object
@@ -13,11 +13,13 @@ from xyang.ast import (
     YangLeaf,
     YangType,
 )
+from xyang.yang.tokens import YANG_TYPE_LEAFREF
 from xyang.validator.validation_error import ValidationError, Severity
 from xyang.validator.path_builder import PathBuilder
 from xyang.validator.type_checker import (
     IntegerTypeBounds,
     check_leaf_value,
+    check_leafref_reference,
     make_integer_type_bounds_table,
 )
 from xyang.xpath import (
@@ -171,7 +173,7 @@ struct DocumentValidator:
             if cont.name in root_obj:
                 self._trace("Visit top-level container '" + cont.name + "'")
                 path.push(cont.name)
-                self._visit_container(root_obj[cont.name], cont, path)
+                self._visit_container(root_obj[cont.name], cont, path, data)
                 path.pop()
         for ref pair in root_obj.items():
             var key = pair.key
@@ -198,6 +200,7 @@ struct DocumentValidator:
         data: Value,
         container: YangContainer,
         mut path: PathBuilder,
+        root_data: Value,
     ) raises:
         self._trace("Enter container path=" + path.current() + " schema='" + container.name + "'")
         if not data.is_object():
@@ -223,15 +226,15 @@ struct DocumentValidator:
                     ),
                 )
         for i in range(len(container.leaves)):
-            self._visit_leaf(obj, container.leaves[i][], path)
+            self._visit_leaf(obj, container.leaves[i][], path, root_data)
         for c in container.containers:
             ref child_cont = c[]
             if child_cont.name in obj:
                 path.push(child_cont.name)
-                self._visit_container(obj[child_cont.name], child_cont, path)
+                self._visit_container(obj[child_cont.name], child_cont, path, root_data)
                 path.pop()
         for i in range(len(container.lists)):
-            self._visit_list(obj, container.lists[i][], path)
+            self._visit_list(obj, container.lists[i][], path, root_data)
         for i in range(len(container.choices)):
             self._visit_choice(obj, container.choices[i][], path)
 
@@ -240,6 +243,7 @@ struct DocumentValidator:
         obj: Object,
         leaf: YangLeaf,
         path: PathBuilder,
+        root_data: Value,
     ) raises:
         var name = leaf.name
         var child_path = path.child(name)
@@ -320,7 +324,8 @@ struct DocumentValidator:
                         ),
                     )
                     return
-        for msg in check_leaf_value(val, leaf.type, child_path, self._integer_bounds):
+        var type_errors = check_leaf_value(val, leaf.type, child_path, self._integer_bounds)
+        for msg in type_errors:
             self._errors.append(
                 ValidationError(
                     path=child_path,
@@ -329,6 +334,22 @@ struct DocumentValidator:
                     severity=Severity("error"),
                 ),
             )
+        if leaf.type.name == YANG_TYPE_LEAFREF:
+            if len(type_errors) > 0:
+                return
+            var leafref_errors = check_leafref_reference(val, leaf.type, child_path, root_data)
+            for i in range(len(leafref_errors)):
+                var msg = leafref_errors[i]
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message=msg,
+                        expression=leaf.type.leafref_path,
+                        severity=Severity("error"),
+                    ),
+                )
+            if len(leafref_errors) > 0:
+                return
         for i in range(len(leaf.with_must.must_statements)):
             ref must_ref = leaf.with_must.must_statements[i][]
             self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
@@ -372,6 +393,7 @@ struct DocumentValidator:
         obj: Object,
         list_node: YangList,
         mut path: PathBuilder,
+        root_data: Value,
     ) raises:
         var name = list_node.name
         self._trace("Check list path=" + path.child(name) + " schema='" + name + "'")
@@ -399,7 +421,7 @@ struct DocumentValidator:
             self._trace("Visit list entry " + path.child(name, key_str))
             path.push(name, key_str)
             if entry.is_object():
-                self._visit_list_entry(entry.object(), list_node, path)
+                self._visit_list_entry(entry.object(), list_node, path, root_data)
             path.pop()
 
     def _visit_list_entry(
@@ -407,6 +429,7 @@ struct DocumentValidator:
         obj: Object,
         list_node: YangList,
         mut path: PathBuilder,
+        root_data: Value,
     ) raises:
         var valid_names = _list_valid_child_names(list_node)
         for ref pair in obj.items():
@@ -426,15 +449,15 @@ struct DocumentValidator:
                     ),
                 )
         for i in range(len(list_node.leaves)):
-            self._visit_leaf(obj, list_node.leaves[i][], path)
+            self._visit_leaf(obj, list_node.leaves[i][], path, root_data)
         for c in list_node.containers:
             ref child_cont = c[]
             if child_cont.name in obj:
                 path.push(child_cont.name)
-                self._visit_container(obj[child_cont.name], child_cont, path)
+                self._visit_container(obj[child_cont.name], child_cont, path, root_data)
                 path.pop()
         for i in range(len(list_node.lists)):
-            self._visit_list(obj, list_node.lists[i][], path)
+            self._visit_list(obj, list_node.lists[i][], path, root_data)
         for i in range(len(list_node.choices)):
             self._visit_choice(obj, list_node.choices[i][], path)
 

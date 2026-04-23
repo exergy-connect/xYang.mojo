@@ -15,6 +15,7 @@ from xyang.ast import (
     YangStatementWithMust,
     YangStatementWithWhen,
 )
+from xyang.yang.tokens import YANG_TYPE_LEAFREF
 
 comptime Arc = ArcPointer
 
@@ -171,8 +172,27 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
             parsed = False,
         ),
     )
+    var has_leafref_path = False
+    var leafref_path = ""
+    var leafref_require_instance = True
+    var leafref_xpath_ast = Expr.ExprPointer()
+    var leafref_path_parsed = False
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
+        if "type" in xy.object() and xy.object()["type"].is_string():
+            type_name = xy.object()["type"].string()
+        if type_name == YANG_TYPE_LEAFREF:
+            if "path" in xy.object() and xy.object()["path"].is_string():
+                has_leafref_path = True
+                leafref_path = xy.object()["path"].string()
+                try:
+                    leafref_xpath_ast = parse_xpath(leafref_path)
+                    leafref_path_parsed = True
+                except:
+                    leafref_xpath_ast = Expr.ExprPointer()
+                    leafref_path_parsed = False
+            if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
+                leafref_require_instance = xy.object()["require-instance"].bool()
         must_list = _parse_yang_must_list(xy)
         with_when = _parse_yang_when(xy)
     return YangLeaf(
@@ -182,6 +202,11 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
             has_range = False,
             range_min = 0,
             range_max = 0,
+            has_leafref_path = has_leafref_path,
+            leafref_path = leafref_path,
+            leafref_require_instance = leafref_require_instance,
+            leafref_xpath_ast = leafref_xpath_ast,
+            leafref_path_parsed = leafref_path_parsed,
         ),
         mandatory = mandatory,
         with_must = YangStatementWithMust(must_statements = must_list^),
@@ -210,7 +235,7 @@ def _parse_node_children(
         if kind == "container":
             var yc = parse_yang_container(pair.key, child)
             containers.append(Arc[YangContainer](yc^))
-        elif kind == "leaf" or kind == "leafref" or kind == "leaf-list":
+        elif kind == "leaf" or kind == YANG_TYPE_LEAFREF or kind == "leaf-list":
             var mandatory = _is_required(pair.key, parent_prop)
             var yl = parse_yang_leaf(pair.key, child, mandatory)
             leaves.append(Arc[YangLeaf](yl^))
@@ -273,7 +298,7 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
                 if kind == "container":
                     var yc = parse_yang_container(pair.key, child)
                     containers.append(Arc[YangContainer](yc^))
-                elif kind == "leaf" or kind == "leafref" or kind == "leaf-list":
+                elif kind == "leaf" or kind == YANG_TYPE_LEAFREF or kind == "leaf-list":
                     var mandatory = False
                     if "required" in items_schema and items_schema["required"].is_array():
                         ref req = items_schema["required"].array()

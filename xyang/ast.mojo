@@ -13,8 +13,29 @@ struct YangType(Movable, JsonDeserializable):
     var has_range: Bool
     var range_min: Int64
     var range_max: Int64
+    var has_leafref_path: Bool
+    var leafref_path: String
+    var leafref_require_instance: Bool
+    var leafref_xpath_ast: Expr.ExprPointer
+    var leafref_path_parsed: Bool
+
+    fn __del__(deinit self):
+        if self.leafref_xpath_ast:
+            self.leafref_xpath_ast[].free_tree()
+            self.leafref_xpath_ast.destroy_pointee()
+            self.leafref_xpath_ast.free()
 
     def __str__(self) -> String:
+        if self.has_leafref_path:
+            return (
+                "YangType("
+                + self.name
+                + ", path="
+                + self.leafref_path
+                + ", require-instance="
+                + ("true" if self.leafref_require_instance else "false")
+                + ")"
+            )
         if self.has_range:
             return (
                 "YangType("

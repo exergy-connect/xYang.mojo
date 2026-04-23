@@ -3,6 +3,16 @@
 
 from emberjson import Value
 from xyang.ast import YangType
+from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from std.memory import ArcPointer
+from xyang.xpath import (
+    XPathNode,
+    EvalContext,
+    XPathEvaluator,
+)
+from xyang.xpath.pratt_parser import Expr
+
+comptime Arc = ArcPointer
 
 
 @fieldwise_init
@@ -143,6 +153,146 @@ def _check_leafref_type(val: Value) -> List[String]:
     errs.append("Expected scalar leafref value, got non-scalar value")
     return errs^
 
+
+def _normalize_leafref_segment(seg: String) -> String:
+    var trimmed = String(seg.strip())
+    var parts = trimmed.split("[")
+    if len(parts) == 0:
+        return trimmed
+    return String(String(parts[0]).strip())
+
+
+def _leafref_step(read nodes: List[Value], segment: String) raises -> List[Value]:
+    var out = List[Value]()
+    var seg = _normalize_leafref_segment(segment)
+    if len(seg) == 0:
+        return out^
+    for i in range(len(nodes)):
+        ref node = nodes[i]
+        if node.is_array():
+            ref arr = node.array()
+            for j in range(len(arr)):
+                ref item = arr[j]
+                if item.is_object():
+                    ref o = item.object()
+                    if seg in o:
+                        out.append(o[seg].copy())
+        elif node.is_object():
+            ref o = node.object()
+            if seg in o:
+                out.append(o[seg].copy())
+    return out^
+
+
+def _resolve_values_for_xpath_path(path_expr: String, root: Value) raises -> List[Value]:
+    var nodes = List[Value]()
+    nodes.append(root.copy())
+    var parts = path_expr.split("/")
+    for i in range(len(parts)):
+        var seg = _normalize_leafref_segment(String(String(parts[i]).strip()))
+        if len(seg) == 0 or seg == ".":
+            continue
+        if seg == "..":
+            return List[Value]()
+        nodes = _leafref_step(nodes, seg)
+    return nodes^
+
+
+def _scalar_value_equal(ref a: Value, ref b: Value) -> Bool:
+    if a.is_string() and b.is_string():
+        return a.string() == b.string()
+    if a.is_bool() and b.is_bool():
+        return a.bool() == b.bool()
+    if a.is_int():
+        var av = a.int()
+        if b.is_int():
+            return av == b.int()
+        if b.is_uint():
+            if av < 0:
+                return False
+            return av == Int64(b.uint())
+        if b.is_float():
+            return Float64(av) == b.float()
+        return False
+    if a.is_uint():
+        var av = a.uint()
+        if b.is_uint():
+            return av == b.uint()
+        if b.is_int():
+            var bv = b.int()
+            if bv < 0:
+                return False
+            return Int64(av) == bv
+        if b.is_float():
+            return Float64(av) == b.float()
+        return False
+    if a.is_float():
+        var av = a.float()
+        if b.is_float():
+            return av == b.float()
+        if b.is_int():
+            return av == Float64(b.int())
+        if b.is_uint():
+            return av == Float64(b.uint())
+        return False
+    return False
+
+
+def _eval_leafref_target_paths(path_ast: Expr.ExprPointer, path_expr: String, current_path: String) raises -> List[String]:
+    var paths = List[String]()
+    var expr = String(path_expr.strip())
+    if len(expr) == 0 or not path_ast:
+        return paths^
+    var root_node = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root_node^)
+    var current_node = XPathNode(current_path, current_path)
+    var current_arc = Arc[XPathNode](current_node^)
+    var ctx = EvalContext(current_arc, root_arc, expr)
+    var ev = XPathEvaluator()
+    try:
+        var result = ev.eval(path_ast, ctx, current_arc)
+        if result.isa[List[Arc[XPathNode]]]():
+            ref nodes = result[List[Arc[XPathNode]]]
+            for i in range(len(nodes)):
+                paths.append(nodes[i][].path)
+    except:
+        paths = List[String]()
+    return paths^
+
+
+def check_leafref_reference(
+    val: Value,
+    type_stmt: YangType,
+    node_path: String,
+    root_data: Value,
+) raises -> List[String]:
+    """Python-style leafref require-instance check in type checker."""
+    if type_stmt.name != YANG_TYPE_LEAFREF or not type_stmt.leafref_require_instance:
+        return List[String]()
+    if not type_stmt.has_leafref_path or len(type_stmt.leafref_path) == 0:
+        var errs = List[String]()
+        errs.append("Leafref is missing required path metadata")
+        return errs^
+    if not type_stmt.leafref_path_parsed or not type_stmt.leafref_xpath_ast:
+        var errs = List[String]()
+        errs.append("Leafref path expression could not be parsed")
+        return errs^
+    var target_paths = _eval_leafref_target_paths(
+        type_stmt.leafref_xpath_ast,
+        type_stmt.leafref_path,
+        node_path,
+    )
+    for i in range(len(target_paths)):
+        var targets = _resolve_values_for_xpath_path(target_paths[i], root_data)
+        for j in range(len(targets)):
+            if _scalar_value_equal(targets[j], val):
+                return List[String]()
+    var errs = List[String]()
+    errs.append(
+        "Leafref value does not resolve to any target for path '" + type_stmt.leafref_path + "'"
+    )
+    return errs^
+
 def check_leaf_value(
     val: Value,
     type_stmt: YangType,
@@ -182,7 +332,7 @@ def check_leaf_value(
         return _check_object_type(val)
     if name == "array":
         return _check_array_type(val)
-    if name == "leafref":
+    if name == YANG_TYPE_LEAFREF:
         return _check_leafref_type(val)
     # Unknown / typedef names: treat as string for now
     return _check_string_type(val)

@@ -210,6 +210,11 @@ struct _YangParser(Movable):
             has_range = False,
             range_min = 0,
             range_max = 0,
+            has_leafref_path = False,
+            leafref_path = "",
+            leafref_require_instance = True,
+            leafref_xpath_ast = Expr.ExprPointer(),
+            leafref_path_parsed = False,
         )
         var mandatory = False
         var must = List[Arc[YangMust]]()
@@ -322,6 +327,11 @@ struct _YangParser(Movable):
         var has_range = False
         var range_min = Int64(0)
         var range_max = Int64(0)
+        var has_leafref_path = False
+        var leafref_path = ""
+        var leafref_require_instance = True
+        var leafref_xpath_ast = Expr.ExprPointer()
+        var leafref_path_parsed = False
 
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
@@ -338,6 +348,21 @@ struct _YangParser(Movable):
                         except:
                             has_range = False
                     self._skip_if(";")
+                elif stmt == "path":
+                    self._consume()
+                    leafref_path = self._consume_argument_value()
+                    has_leafref_path = True
+                    try:
+                        leafref_xpath_ast = parse_xpath(leafref_path)
+                        leafref_path_parsed = True
+                    except:
+                        leafref_xpath_ast = Expr.ExprPointer()
+                        leafref_path_parsed = False
+                    self._skip_if(";")
+                elif stmt == "require-instance":
+                    self._consume()
+                    leafref_require_instance = self._parse_boolean_value()
+                    self._skip_if(";")
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -348,6 +373,11 @@ struct _YangParser(Movable):
             has_range = has_range,
             range_min = range_min,
             range_max = range_max,
+            has_leafref_path = has_leafref_path,
+            leafref_path = leafref_path,
+            leafref_require_instance = leafref_require_instance,
+            leafref_xpath_ast = leafref_xpath_ast,
+            leafref_path_parsed = leafref_path_parsed,
         )
 
     def _parse_must_statement(mut self) raises -> YangMust:

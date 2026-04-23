@@ -255,6 +255,12 @@ struct XPathEvaluator(ExprEvalVisitor):
         var left_nodes = _node_set_to_list(left_res)
         if not left_res.isa[List[Arc[XPathNode]]]():
             left_nodes = List[Arc[XPathNode]]()
+            if left_res.isa[String]():
+                var step_name = left_res[String]
+                if len(step_name) > 0:
+                    var child_path = current[].path + "/" + step_name
+                    var child = XPathNode(child_path, child_path)
+                    left_nodes.append(Arc[XPathNode](child^))
 
         var results = List[Arc[XPathNode]]()
         for i in range(len(left_nodes)):
@@ -262,6 +268,12 @@ struct XPathEvaluator(ExprEvalVisitor):
             var rlist = _node_set_to_list(r)
             for j in range(len(rlist)):
                 results.append(rlist[j].copy())
+            if r.isa[String]():
+                var step_name = r[String]
+                if len(step_name) > 0:
+                    var child_path = left_nodes[i][].path + "/" + step_name
+                    var child = XPathNode(child_path, child_path)
+                    results.append(Arc[XPathNode](child^))
         return EvalResult(results^)
 
     def visit_path(
