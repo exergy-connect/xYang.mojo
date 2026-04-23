@@ -31,7 +31,7 @@ Scope:
 | `leaf` | Supported | Parsed, represented, type/constraint checks apply. |
 | `choice` | Supported | Parsed; mandatory choice check implemented. |
 | `case` | Supported | Parsed under choice as case-name set. |
-| `leaf-list` | Partial | JSON/YANG path can map `x-yang.type=leaf-list` to leaf-like handling; no dedicated text-parser AST node. |
+| `leaf-list` | Supported | Dedicated AST node and text-parser support; validator enforces array shape plus per-item type/leafref/must checks. |
 | `anydata`, `anyxml` | Not yet | Not modeled in current Mojo AST/validator path. |
 | `grouping` | Not yet | Text parser currently ignores it (statement skipped). |
 | `uses` | Not yet | Text parser currently ignores it; no expansion/merge. |
@@ -56,6 +56,7 @@ Scope:
 | `must` `error-message` | Supported | Used in reported validation errors. |
 | `when` on leaf | Supported | Parsed and enforced for present leaves. |
 | `mandatory` (leaf) | Supported | Missing/null checks implemented. |
+| `default` (`leaf`, `leaf-list`, `choice` default case) | Partial | Parser captures defaults; validator realizes leaf/leaf-list effective defaults and treats choice default case as active when no explicit case is present. |
 | `key` (list) | Supported | Parsed and used for list-path formatting in diagnostics. |
 | `min-elements`, `max-elements`, `unique`, `ordered-by` | Not yet | Not implemented. |
 | Choice/case full RFC semantics | Partial | Mandatory choice check exists; broader case semantics are simplified. |
@@ -75,13 +76,16 @@ Implemented:
 - Unknown field detection in containers/list entries.
 - Mandatory leaf missing/null checks.
 - List node type checks (must be array).
+- Leaf-list node type checks (must be array).
 - Numeric type + `range` checks.
 - Leaf-level `must` and `when` evaluation.
+- Leaf-list per-item `must` and type checks.
 - Basic choice mandatory check.
+- Effective default realization for missing `leaf` / `leaf-list` values.
+- Choice default-case handling when no explicit case is active.
 - Leafref referential integrity checks (`require-instance`): value must match at least one resolved target from leafref `path` (supports absolute and relative paths in current implementation).
 
 Not implemented yet:
-- Default realization and comprehensive default semantics.
 - Presence containers and full config/state semantics.
 - Full RFC section 8 behavior for all statement kinds and edit operations.
 

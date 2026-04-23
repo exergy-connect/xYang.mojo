@@ -32,6 +32,19 @@ def test_parse_basic_yang_file() raises:
     assert_equal(module.namespace, "urn:example:basic-device")
     assert_equal(module.prefix, "bd")
 
+    assert_equal(module.get_name(), "basic-device")
+    assert_equal(module.get_namespace(), "urn:example:basic-device")
+    assert_equal(module.get_prefix(), "bd")
+    assert_equal(
+        module.get_description(),
+        "A minimal YANG module used as a basic example.",
+    )
+    assert_true(len(module.get_revisions()) == 1)
+    assert_equal(module.get_revisions()[0], "2026-04-23")
+    assert_equal(module.get_organization(), "Example")
+    assert_equal(module.get_contact(), "example@example.com")
+
+    assert_true(len(module.get_top_level_containers()) == 1)
     assert_true(len(module.top_level_containers) == 1)
     ref system = module.top_level_containers[0][]
     assert_equal(system.name, "system")

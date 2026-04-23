@@ -83,26 +83,45 @@ struct YangWhen(Movable):
             self.xpath_ast.free()
 
 
-@fieldwise_init
-struct YangStatementWithMust(Movable):
-    ## Python parity: base holder for statements that support must.
-    var must_statements: List[Arc[YangMust]]
+trait YangHasMustStatements:
+    ## Shared access to a (possibly empty) list of `must` constraints.
+    def must_count(self) -> Int:
+        ...
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        ...
+
+
+trait YangHasWhen:
+    ## Shared access to an optional `when` constraint.
+    def has_when(self) -> Bool:
+        ...
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        ...
 
 
 @fieldwise_init
-struct YangStatementWithWhen(Movable):
-    ## Python parity: base holder for statements that support when.
-    var has_when: Bool
-    var when_statement: YangWhen
-
-
-@fieldwise_init
-struct YangLeaf(Movable, JsonDeserializable):
+struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
     var name: String
     var type: YangType
     var mandatory: Bool
-    var with_must: YangStatementWithMust
-    var with_when: YangStatementWithWhen
+    var has_default: Bool
+    var default_value: String
+    var must_statements: List[Arc[YangMust]]
+    var when: Optional[YangWhen]
+
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
 
     def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
@@ -113,23 +132,80 @@ struct YangLeaf(Movable, JsonDeserializable):
             + self.type.__str__()
             + ", mandatory="
             + m
+            + ", has_default="
+            + ("true" if self.has_default else "false")
             + ", must="
-            + String(len(self.with_must.must_statements))
+            + String(len(self.must_statements))
             + ", has_when="
-            + ("true" if self.with_when.has_when else "false")
+            + ("true" if self.has_when() else "false")
             + ")"
         )
+
+
+@fieldwise_init
+struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+    var name: String
+    var type: YangType
+    var default_values: List[String]
+    var must_statements: List[Arc[YangMust]]
+    var when: Optional[YangWhen]
+
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
+
+    def __str__(self) -> String:
+        return (
+            "YangLeafList("
+            + self.name
+            + ", type="
+            + self.type.__str__()
+            + ", defaults="
+            + String(len(self.default_values))
+            + ", must="
+            + String(len(self.must_statements))
+            + ", has_when="
+            + ("true" if self.has_when() else "false")
+            + ")"
+        )
+
+
+@fieldwise_init
+struct YangChoiceCase(Movable, JsonDeserializable):
+    var name: String
+    var node_names: List[String]
 
 
 @fieldwise_init
 struct YangChoice(Movable, JsonDeserializable):
     var name: String
     var mandatory: Bool
+    var default_case: String
     var case_names: List[String]
+    var cases: List[Arc[YangChoiceCase]]
 
     def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
-        return "YangChoice(" + self.name + ", mandatory=" + m + ", cases=" + String(len(self.case_names)) + ")"
+        var has_default = "true" if len(self.default_case) > 0 else "false"
+        return (
+            "YangChoice("
+            + self.name
+            + ", mandatory="
+            + m
+            + ", default-case="
+            + has_default
+            + ", cases="
+            + String(len(self.case_names))
+            + ")"
+        )
 
 
 @fieldwise_init
@@ -137,16 +213,18 @@ struct YangContainer(Movable, JsonDeserializable):
     var name: String
     var description: String
     var leaves: List[Arc[YangLeaf]]
+    var leaf_lists: List[Arc[YangLeafList]]
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
 
     def __str__(self) -> String:
         var nleaf = len(self.leaves)
+        var nleaflist = len(self.leaf_lists)
         var ncont = len(self.containers)
         var nlist = len(self.lists)
         var nchoice = len(self.choices)
-        return "YangContainer(" + self.name + ", leaves=" + String(nleaf) + ", containers=" + String(ncont) + ", lists=" + String(nlist) + ", choices=" + String(nchoice) + ")"
+        return "YangContainer(" + self.name + ", leaves=" + String(nleaf) + ", leaf-lists=" + String(nleaflist) + ", containers=" + String(ncont) + ", lists=" + String(nlist) + ", choices=" + String(nchoice) + ")"
 
 
 @fieldwise_init
@@ -155,16 +233,18 @@ struct YangList(Movable, JsonDeserializable):
     var key: String
     var description: String
     var leaves: List[Arc[YangLeaf]]
+    var leaf_lists: List[Arc[YangLeafList]]
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
 
     def __str__(self) -> String:
         var nleaf = len(self.leaves)
+        var nleaflist = len(self.leaf_lists)
         var ncont = len(self.containers)
         var nlist = len(self.lists)
         var nchoice = len(self.choices)
-        return "YangList(" + self.name + ", key=" + self.key + ", leaves=" + String(nleaf) + ", containers=" + String(ncont) + ", lists=" + String(nlist) + ", choices=" + String(nchoice) + ")"
+        return "YangList(" + self.name + ", key=" + self.key + ", leaves=" + String(nleaf) + ", leaf-lists=" + String(nleaflist) + ", containers=" + String(ncont) + ", lists=" + String(nlist) + ", choices=" + String(nchoice) + ")"
 
 
 @fieldwise_init
@@ -173,7 +253,38 @@ struct YangModule(Movable, JsonDeserializable):
     var name: String
     var namespace: String
     var prefix: String
+    ## Module-level `description` (RFC 7950); empty if absent in source.
+    var description: String
+    ## `revision` date strings in module source order (RFC 7950 allows multiple). Substatements inside each revision block are not modeled.
+    var revisions: List[String]
+    var organization: String
+    var contact: String
     var top_level_containers: List[Arc[YangContainer]]
+
+    def get_name(self) -> String:
+        return self.name
+
+    def get_namespace(self) -> String:
+        return self.namespace
+
+    def get_prefix(self) -> String:
+        return self.prefix
+
+    def get_description(self) -> String:
+        return self.description
+
+    def get_revisions(self) -> List[String]:
+        return self.revisions.copy()
+
+    def get_organization(self) -> String:
+        return self.organization
+
+    def get_contact(self) -> String:
+        return self.contact
+
+    ## Returns a copy of the top-level container list; use the `top_level_containers` field when a borrow is enough.
+    def get_top_level_containers(self) -> List[Arc[YangContainer]]:
+        return self.top_level_containers.copy()
 
     def __str__(self) -> String:
         return "YangModule(" + self.name + ", namespace=" + self.namespace + ", prefix=" + self.prefix + ", containers=" + String(len(self.top_level_containers)) + ")"

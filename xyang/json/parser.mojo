@@ -8,14 +8,14 @@ from xyang.ast import (
     YangContainer,
     YangList,
     YangChoice,
+    YangChoiceCase,
     YangLeaf,
+    YangLeafList,
     YangType,
     YangMust,
     YangWhen,
-    YangStatementWithMust,
-    YangStatementWithWhen,
 )
-from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from xyang.yang.tokens import YANG_TYPE_LEAFREF, YANG_STMT_LEAF_LIST
 
 comptime Arc = ArcPointer
 
@@ -56,6 +56,10 @@ def parse_yang_module(source: String) raises -> YangModule:
         name = name,
         namespace = ns,
         prefix = prefix,
+        description = "",
+        revisions = List[String](),
+        organization = "",
+        contact = "",
         top_level_containers = containers^,
     )
 
@@ -129,17 +133,9 @@ def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[YangMust]]:
     return must_list^
 
 
-def _parse_yang_when(ref xy: Value) raises -> YangStatementWithWhen:
+def _parse_yang_when(ref xy: Value) raises -> Optional[YangWhen]:
     if "when" not in xy.object() or not xy.object()["when"].is_string():
-        return YangStatementWithWhen(
-            has_when = False,
-            when_statement = YangWhen(
-                expression = "",
-                description = "",
-                xpath_ast = Expr.ExprPointer(),
-                parsed = False,
-            ),
-        )
+        return Optional[YangWhen]()
     var expr = xy.object()["when"].string()
     var ptr = Expr.ExprPointer()
     var parsed = False
@@ -148,9 +144,8 @@ def _parse_yang_when(ref xy: Value) raises -> YangStatementWithWhen:
         parsed = True
     except e:
         print("[x-yang when] parse_xpath failed for expression: ", expr, " error: ", String(e))
-    return YangStatementWithWhen(
-        has_when = True,
-        when_statement = YangWhen(
+    return Optional(
+        YangWhen(
             expression = expr,
             description = "",
             xpath_ast = ptr,
@@ -159,24 +154,32 @@ def _parse_yang_when(ref xy: Value) raises -> YangStatementWithWhen:
     )
 
 
+def _default_scalar_to_string(v: Value) -> String:
+    if v.is_string():
+        return v.string()
+    if v.is_bool():
+        return "true" if v.bool() else "false"
+    if v.is_int():
+        return String(v.int())
+    if v.is_uint():
+        return String(v.uint())
+    if v.is_float():
+        return String(v.float())
+    return ""
+
+
 def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLeaf:
     """Parse a leaf definition from a JSON Schema property."""
     var type_name = _leaf_type_name_from_prop(prop)
     var must_list = List[Arc[YangMust]]()
-    var with_when = YangStatementWithWhen(
-        has_when = False,
-        when_statement = YangWhen(
-            expression = "",
-            description = "",
-            xpath_ast = Expr.ExprPointer(),
-            parsed = False,
-        ),
-    )
+    var when = Optional[YangWhen]()
     var has_leafref_path = False
     var leafref_path = ""
     var leafref_require_instance = True
     var leafref_xpath_ast = Expr.ExprPointer()
     var leafref_path_parsed = False
+    var has_default = False
+    var default_value = ""
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
         if "type" in xy.object() and xy.object()["type"].is_string():
@@ -194,7 +197,10 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
             if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
                 leafref_require_instance = xy.object()["require-instance"].bool()
         must_list = _parse_yang_must_list(xy)
-        with_when = _parse_yang_when(xy)
+        when = _parse_yang_when(xy)
+    if "default" in prop.object():
+        default_value = _default_scalar_to_string(prop.object()["default"])
+        has_default = len(default_value) > 0
     return YangLeaf(
         name = name,
         type = YangType(
@@ -209,14 +215,76 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
             leafref_path_parsed = leafref_path_parsed,
         ),
         mandatory = mandatory,
-        with_must = YangStatementWithMust(must_statements = must_list^),
-        with_when = with_when^,
+        has_default = has_default,
+        default_value = default_value,
+        must_statements = must_list^,
+        when = when^,
+    )
+
+
+def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
+    var type_name = _leaf_type_name_from_prop(prop)
+    var must_list = List[Arc[YangMust]]()
+    var when = Optional[YangWhen]()
+    var has_leafref_path = False
+    var leafref_path = ""
+    var leafref_require_instance = True
+    var leafref_xpath_ast = Expr.ExprPointer()
+    var leafref_path_parsed = False
+    var default_values = List[String]()
+    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
+        ref xy = prop.object()["x-yang"]
+        if "type" in xy.object() and xy.object()["type"].is_string():
+            type_name = xy.object()["type"].string()
+        if type_name == YANG_TYPE_LEAFREF:
+            if "path" in xy.object() and xy.object()["path"].is_string():
+                has_leafref_path = True
+                leafref_path = xy.object()["path"].string()
+                try:
+                    leafref_xpath_ast = parse_xpath(leafref_path)
+                    leafref_path_parsed = True
+                except:
+                    leafref_xpath_ast = Expr.ExprPointer()
+                    leafref_path_parsed = False
+            if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
+                leafref_require_instance = xy.object()["require-instance"].bool()
+        must_list = _parse_yang_must_list(xy)
+        when = _parse_yang_when(xy)
+    if "default" in prop.object():
+        ref default_val = prop.object()["default"]
+        if default_val.is_array():
+            ref default_arr = default_val.array()
+            for i in range(len(default_arr)):
+                var text = _default_scalar_to_string(default_arr[i])
+                if len(text) > 0:
+                    default_values.append(text)
+        else:
+            var text = _default_scalar_to_string(default_val)
+            if len(text) > 0:
+                default_values.append(text)
+    return YangLeafList(
+        name = name,
+        type = YangType(
+            name = type_name,
+            has_range = False,
+            range_min = 0,
+            range_max = 0,
+            has_leafref_path = has_leafref_path,
+            leafref_path = leafref_path,
+            leafref_require_instance = leafref_require_instance,
+            leafref_xpath_ast = leafref_xpath_ast,
+            leafref_path_parsed = leafref_path_parsed,
+        ),
+        default_values = default_values^,
+        must_statements = must_list^,
+        when = when^,
     )
 
 
 def _parse_node_children(
     parent_prop: Value,
     mut leaves: List[Arc[YangLeaf]],
+    mut leaf_lists: List[Arc[YangLeafList]],
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
@@ -235,10 +303,13 @@ def _parse_node_children(
         if kind == "container":
             var yc = parse_yang_container(pair.key, child)
             containers.append(Arc[YangContainer](yc^))
-        elif kind == "leaf" or kind == YANG_TYPE_LEAFREF or kind == "leaf-list":
+        elif kind == "leaf" or kind == YANG_TYPE_LEAFREF:
             var mandatory = _is_required(pair.key, parent_prop)
             var yl = parse_yang_leaf(pair.key, child, mandatory)
             leaves.append(Arc[YangLeaf](yl^))
+        elif kind == YANG_STMT_LEAF_LIST:
+            var yll = parse_yang_leaf_list(pair.key, child)
+            leaf_lists.append(Arc[YangLeafList](yll^))
         elif kind == "list":
             var yl = parse_yang_list(pair.key, child)
             lists.append(Arc[YangList](yl^))
@@ -250,24 +321,49 @@ def _parse_node_children(
 def parse_yang_choice(name: String, prop: Value) raises -> YangChoice:
     """Parse a choice definition from a JSON Schema property (oneOf)."""
     var mandatory = False
+    var default_case = ""
     if "x-yang" in prop.object() and "mandatory" in prop.object()["x-yang"].object():
         mandatory = prop.object()["x-yang"]["mandatory"].bool()
+    if (
+        "x-yang" in prop.object()
+        and "default" in prop.object()["x-yang"].object()
+        and prop.object()["x-yang"]["default"].is_string()
+    ):
+        default_case = prop.object()["x-yang"]["default"].string()
 
     var case_names = List[String]()
+    var cases = List[Arc[YangChoiceCase]]()
     if "oneOf" in prop.object() and prop.object()["oneOf"].is_array():
         ref one_of = prop.object()["oneOf"].array()
         for i in range(len(one_of)):
             ref branch = one_of[i].object()
+            var case_name = "case-" + String(i)
+            var node_names = List[String]()
             if "required" in branch and branch["required"].is_array():
                 ref req = branch["required"].array()
-                if len(req) > 0 and req[0].is_string():
-                    case_names.append(req[0].string())
+                if len(req) > 0:
+                    for j in range(len(req)):
+                        if req[j].is_string():
+                            var n = req[j].string()
+                            node_names.append(n)
+                            case_names.append(n)
+                    if len(node_names) > 0:
+                        case_name = node_names[0]
             elif "properties" in branch:
                 ref branch_props = branch["properties"].object()
                 for ref p in branch_props.items():
+                    node_names.append(p.key)
                     case_names.append(p.key)
-                    break
-    return YangChoice(name=name, mandatory=mandatory, case_names=case_names^)
+                if len(node_names) > 0:
+                    case_name = node_names[0]
+            cases.append(Arc[YangChoiceCase](YangChoiceCase(name=case_name, node_names=node_names^)))
+    return YangChoice(
+        name=name,
+        mandatory=mandatory,
+        default_case=default_case,
+        case_names=case_names^,
+        cases=cases^,
+    )
 
 
 def parse_yang_list(name: String, prop: Value) raises -> YangList:
@@ -281,6 +377,7 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
         key = prop.object()["x-yang"]["key"].string()
 
     var leaves = List[Arc[YangLeaf]]()
+    var leaf_lists = List[Arc[YangLeafList]]()
     var containers = List[Arc[YangContainer]]()
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
@@ -298,7 +395,7 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
                 if kind == "container":
                     var yc = parse_yang_container(pair.key, child)
                     containers.append(Arc[YangContainer](yc^))
-                elif kind == "leaf" or kind == YANG_TYPE_LEAFREF or kind == "leaf-list":
+                elif kind == "leaf" or kind == YANG_TYPE_LEAFREF:
                     var mandatory = False
                     if "required" in items_schema and items_schema["required"].is_array():
                         ref req = items_schema["required"].array()
@@ -308,6 +405,9 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
                                 break
                     var yl = parse_yang_leaf(pair.key, child, mandatory)
                     leaves.append(Arc[YangLeaf](yl^))
+                elif kind == YANG_STMT_LEAF_LIST:
+                    var yll = parse_yang_leaf_list(pair.key, child)
+                    leaf_lists.append(Arc[YangLeafList](yll^))
                 elif kind == "list":
                     var yl = parse_yang_list(pair.key, child)
                     lists.append(Arc[YangList](yl^))
@@ -320,6 +420,7 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
         key = key,
         description = desc,
         leaves = leaves^,
+        leaf_lists = leaf_lists^,
         containers = containers^,
         lists = lists^,
         choices = choices^,
@@ -333,14 +434,16 @@ def parse_yang_container(name: String, prop: Value) raises -> YangContainer:
         desc = prop.object()["description"].string()
 
     var leaves = List[Arc[YangLeaf]]()
+    var leaf_lists = List[Arc[YangLeafList]]()
     var containers = List[Arc[YangContainer]]()
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
-    _parse_node_children(prop, leaves, containers, lists, choices)
+    _parse_node_children(prop, leaves, leaf_lists, containers, lists, choices)
     return YangContainer(
         name = name,
         description = desc,
         leaves = leaves^,
+        leaf_lists = leaf_lists^,
         containers = containers^,
         lists = lists^,
         choices = choices^,
