@@ -15,7 +15,11 @@ from xyang.ast import (
 )
 from xyang.validator.validation_error import ValidationError, Severity
 from xyang.validator.path_builder import PathBuilder
-from xyang.validator.type_checker import check_leaf_value
+from xyang.validator.type_checker import (
+    IntegerTypeBounds,
+    check_leaf_value,
+    make_integer_type_bounds_table,
+)
 from xyang.xpath import (
     XPathNode,
     EvalContext,
@@ -111,10 +115,12 @@ def _leaf_value_to_string(ref val: Value) -> String:
 struct DocumentValidator:
     var _errors: List[ValidationError]
     var debug_trace: Bool
+    var _integer_bounds: Dict[String, IntegerTypeBounds]
 
     def __init__(out self, debug_trace: Bool = False):
         self._errors = List[ValidationError]()
         self.debug_trace = debug_trace
+        self._integer_bounds = make_integer_type_bounds_table()
 
     def _trace(ref self, message: String):
         if self.debug_trace:
@@ -241,7 +247,7 @@ struct DocumentValidator:
                     ),
                 )
             return
-        for msg in check_leaf_value(val, leaf.type, child_path):
+        for msg in check_leaf_value(val, leaf.type, child_path, self._integer_bounds):
             self._errors.append(
                 ValidationError(
                     path=child_path,

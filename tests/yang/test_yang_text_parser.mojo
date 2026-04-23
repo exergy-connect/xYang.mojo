@@ -51,6 +51,9 @@ def test_parse_basic_yang_file() raises:
     var mtu_idx = _find_leaf_index_in_list("interface", "mtu", path)
     assert_true(mtu_idx >= 0)
     assert_equal(interface_list.leaves[mtu_idx][].type.name, "uint16")
+    assert_true(interface_list.leaves[mtu_idx][].type.has_range)
+    assert_equal(interface_list.leaves[mtu_idx][].type.range_min, 576)
+    assert_equal(interface_list.leaves[mtu_idx][].type.range_max, 9216)
 
 
 def main() raises:

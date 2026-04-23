@@ -10,8 +10,21 @@ comptime Arc = ArcPointer
 @fieldwise_init
 struct YangType(Movable, JsonDeserializable):
     var name: String
+    var has_range: Bool
+    var range_min: Int64
+    var range_max: Int64
 
     def __str__(self) -> String:
+        if self.has_range:
+            return (
+                "YangType("
+                + self.name
+                + ", range="
+                + String(self.range_min)
+                + ".."
+                + String(self.range_max)
+                + ")"
+            )
         return "YangType(" + self.name + ")"
 
 

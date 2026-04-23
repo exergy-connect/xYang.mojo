@@ -190,7 +190,12 @@ struct _YangParser(Movable):
         self._expect("leaf")
         var name = self._consume_name()
 
-        var type_name = "unknown"
+        var type_stmt = YangType(
+            name = "unknown",
+            has_range = False,
+            range_min = 0,
+            range_max = 0,
+        )
         var mandatory = False
         var must = List[Arc[YangMust]]()
 
@@ -198,7 +203,7 @@ struct _YangParser(Movable):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
                 if stmt == "type":
-                    type_name = self._parse_type_statement()
+                    type_stmt = self._parse_type_statement()
                 elif stmt == "mandatory":
                     self._consume()
                     mandatory = self._parse_boolean_value()
@@ -217,7 +222,7 @@ struct _YangParser(Movable):
 
         return YangLeaf(
             name = name,
-            type = YangType(name = type_name),
+            type = type_stmt^,
             mandatory = mandatory,
             must = must^,
         )
@@ -291,15 +296,39 @@ struct _YangParser(Movable):
 
         return names^
 
-    def _parse_type_statement(mut self) raises -> String:
+    def _parse_type_statement(mut self) raises -> YangType:
         self._expect("type")
         var type_name = self._consume_name()
+        var has_range = False
+        var range_min = Int64(0)
+        var range_max = Int64(0)
 
         if self._consume_if("{"):
-            self._skip_block_body()
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == "range":
+                    self._consume()
+                    var range_expr = self._consume_argument_value()
+                    var parts = range_expr.split("..")
+                    if len(parts) == 2:
+                        try:
+                            range_min = Int64(atol(parts[0].strip()))
+                            range_max = Int64(atol(parts[1].strip()))
+                            has_range = True
+                        except:
+                            has_range = False
+                    self._skip_if(";")
+                else:
+                    self._skip_statement()
+            self._expect("}")
         self._skip_if(";")
 
-        return type_name
+        return YangType(
+            name = type_name,
+            has_range = has_range,
+            range_min = range_min,
+            range_max = range_max,
+        )
 
     def _parse_must_statement(mut self) raises -> YangMust:
         self._expect("must")

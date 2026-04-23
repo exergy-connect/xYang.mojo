@@ -134,7 +134,12 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
         must_list = _parse_yang_must_list(xy)
     return YangLeaf(
         name = name,
-        type = YangType(name = type_name),
+        type = YangType(
+            name = type_name,
+            has_range = False,
+            range_min = 0,
+            range_max = 0,
+        ),
         mandatory = mandatory,
         must = must_list^,
     )
