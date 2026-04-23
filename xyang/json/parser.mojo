@@ -16,7 +16,7 @@ from xyang.ast import (
 comptime Arc = ArcPointer
 
 
-def parse_yang_module(source: String) -> YangModule:
+def parse_yang_module(source: String) raises -> YangModule:
     # Parse a `.yang.json` meta-model into a minimal YangModule AST.
     # This is a placeholder stub that demonstrates wiring EmberJson into the
     # xYang.mojo AST. It does **not** yet implement the full xYang meta-model.
@@ -271,3 +271,7 @@ def parse_yang_container(name: String, prop: Value) -> YangContainer:
         choices = choices^,
     )
 
+
+def parse_json_schema(source: String) raises -> YangModule:
+    ## Backward-compatible alias used by package exports.
+    return parse_yang_module(source)
