@@ -14,6 +14,9 @@ crash_test = "mojo -I . tests/crash/test.mojo"
 yang_tests = "mojo -I . tests/yang/*.mojo"  # To run: pixi run yang_tests
 
 basic-yang-example = "mojo -I . examples/basic_yang/main.mojo"
+
+# CLI (same commands as Python `xyang`: parse, validate, convert). Example: `pixi run xyang -- parse file.yang`
+xyang = "mojo -I . main.mojo"
 [dependencies]
 mblack = "==26.2.0"
 mojo = "0.26.2.0.*"

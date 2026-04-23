@@ -13,6 +13,8 @@ struct YangType(Movable, JsonDeserializable):
     var has_range: Bool
     var range_min: Int64
     var range_max: Int64
+    var enum_values: List[String]
+    var union_types: List[Arc[YangType]]
     var has_leafref_path: Bool
     var leafref_path: String
     var leafref_require_instance: Bool
@@ -44,6 +46,22 @@ struct YangType(Movable, JsonDeserializable):
                 + String(self.range_min)
                 + ".."
                 + String(self.range_max)
+                + ")"
+            )
+        if self.name == "enumeration":
+            return (
+                "YangType("
+                + self.name
+                + ", enums="
+                + String(len(self.enum_values))
+                + ")"
+            )
+        if self.name == "union":
+            return (
+                "YangType("
+                + self.name
+                + ", types="
+                + String(len(self.union_types))
                 + ")"
             )
         return "YangType(" + self.name + ")"

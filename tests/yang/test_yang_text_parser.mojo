@@ -79,6 +79,16 @@ def test_parse_basic_yang_file() raises:
     assert_equal(interface_list.leaves[mtu_idx][].type.range_min, 576)
     assert_equal(interface_list.leaves[mtu_idx][].type.range_max, 9216)
 
+    var descr_idx = _find_leaf_index_in_list("interface", "description", path)
+    var hold_time_idx = _find_leaf_index_in_list("interface", "hold-time", path)
+    assert_true(descr_idx >= 0)
+    assert_true(hold_time_idx >= 0)
+    assert_equal(interface_list.leaves[descr_idx][].type.name, "string")
+    assert_equal(interface_list.leaves[hold_time_idx][].type.name, "uint16")
+    assert_true(interface_list.leaves[hold_time_idx][].type.has_range)
+    assert_equal(interface_list.leaves[hold_time_idx][].type.range_min, 0)
+    assert_equal(interface_list.leaves[hold_time_idx][].type.range_max, 300)
+
 
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

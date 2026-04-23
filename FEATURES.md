@@ -8,7 +8,7 @@ Status labels:
 - `Not yet`: not implemented (or currently ignored by parser/validator).
 
 Scope:
-- Code under `xyang/` (text YANG parser, JSON/YANG parser, AST, XPath, validator).
+- Code under `xyang/` (text YANG parser, JSON/YANG parser, JSON Schema generator, AST, XPath, validator).
 - Focus is runtime behavior, not just syntax acceptance.
 
 ## RFC Construct Matrix
@@ -19,9 +19,9 @@ Scope:
 | `module` | Supported | Parsed and represented in AST. |
 | `namespace` | Supported | Parsed in text parser and JSON/YANG path. |
 | `prefix` | Supported | Parsed in text parser and JSON/YANG path. |
-| `revision` | Partial | Statement recognized; body is skipped, no full revision model. |
-| `description` | Partial | Captured for selected nodes only. |
-| `organization`, `contact` | Not yet | Accepted as skipped/ignored text statements; not modeled in AST. |
+| `revision` | Partial | All `revision` dates collected in `YangModule.revisions` (source order). Substatements inside each revision block are still skipped; no per-revision object in the AST. |
+| `description` | Partial | Module-level string on `YangModule`; also captured on several data nodes (e.g. `container`, `list`). Not every statement kind stores description yet. |
+| `organization`, `contact` | Supported | Module-level strings on `YangModule` from the text parser (with `get_organization` / `get_contact`). JSON/YANG import leaves them empty until the meta-model exposes them. |
 
 ### Data definition statements
 | Construct | Status | Notes |
@@ -33,8 +33,8 @@ Scope:
 | `case` | Supported | Parsed under choice as case-name set. |
 | `leaf-list` | Supported | Dedicated AST node and text-parser support; validator enforces array shape plus per-item type/leafref/must checks. |
 | `anydata`, `anyxml` | Not yet | Not modeled in current Mojo AST/validator path. |
-| `grouping` | Not yet | Text parser currently ignores it (statement skipped). |
-| `uses` | Not yet | Text parser currently ignores it; no expansion/merge. |
+| `grouping` | Supported | Text parser parses and stores groupings and supports grouped schema nodes used by this project (`leaf`, `leaf-list`, `container`, `list`, `choice`). |
+| `uses` | Partial | Text parser expands `uses` in `container`/`list`/`grouping` for in-module groupings; advanced `uses` substatements (`refine`, `if-feature`, etc.) are not applied yet. |
 | `augment` | Not yet | No augment processing. |
 | `rpc`, `action`, `notification` | Not yet | Not modeled/validated. |
 | `deviation`/`deviate` | Not yet | Not modeled/validated. |
@@ -98,6 +98,20 @@ Supported:
 Partial:
 - Feature coverage depends on fields present in `x-yang`; many RFC substatements are not mapped yet.
 
+## JSON Schema Generation (YANG → JSON Schema)
+
+Supported:
+- Emit draft marker (`$schema: https://json-schema.org/draft/2020-12/schema`) and top-level `properties`.
+- Emit `x-yang` annotations for module metadata and node-level semantics used by this project (`type`, `key`, `mandatory`, `must`, `when`, leafref path/require-instance).
+- Encode integer types and explicit `range` as JSON Schema `minimum`/`maximum`.
+- Encode defaults for `leaf` and `leaf-list` when values are representable.
+- Emit choice structure with `oneOf` branches and `x-yang` choice metadata.
+- Round-trip path covered by tests: text YANG → AST → JSON Schema JSON text → `parse_json_schema`.
+
+Partial:
+- Type mapping is pragmatic, not RFC-complete (for example no full `union`/`identityref`/`bits`/`decimal64` facet coverage).
+- Emission is focused on current validator/parser interoperability, not full reversible fidelity for every RFC statement.
+
 ## Practical Use Guidance
 
 Good fit today:
@@ -108,7 +122,7 @@ Good fit today:
 
 Not production-complete yet for:
 - Full RFC 7950 conformance.
-- Advanced module composition (`grouping`/`uses`/`augment`/`deviation`).
+- Advanced module composition (`augment`/`deviation`, plus full RFC `grouping`/`uses` semantics such as refine/if-feature processing).
 - Full identityref cross-node integrity and full XPath semantics.
 
 ## Notes On Current Leafref Scope

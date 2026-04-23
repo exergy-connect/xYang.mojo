@@ -15,7 +15,12 @@ from xyang.ast import (
     YangMust,
     YangWhen,
 )
-from xyang.yang.tokens import YANG_TYPE_LEAFREF, YANG_STMT_LEAF_LIST
+from xyang.yang.tokens import (
+    YANG_TYPE_LEAFREF,
+    YANG_STMT_ENUM,
+    YANG_STMT_LEAF_LIST,
+    YANG_STMT_UNION,
+)
 
 comptime Arc = ArcPointer
 
@@ -79,6 +84,72 @@ def _leaf_type_name_from_prop(prop: Value) raises -> String:
     return "unknown"
 
 
+def _empty_type(name: String) -> YangType:
+    return YangType(
+        name = name,
+        has_range = False,
+        range_min = 0,
+        range_max = 0,
+        enum_values = List[String](),
+        union_types = List[Arc[YangType]](),
+        has_leafref_path = False,
+        leafref_path = "",
+        leafref_require_instance = True,
+        leafref_xpath_ast = Expr.ExprPointer(),
+        leafref_path_parsed = False,
+    )
+
+
+def _parse_type_from_schema_property(prop: Value) raises -> YangType:
+    ref obj = prop.object()
+    var t = _empty_type(_leaf_type_name_from_prop(prop))
+
+    if "enum" in obj and obj["enum"].is_array():
+        ref earr = obj["enum"].array()
+        if len(earr) > 0:
+            t.name = "enumeration"
+            for i in range(len(earr)):
+                if earr[i].is_string():
+                    t.enum_values.append(earr[i].string())
+
+    if "oneOf" in obj and obj["oneOf"].is_array():
+        ref one_of = obj["oneOf"].array()
+        var members = List[Arc[YangType]]()
+        for i in range(len(one_of)):
+            if not one_of[i].is_object():
+                continue
+            var member = _parse_type_from_schema_property(one_of[i])
+            members.append(Arc[YangType](member^))
+        if len(members) > 0:
+            t.name = YANG_STMT_UNION
+            t.union_types = members^
+
+    if "x-yang" in obj and obj["x-yang"].is_object():
+        ref xy = obj["x-yang"]
+        if "type" in xy.object() and xy.object()["type"].is_string():
+            var xyang_type = xy.object()["type"].string()
+            if xyang_type == YANG_TYPE_LEAFREF:
+                t.name = xyang_type
+            elif xyang_type == YANG_STMT_UNION and len(t.union_types) > 0:
+                t.name = xyang_type
+            elif xyang_type == "enumeration" and len(t.enum_values) > 0:
+                t.name = xyang_type
+        if t.name == YANG_TYPE_LEAFREF:
+            if "path" in xy.object() and xy.object()["path"].is_string():
+                t.has_leafref_path = True
+                t.leafref_path = xy.object()["path"].string()
+                try:
+                    t.leafref_xpath_ast = parse_xpath(t.leafref_path)
+                    t.leafref_path_parsed = True
+                except:
+                    t.leafref_xpath_ast = Expr.ExprPointer()
+                    t.leafref_path_parsed = False
+            if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
+                t.leafref_require_instance = xy.object()["require-instance"].bool()
+
+    return t^
+
+
 def _is_required(prop_key: String, container_prop: Value) raises -> Bool:
     """True if prop_key is in the container's required array."""
     ref obj = container_prop.object()
@@ -134,9 +205,21 @@ def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[YangMust]]:
 
 
 def _parse_yang_when(ref xy: Value) raises -> Optional[YangWhen]:
-    if "when" not in xy.object() or not xy.object()["when"].is_string():
+    if "when" not in xy.object():
         return Optional[YangWhen]()
-    var expr = xy.object()["when"].string()
+    ref when_val = xy.object()["when"]
+    var expr = ""
+    var desc = ""
+    if when_val.is_string():
+        expr = when_val.string()
+    elif when_val.is_object():
+        ref wo = when_val.object()
+        if "condition" in wo and wo["condition"].is_string():
+            expr = wo["condition"].string()
+        if "description" in wo and wo["description"].is_string():
+            desc = wo["description"].string()
+    if len(expr) == 0:
+        return Optional[YangWhen]()
     var ptr = Expr.ExprPointer()
     var parsed = False
     try:
@@ -147,7 +230,7 @@ def _parse_yang_when(ref xy: Value) raises -> Optional[YangWhen]:
     return Optional(
         YangWhen(
             expression = expr,
-            description = "",
+            description = desc,
             xpath_ast = ptr,
             parsed = parsed,
         ),
@@ -170,32 +253,13 @@ def _default_scalar_to_string(v: Value) -> String:
 
 def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLeaf:
     """Parse a leaf definition from a JSON Schema property."""
-    var type_name = _leaf_type_name_from_prop(prop)
+    var type_stmt = _parse_type_from_schema_property(prop)
     var must_list = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
-    var has_leafref_path = False
-    var leafref_path = ""
-    var leafref_require_instance = True
-    var leafref_xpath_ast = Expr.ExprPointer()
-    var leafref_path_parsed = False
     var has_default = False
     var default_value = ""
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
-        if "type" in xy.object() and xy.object()["type"].is_string():
-            type_name = xy.object()["type"].string()
-        if type_name == YANG_TYPE_LEAFREF:
-            if "path" in xy.object() and xy.object()["path"].is_string():
-                has_leafref_path = True
-                leafref_path = xy.object()["path"].string()
-                try:
-                    leafref_xpath_ast = parse_xpath(leafref_path)
-                    leafref_path_parsed = True
-                except:
-                    leafref_xpath_ast = Expr.ExprPointer()
-                    leafref_path_parsed = False
-            if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
-                leafref_require_instance = xy.object()["require-instance"].bool()
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
     if "default" in prop.object():
@@ -203,17 +267,7 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
         has_default = len(default_value) > 0
     return YangLeaf(
         name = name,
-        type = YangType(
-            name = type_name,
-            has_range = False,
-            range_min = 0,
-            range_max = 0,
-            has_leafref_path = has_leafref_path,
-            leafref_path = leafref_path,
-            leafref_require_instance = leafref_require_instance,
-            leafref_xpath_ast = leafref_xpath_ast,
-            leafref_path_parsed = leafref_path_parsed,
-        ),
+        type = type_stmt^,
         mandatory = mandatory,
         has_default = has_default,
         default_value = default_value,
@@ -223,31 +277,12 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
 
 
 def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
-    var type_name = _leaf_type_name_from_prop(prop)
+    var type_stmt = _parse_type_from_schema_property(prop)
     var must_list = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
-    var has_leafref_path = False
-    var leafref_path = ""
-    var leafref_require_instance = True
-    var leafref_xpath_ast = Expr.ExprPointer()
-    var leafref_path_parsed = False
     var default_values = List[String]()
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
-        if "type" in xy.object() and xy.object()["type"].is_string():
-            type_name = xy.object()["type"].string()
-        if type_name == YANG_TYPE_LEAFREF:
-            if "path" in xy.object() and xy.object()["path"].is_string():
-                has_leafref_path = True
-                leafref_path = xy.object()["path"].string()
-                try:
-                    leafref_xpath_ast = parse_xpath(leafref_path)
-                    leafref_path_parsed = True
-                except:
-                    leafref_xpath_ast = Expr.ExprPointer()
-                    leafref_path_parsed = False
-            if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
-                leafref_require_instance = xy.object()["require-instance"].bool()
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
     if "default" in prop.object():
@@ -264,17 +299,7 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
                 default_values.append(text)
     return YangLeafList(
         name = name,
-        type = YangType(
-            name = type_name,
-            has_range = False,
-            range_min = 0,
-            range_max = 0,
-            has_leafref_path = has_leafref_path,
-            leafref_path = leafref_path,
-            leafref_require_instance = leafref_require_instance,
-            leafref_xpath_ast = leafref_xpath_ast,
-            leafref_path_parsed = leafref_path_parsed,
-        ),
+        type = type_stmt^,
         default_values = default_values^,
         must_statements = must_list^,
         when = when^,

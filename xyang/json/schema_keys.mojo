@@ -1,0 +1,53 @@
+## String keys for JSON Schema output and `x-yang` annotations (aligned with Python xYang).
+
+comptime JSON_SCHEMA_REF = "$ref"
+comptime JSON_SCHEMA_DEFS = "$defs"
+comptime JSON_SCHEMA_SCHEMA = "$schema"
+comptime JSON_SCHEMA_ID = "$id"
+comptime JSON_SCHEMA_ALL_OF = "allOf"
+comptime JSON_SCHEMA_ONE_OF = "oneOf"
+comptime JSON_SCHEMA_PROPERTIES = "properties"
+comptime JSON_SCHEMA_REQUIRED = "required"
+comptime JSON_SCHEMA_DESCRIPTION = "description"
+comptime JSON_SCHEMA_TYPE = "type"
+comptime JSON_SCHEMA_ITEMS = "items"
+comptime JSON_SCHEMA_DEFAULT = "default"
+comptime JSON_SCHEMA_ENUM = "enum"
+comptime JSON_SCHEMA_PATTERN = "pattern"
+comptime JSON_SCHEMA_MIN_LENGTH = "minLength"
+comptime JSON_SCHEMA_MAX_LENGTH = "maxLength"
+comptime JSON_SCHEMA_MINIMUM = "minimum"
+comptime JSON_SCHEMA_MAXIMUM = "maximum"
+comptime JSON_SCHEMA_MAX_PROPERTIES = "maxProperties"
+comptime JSON_SCHEMA_MULTIPLE_OF = "multipleOf"
+comptime JSON_SCHEMA_ADDITIONAL_PROPERTIES = "additionalProperties"
+comptime JSON_SCHEMA_X_YANG = "x-yang"
+comptime JSON_SCHEMA_NAME = "name"
+
+comptime XYANG_TYPE = "type"
+comptime XYANG_PATH = "path"
+comptime XYANG_REQUIRE_INSTANCE = "require-instance"
+comptime XYANG_WHEN = "when"
+comptime XYANG_MUST = "must"
+comptime XYANG_KEY = "key"
+comptime XYANG_MANDATORY = "mandatory"
+comptime XYANG_MODULE = "module"
+comptime XYANG_YANG_VERSION = "yang-version"
+comptime XYANG_NAMESPACE = "namespace"
+comptime XYANG_PREFIX = "prefix"
+comptime XYANG_ORGANIZATION = "organization"
+comptime XYANG_CONTACT = "contact"
+comptime XYANG_DEFAULT = "default"
+
+comptime XYANG_MUST_EXPR = "must"
+comptime XYANG_ERROR_MESSAGE = "error-message"
+comptime XYANG_WHEN_CONDITION = "condition"
+
+comptime JSON_SCHEMA_DRAFT_2020_12 = (
+    "https://json-schema.org/draft/2020-12/schema"
+)
+comptime JSON_SCHEMA_DEFS_URI_PREFIX = "#/$defs/"
+
+
+def json_schema_defs_uri(name: String) -> String:
+    return JSON_SCHEMA_DEFS_URI_PREFIX + name

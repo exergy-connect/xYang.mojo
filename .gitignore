@@ -1,3 +1,6 @@
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# mojo build output of main.mojo (binary name `main` in repo root)
+/main

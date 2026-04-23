@@ -21,7 +21,37 @@ from xyang.ast import (
     YangWhen,
 )
 from xyang.xpath import parse_xpath, Expr
-from xyang.yang.tokens import YANG_STMT_LEAF_LIST
+from xyang.yang.tokens import (
+    YANG_BOOL_FALSE,
+    YANG_BOOL_TRUE,
+    YANG_STMT_CASE,
+    YANG_STMT_CHOICE,
+    YANG_STMT_CONTACT,
+    YANG_STMT_CONTAINER,
+    YANG_STMT_DEFAULT,
+    YANG_STMT_DESCRIPTION,
+    YANG_STMT_ERROR_MESSAGE,
+    YANG_STMT_ENUM,
+    YANG_STMT_GROUPING,
+    YANG_STMT_KEY,
+    YANG_STMT_LEAF,
+    YANG_STMT_LEAF_LIST,
+    YANG_STMT_LIST,
+    YANG_STMT_MANDATORY,
+    YANG_STMT_MODULE,
+    YANG_STMT_MUST,
+    YANG_STMT_NAMESPACE,
+    YANG_STMT_ORGANIZATION,
+    YANG_STMT_PATH,
+    YANG_STMT_PREFIX,
+    YANG_STMT_RANGE,
+    YANG_STMT_REQUIRE_INSTANCE,
+    YANG_STMT_REVISION,
+    YANG_STMT_TYPE,
+    YANG_STMT_UNION,
+    YANG_STMT_USES,
+    YANG_STMT_WHEN,
+)
 
 comptime Arc = ArcPointer
 comptime CP_NEWLINE = Codepoint.ord("\n")
@@ -51,16 +81,30 @@ struct ParsedChoiceCase(Movable):
     var node_names: List[String]
 
 
+@fieldwise_init
+struct ParsedGrouping(Movable):
+    var name: String
+    var leaves: List[Arc[YangLeaf]]
+    var leaf_lists: List[Arc[YangLeafList]]
+    var containers: List[Arc[YangContainer]]
+    var lists: List[Arc[YangList]]
+    var choices: List[Arc[YangChoice]]
+
+
 struct _YangParser(Movable):
     var tokens: List[YangToken]
     var index: Int
+    var grouping_names: List[String]
+    var groupings: List[Arc[ParsedGrouping]]
 
     def __init__(out self, var tokens: List[YangToken]):
         self.tokens = tokens^
         self.index = 0
+        self.grouping_names = List[String]()
+        self.groupings = List[Arc[ParsedGrouping]]()
 
     def parse_module(mut self) raises -> YangModule:
-        self._expect("module")
+        self._expect(YANG_STMT_MODULE)
         var module_name = self._consume_name()
         self._expect("{")
 
@@ -74,35 +118,37 @@ struct _YangParser(Movable):
 
         while self._has_more() and self._peek() != "}":
             var stmt = self._peek()
-            if stmt == "namespace":
+            if stmt == YANG_STMT_NAMESPACE:
                 self._consume()
                 namespace = self._consume_argument_value()
                 self._skip_if(";")
-            elif stmt == "prefix":
+            elif stmt == YANG_STMT_PREFIX:
                 self._consume()
                 prefix = self._consume_argument_value()
                 self._skip_if(";")
-            elif stmt == "description":
+            elif stmt == YANG_STMT_DESCRIPTION:
                 self._consume()
                 description = self._consume_argument_value()
                 self._skip_if(";")
-            elif stmt == "revision":
+            elif stmt == YANG_STMT_REVISION:
                 self._consume()
                 revisions.append(self._consume_argument_value())
                 if self._consume_if("{"):
                     self._skip_block_body()
                 self._skip_if(";")
-            elif stmt == "organization":
+            elif stmt == YANG_STMT_ORGANIZATION:
                 self._consume()
                 organization = self._consume_argument_value()
                 self._skip_if(";")
-            elif stmt == "contact":
+            elif stmt == YANG_STMT_CONTACT:
                 self._consume()
                 contact = self._consume_argument_value()
                 self._skip_if(";")
-            elif stmt == "container":
+            elif stmt == YANG_STMT_CONTAINER:
                 var c = self._parse_container_statement()
                 top_containers.append(Arc[YangContainer](c^))
+            elif stmt == YANG_STMT_GROUPING:
+                self._parse_grouping_statement()
             else:
                 self._skip_statement()
 
@@ -121,7 +167,7 @@ struct _YangParser(Movable):
         )
 
     def _parse_container_statement(mut self) raises -> YangContainer:
-        self._expect("container")
+        self._expect(YANG_STMT_CONTAINER)
         var name = self._consume_name()
 
         var desc = ""
@@ -134,25 +180,33 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "description":
+                if stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     desc = self._consume_argument_value()
                     self._skip_if(";")
-                elif stmt == "leaf":
+                elif stmt == YANG_STMT_LEAF:
                     var leaf = self._parse_leaf_statement()
                     leaves.append(Arc[YangLeaf](leaf^))
                 elif stmt == YANG_STMT_LEAF_LIST:
                     var leaf_list = self._parse_leaf_list_statement()
                     leaf_lists.append(Arc[YangLeafList](leaf_list^))
-                elif stmt == "container":
+                elif stmt == YANG_STMT_CONTAINER:
                     var child_container = self._parse_container_statement()
                     containers.append(Arc[YangContainer](child_container^))
-                elif stmt == "list":
+                elif stmt == YANG_STMT_LIST:
                     var child_list = self._parse_list_statement()
                     lists.append(Arc[YangList](child_list^))
-                elif stmt == "choice":
+                elif stmt == YANG_STMT_CHOICE:
                     var choice = self._parse_choice_statement()
                     choices.append(Arc[YangChoice](choice^))
+                elif stmt == YANG_STMT_USES:
+                    self._parse_uses_statement(
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    )
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -169,7 +223,7 @@ struct _YangParser(Movable):
         )
 
     def _parse_list_statement(mut self) raises -> YangList:
-        self._expect("list")
+        self._expect(YANG_STMT_LIST)
         var name = self._consume_name()
 
         var key = ""
@@ -183,29 +237,37 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "key":
+                if stmt == YANG_STMT_KEY:
                     self._consume()
                     key = self._consume_argument_value()
                     self._skip_if(";")
-                elif stmt == "description":
+                elif stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     desc = self._consume_argument_value()
                     self._skip_if(";")
-                elif stmt == "leaf":
+                elif stmt == YANG_STMT_LEAF:
                     var leaf = self._parse_leaf_statement()
                     leaves.append(Arc[YangLeaf](leaf^))
                 elif stmt == YANG_STMT_LEAF_LIST:
                     var leaf_list = self._parse_leaf_list_statement()
                     leaf_lists.append(Arc[YangLeafList](leaf_list^))
-                elif stmt == "container":
+                elif stmt == YANG_STMT_CONTAINER:
                     var child_container = self._parse_container_statement()
                     containers.append(Arc[YangContainer](child_container^))
-                elif stmt == "list":
+                elif stmt == YANG_STMT_LIST:
                     var child_list = self._parse_list_statement()
                     lists.append(Arc[YangList](child_list^))
-                elif stmt == "choice":
+                elif stmt == YANG_STMT_CHOICE:
                     var choice = self._parse_choice_statement()
                     choices.append(Arc[YangChoice](choice^))
+                elif stmt == YANG_STMT_USES:
+                    self._parse_uses_statement(
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    )
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -223,7 +285,7 @@ struct _YangParser(Movable):
         )
 
     def _parse_leaf_statement(mut self) raises -> YangLeaf:
-        self._expect("leaf")
+        self._expect(YANG_STMT_LEAF)
         var name = self._consume_name()
 
         var type_stmt = YangType(
@@ -231,6 +293,8 @@ struct _YangParser(Movable):
             has_range = False,
             range_min = 0,
             range_max = 0,
+            enum_values = List[String](),
+            union_types = List[Arc[YangType]](),
             has_leafref_path = False,
             leafref_path = "",
             leafref_require_instance = True,
@@ -246,24 +310,24 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "type":
+                if stmt == YANG_STMT_TYPE:
                     type_stmt = self._parse_type_statement()
-                elif stmt == "mandatory":
+                elif stmt == YANG_STMT_MANDATORY:
                     self._consume()
                     mandatory = self._parse_boolean_value()
                     self._skip_if(";")
-                elif stmt == "default":
+                elif stmt == YANG_STMT_DEFAULT:
                     self._consume()
                     default_value = self._consume_argument_value()
                     has_default = True
                     self._skip_if(";")
-                elif stmt == "must":
+                elif stmt == YANG_STMT_MUST:
                     var m = self._parse_must_statement()
                     must.append(Arc[YangMust](m^))
-                elif stmt == "when":
+                elif stmt == YANG_STMT_WHEN:
                     var w = self._parse_when_statement()
                     when = Optional(w^)
-                elif stmt == "description":
+                elif stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     _ = self._consume_argument_value()
                     self._skip_if(";")
@@ -291,6 +355,8 @@ struct _YangParser(Movable):
             has_range = False,
             range_min = 0,
             range_max = 0,
+            enum_values = List[String](),
+            union_types = List[Arc[YangType]](),
             has_leafref_path = False,
             leafref_path = "",
             leafref_require_instance = True,
@@ -304,19 +370,19 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "type":
+                if stmt == YANG_STMT_TYPE:
                     type_stmt = self._parse_type_statement()
-                elif stmt == "default":
+                elif stmt == YANG_STMT_DEFAULT:
                     self._consume()
                     default_values.append(self._consume_argument_value())
                     self._skip_if(";")
-                elif stmt == "must":
+                elif stmt == YANG_STMT_MUST:
                     var m = self._parse_must_statement()
                     must.append(Arc[YangMust](m^))
-                elif stmt == "when":
+                elif stmt == YANG_STMT_WHEN:
                     var w = self._parse_when_statement()
                     when = Optional(w^)
-                elif stmt == "description":
+                elif stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     _ = self._consume_argument_value()
                     self._skip_if(";")
@@ -334,7 +400,7 @@ struct _YangParser(Movable):
         )
 
     def _parse_choice_statement(mut self) raises -> YangChoice:
-        self._expect("choice")
+        self._expect(YANG_STMT_CHOICE)
         var name = self._consume_name()
 
         var mandatory = False
@@ -345,15 +411,15 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "mandatory":
+                if stmt == YANG_STMT_MANDATORY:
                     self._consume()
                     mandatory = self._parse_boolean_value()
                     self._skip_if(";")
-                elif stmt == "default":
+                elif stmt == YANG_STMT_DEFAULT:
                     self._consume()
                     default_case = self._consume_name()
                     self._skip_if(";")
-                elif stmt == "case":
+                elif stmt == YANG_STMT_CASE:
                     var parsed_case = self._parse_case_statement()
                     for i in range(len(parsed_case.node_names)):
                         case_names.append(parsed_case.node_names[i])
@@ -363,7 +429,7 @@ struct _YangParser(Movable):
                             node_names=parsed_case.node_names.copy(),
                         ),
                     ))
-                elif stmt == "leaf":
+                elif stmt == YANG_STMT_LEAF:
                     self._consume()
                     var node_name = self._consume_name()
                     case_names.append(node_name)
@@ -373,7 +439,7 @@ struct _YangParser(Movable):
                         YangChoiceCase(name=node_name, node_names=implicit_names^),
                     ))
                     self._skip_statement_tail()
-                elif stmt == "container":
+                elif stmt == YANG_STMT_CONTAINER:
                     self._consume()
                     var node_name = self._consume_name()
                     case_names.append(node_name)
@@ -383,7 +449,7 @@ struct _YangParser(Movable):
                         YangChoiceCase(name=node_name, node_names=implicit_names^),
                     ))
                     self._skip_statement_tail()
-                elif stmt == "list":
+                elif stmt == YANG_STMT_LIST:
                     self._consume()
                     var node_name = self._consume_name()
                     case_names.append(node_name)
@@ -417,7 +483,7 @@ struct _YangParser(Movable):
         )
 
     def _parse_case_statement(mut self) raises -> ParsedChoiceCase:
-        self._expect("case")
+        self._expect(YANG_STMT_CASE)
         var case_name = self._consume_name()
 
         var names = List[String]()
@@ -425,15 +491,15 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "leaf":
+                if stmt == YANG_STMT_LEAF:
                     self._consume()
                     names.append(self._consume_name())
                     self._skip_statement_tail()
-                elif stmt == "container":
+                elif stmt == YANG_STMT_CONTAINER:
                     self._consume()
                     names.append(self._consume_name())
                     self._skip_statement_tail()
-                elif stmt == "list":
+                elif stmt == YANG_STMT_LIST:
                     self._consume()
                     names.append(self._consume_name())
                     self._skip_statement_tail()
@@ -448,12 +514,128 @@ struct _YangParser(Movable):
 
         return ParsedChoiceCase(name=case_name, node_names=names^)
 
+    def _parse_grouping_statement(mut self) raises:
+        self._expect(YANG_STMT_GROUPING)
+        var name = self._consume_name()
+
+        var leaves = List[Arc[YangLeaf]]()
+        var leaf_lists = List[Arc[YangLeafList]]()
+        var containers = List[Arc[YangContainer]]()
+        var lists = List[Arc[YangList]]()
+        var choices = List[Arc[YangChoice]]()
+
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == YANG_STMT_LEAF:
+                    var leaf = self._parse_leaf_statement()
+                    leaves.append(Arc[YangLeaf](leaf^))
+                elif stmt == YANG_STMT_LEAF_LIST:
+                    var leaf_list = self._parse_leaf_list_statement()
+                    leaf_lists.append(Arc[YangLeafList](leaf_list^))
+                elif stmt == YANG_STMT_CONTAINER:
+                    var child_container = self._parse_container_statement()
+                    containers.append(Arc[YangContainer](child_container^))
+                elif stmt == YANG_STMT_LIST:
+                    var child_list = self._parse_list_statement()
+                    lists.append(Arc[YangList](child_list^))
+                elif stmt == YANG_STMT_CHOICE:
+                    var choice = self._parse_choice_statement()
+                    choices.append(Arc[YangChoice](choice^))
+                elif stmt == YANG_STMT_USES:
+                    self._parse_uses_statement(
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                elif stmt == YANG_STMT_DESCRIPTION:
+                    self._consume()
+                    _ = self._consume_argument_value()
+                    self._skip_if(";")
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
+
+        self._store_grouping(
+            ParsedGrouping(
+                name = name,
+                leaves = leaves^,
+                leaf_lists = leaf_lists^,
+                containers = containers^,
+                lists = lists^,
+                choices = choices^,
+            ),
+        )
+
+    def _store_grouping(mut self, var grouping: ParsedGrouping) raises:
+        for i in range(len(self.grouping_names)):
+            if self.grouping_names[i] == grouping.name:
+                self._error("Duplicate grouping '" + grouping.name + "'")
+                return
+        self.grouping_names.append(grouping.name)
+        self.groupings.append(Arc[ParsedGrouping](grouping^))
+
+    def _parse_uses_statement(
+        mut self,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) raises:
+        self._expect(YANG_STMT_USES)
+        var grouping_name = self._consume_name()
+        self._skip_statement_tail()
+        self._append_grouping_nodes_by_name(
+            grouping_name,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        )
+
+    def _append_grouping_nodes_by_name(
+        mut self,
+        grouping_name: String,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) raises:
+        var idx = self._find_grouping_index(grouping_name)
+        if idx < 0:
+            self._error("Unknown grouping '" + grouping_name + "' in uses statement")
+            return
+        for i in range(len(self.groupings[idx][].leaves)):
+            leaves.append(self.groupings[idx][].leaves[i].copy())
+        for i in range(len(self.groupings[idx][].leaf_lists)):
+            leaf_lists.append(self.groupings[idx][].leaf_lists[i].copy())
+        for i in range(len(self.groupings[idx][].containers)):
+            containers.append(self.groupings[idx][].containers[i].copy())
+        for i in range(len(self.groupings[idx][].lists)):
+            lists.append(self.groupings[idx][].lists[i].copy())
+        for i in range(len(self.groupings[idx][].choices)):
+            choices.append(self.groupings[idx][].choices[i].copy())
+
+    def _find_grouping_index(ref self, grouping_name: String) -> Int:
+        for i in range(len(self.grouping_names)):
+            if self.grouping_names[i] == grouping_name:
+                return i
+        return -1
+
     def _parse_type_statement(mut self) raises -> YangType:
-        self._expect("type")
+        self._expect(YANG_STMT_TYPE)
         var type_name = self._consume_name()
         var has_range = False
         var range_min = Int64(0)
         var range_max = Int64(0)
+        var enum_values = List[String]()
+        var union_types = List[Arc[YangType]]()
         var has_leafref_path = False
         var leafref_path = ""
         var leafref_require_instance = True
@@ -463,7 +645,7 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "range":
+                if stmt == YANG_STMT_RANGE:
                     self._consume()
                     var range_expr = self._consume_argument_value()
                     var parts = range_expr.split("..")
@@ -475,7 +657,7 @@ struct _YangParser(Movable):
                         except:
                             has_range = False
                     self._skip_if(";")
-                elif stmt == "path":
+                elif stmt == YANG_STMT_PATH:
                     self._consume()
                     leafref_path = self._consume_argument_value()
                     has_leafref_path = True
@@ -486,20 +668,47 @@ struct _YangParser(Movable):
                         leafref_xpath_ast = Expr.ExprPointer()
                         leafref_path_parsed = False
                     self._skip_if(";")
-                elif stmt == "require-instance":
+                elif stmt == YANG_STMT_REQUIRE_INSTANCE:
                     self._consume()
                     leafref_require_instance = self._parse_boolean_value()
                     self._skip_if(";")
+                elif stmt == YANG_STMT_ENUM:
+                    self._consume()
+                    enum_values.append(self._consume_name())
+                    self._skip_statement_tail()
+                elif stmt == YANG_STMT_TYPE and type_name == YANG_STMT_UNION:
+                    var union_type = self._parse_type_statement()
+                    union_types.append(Arc[YangType](union_type^))
                 else:
                     self._skip_statement()
             self._expect("}")
         self._skip_if(";")
+
+        if type_name == "enumeration" and len(enum_values) == 0:
+            self._error(
+                "enumeration type requires at least one '" + YANG_STMT_ENUM + "' statement",
+            )
+            return YangType(
+                name = type_name,
+                has_range = has_range,
+                range_min = range_min,
+                range_max = range_max,
+                enum_values = enum_values^,
+                union_types = union_types^,
+                has_leafref_path = has_leafref_path,
+                leafref_path = leafref_path,
+                leafref_require_instance = leafref_require_instance,
+                leafref_xpath_ast = leafref_xpath_ast,
+                leafref_path_parsed = leafref_path_parsed,
+            )
 
         return YangType(
             name = type_name,
             has_range = has_range,
             range_min = range_min,
             range_max = range_max,
+            enum_values = enum_values^,
+            union_types = union_types^,
             has_leafref_path = has_leafref_path,
             leafref_path = leafref_path,
             leafref_require_instance = leafref_require_instance,
@@ -508,7 +717,7 @@ struct _YangParser(Movable):
         )
 
     def _parse_must_statement(mut self) raises -> YangMust:
-        self._expect("must")
+        self._expect(YANG_STMT_MUST)
         var expression = self._consume_argument_value()
         var error_message = ""
         var description = ""
@@ -516,11 +725,11 @@ struct _YangParser(Movable):
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "error-message":
+                if stmt == YANG_STMT_ERROR_MESSAGE:
                     self._consume()
                     error_message = self._consume_argument_value()
                     self._skip_if(";")
-                elif stmt == "description":
+                elif stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     description = self._consume_argument_value()
                     self._skip_if(";")
@@ -549,14 +758,14 @@ struct _YangParser(Movable):
             )
 
     def _parse_when_statement(mut self) raises -> YangWhen:
-        self._expect("when")
+        self._expect(YANG_STMT_WHEN)
         var expression = self._consume_argument_value()
         var description = ""
 
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
                 var stmt = self._peek()
-                if stmt == "description":
+                if stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     description = self._consume_argument_value()
                     self._skip_if(";")
@@ -584,9 +793,9 @@ struct _YangParser(Movable):
 
     def _parse_boolean_value(mut self) raises -> Bool:
         var value = self._consume_value()
-        if value == "true":
+        if value == YANG_BOOL_TRUE:
             return True
-        if value == "false":
+        if value == YANG_BOOL_FALSE:
             return False
         self._error("Expected boolean value 'true' or 'false', got '" + value + "'")
         return False

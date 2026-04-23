@@ -154,6 +154,31 @@ def _check_leafref_type(val: Value) -> List[String]:
     return errs^
 
 
+def _check_enumeration_type(val: Value, type_stmt: YangType) -> List[String]:
+    if val.is_null():
+        return List[String]()
+    if not val.is_string():
+        var errs = List[String]()
+        errs.append("Expected enumeration string, got non-string value")
+        return errs^
+    if len(type_stmt.enum_values) == 0:
+        return List[String]()
+    var s = val.string()
+    for i in range(len(type_stmt.enum_values)):
+        if type_stmt.enum_values[i] == s:
+            return List[String]()
+    var allowed = ""
+    for i in range(len(type_stmt.enum_values)):
+        if i > 0:
+            allowed += ", "
+        allowed += type_stmt.enum_values[i]
+    var errs = List[String]()
+    errs.append(
+        "Value '" + s + "' is not one of the allowed enum values: " + allowed,
+    )
+    return errs^
+
+
 def _normalize_leafref_segment(seg: String) -> String:
     var trimmed = String(seg.strip())
     var parts = trimmed.split("[")
@@ -334,5 +359,27 @@ def check_leaf_value(
         return _check_array_type(val)
     if name == YANG_TYPE_LEAFREF:
         return _check_leafref_type(val)
+    if name == "enumeration":
+        return _check_enumeration_type(val, type_stmt)
+    if name == "union":
+        for i in range(len(type_stmt.union_types)):
+            var errs = check_leaf_value(
+                val,
+                type_stmt.union_types[i][],
+                path,
+                integer_bounds,
+            )
+            if len(errs) == 0:
+                return List[String]()
+        var names = ""
+        for i in range(len(type_stmt.union_types)):
+            if i > 0:
+                names += ", "
+            names += type_stmt.union_types[i][].name
+        var errs = List[String]()
+        errs.append(
+            "Value does not match any union member type (" + names + ")",
+        )
+        return errs^
     # Unknown / typedef names: treat as string for now
     return _check_string_type(val)
