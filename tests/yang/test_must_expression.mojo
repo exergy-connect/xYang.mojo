@@ -5,6 +5,7 @@ from std.testing import assert_true, assert_false, TestSuite
 from emberjson import parse as parse_json, Value
 from xyang.ast import YangModule
 from xyang.json.parser import parse_yang_module
+from xyang.yang import parse_yang_file
 from xyang.validator import YangValidator
 
 
@@ -96,6 +97,49 @@ def test_must_expression_invalid() raises:
     assert_false(result.is_valid)
 
 
+def test_list_element_must_valid() raises:
+    # /system/interface[*]/name has must "string-length(.) > 0" in basic-device.yang.
+    var data: Value = parse_json(
+        """
+        {
+          "system": {
+            "hostname": "edge-router-1",
+            "enabled": true,
+            "management-interface": "eth0",
+            "interface": [
+              {"name": "eth0", "mtu": 1500, "admin-up": true}
+            ]
+          }
+        }
+        """
+    )
+    var module = parse_yang_file("examples/basic_yang/basic-device.yang")
+    var validator = YangValidator()
+    var result = validator.validate(data, module)
+    assert_true(result.is_valid)
+
+
+def test_list_element_must_invalid() raises:
+    # Empty interface name violates list-element must.
+    var data: Value = parse_json(
+        """
+        {
+          "system": {
+            "hostname": "edge-router-1",
+            "enabled": true,
+            "management-interface": "eth0",
+            "interface": [
+              {"name": "", "mtu": 1500, "admin-up": true}
+            ]
+          }
+        }
+        """
+    )
+    var module = parse_yang_file("examples/basic_yang/basic-device.yang")
+    var validator = YangValidator()
+    var result = validator.validate(data, module)
+    assert_false(result.is_valid)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
-

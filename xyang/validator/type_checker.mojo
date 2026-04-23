@@ -132,6 +132,17 @@ def _check_object_type(val: Value) -> List[String]:
     errs.append("Expected object, got non-object value")
     return errs^
 
+
+def _check_leafref_type(val: Value) -> List[String]:
+    """Leafref may point to any scalar leaf type; reject non-scalars."""
+    if val.is_string() or val.is_int() or val.is_uint() or val.is_float() or val.is_bool():
+        return List[String]()
+    if val.is_null():
+        return List[String]()
+    var errs = List[String]()
+    errs.append("Expected scalar leafref value, got non-scalar value")
+    return errs^
+
 def check_leaf_value(
     val: Value,
     type_stmt: YangType,
@@ -171,5 +182,7 @@ def check_leaf_value(
         return _check_object_type(val)
     if name == "array":
         return _check_array_type(val)
+    if name == "leafref":
+        return _check_leafref_type(val)
     # Unknown / typedef names: treat as string for now
     return _check_string_type(val)

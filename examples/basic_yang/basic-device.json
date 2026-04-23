@@ -2,23 +2,27 @@
   "system": {
     "hostname": "edge-router-1",
     "enabled": true,
+    "management-interface": "eth0",
+    "management-interface-index": 1,
     "interface": [
       {
         "name": "eth0",
+        "if-index": 1,
         "mtu": 1500,
         "admin-up": true
       },
       {
         "name": "eth1",
+        "if-index": 2,
         "mtu": 9000,
         "admin-up": false,
         "shutdown-reason": "maintenance-window"
       },
       {
         "name": "eth2",
+        "if-index": 3,
         "mtu": 1500,
-        "admin-up": true,
-        "shutdown-reason": "should-not-be-set-when-up"
+        "admin-up": true
       }
     ]
   }

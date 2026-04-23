@@ -35,13 +35,19 @@ def test_parse_basic_yang_file() raises:
     ref system = module.top_level_containers[0][]
     assert_equal(system.name, "system")
 
-    assert_true(len(system.leaves) == 2)
+    assert_true(len(system.leaves) == 4)
     var hostname_idx = _find_leaf_index_by_name_in_container("hostname", path)
     var enabled_idx = _find_leaf_index_by_name_in_container("enabled", path)
+    var mgmt_if_idx = _find_leaf_index_by_name_in_container("management-interface", path)
+    var mgmt_if_index_idx = _find_leaf_index_by_name_in_container("management-interface-index", path)
     assert_true(hostname_idx >= 0)
     assert_true(enabled_idx >= 0)
+    assert_true(mgmt_if_idx >= 0)
+    assert_true(mgmt_if_index_idx >= 0)
     assert_equal(system.leaves[hostname_idx][].type.name, "string")
     assert_equal(system.leaves[enabled_idx][].type.name, "boolean")
+    assert_equal(system.leaves[mgmt_if_idx][].type.name, "leafref")
+    assert_equal(system.leaves[mgmt_if_index_idx][].type.name, "leafref")
 
     assert_true(len(system.lists) == 1)
     ref interface_list = system.lists[0][]
