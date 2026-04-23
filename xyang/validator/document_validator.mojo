@@ -22,13 +22,6 @@ from xyang.xpath import (
     XPathEvaluator,
     eval_result_to_bool,
 )
-from alternatives.xpath.parser import XPathParser
-from alternatives.xpath.evaluator import (
-    AltXPathEvaluator,
-    EvalContext as AltEvalContext,
-    XPathNode as AltXPathNode,
-    eval_result_to_bool as alt_eval_result_to_bool,
-)
 
 comptime Arc = ArcPointer
 
@@ -117,16 +110,23 @@ def _leaf_value_to_string(ref val: Value) -> String:
 
 struct DocumentValidator:
     var _errors: List[ValidationError]
-    var use_alt_xpath: Bool
+    var debug_trace: Bool
 
-    def __init__(out self, use_alt_xpath: Bool = False):
+    def __init__(out self, use_alt_xpath: Bool = False, debug_trace: Bool = False):
         self._errors = List[ValidationError]()
-        self.use_alt_xpath = use_alt_xpath
+        _ = use_alt_xpath  # Compatibility: alternative XPath engine removed.
+        self.debug_trace = debug_trace
+
+    def _trace(ref self, message: String):
+        if self.debug_trace:
+            print("[document-validator] " + message)
 
     def validate(mut self, module: YangModule, data: Value) raises -> List[ValidationError]:
         """Validate root data (object) against the module. Returns list of errors."""
         self._errors = List[ValidationError]()
+        self._trace("Start validate module='" + module.name + "'")
         if not data.is_object():
+            self._trace("Root is not an object")
             self._errors.append(
                 ValidationError(
                     path="/",
@@ -141,6 +141,7 @@ struct DocumentValidator:
         for i in range(len(module.top_level_containers)):
             ref cont = module.top_level_containers[i][]
             if cont.name in root_obj:
+                self._trace("Visit top-level container '" + cont.name + "'")
                 path.push(cont.name)
                 self._visit_container(root_obj[cont.name], cont, path)
                 path.pop()
@@ -152,6 +153,7 @@ struct DocumentValidator:
                     found = True
                     break
             if not found:
+                self._trace("Unknown top-level field '" + key + "'")
                 self._errors.append(
                     ValidationError(
                         path="/" + key,
@@ -160,6 +162,7 @@ struct DocumentValidator:
                         severity=Severity("error"),
                     ),
                 )
+        self._trace("Validation complete with errors=" + String(len(self._errors)))
         return self._errors.copy()
 
     def _visit_container(
@@ -168,7 +171,9 @@ struct DocumentValidator:
         container: YangContainer,
         mut path: PathBuilder,
     ) raises:
+        self._trace("Enter container path=" + path.current() + " schema='" + container.name + "'")
         if not data.is_object():
+            self._trace("Container data is not object at path=" + path.current())
             return
         ref obj = data.object()
         var valid_names = _container_valid_child_names(container)
@@ -180,6 +185,7 @@ struct DocumentValidator:
                     known = True
                     break
             if not known:
+                self._trace("Unknown field at " + path.child(key))
                 self._errors.append(
                     ValidationError(
                         path=path.child(key),
@@ -209,9 +215,11 @@ struct DocumentValidator:
     ) raises:
         var name = leaf.name
         var child_path = path.child(name)
+        self._trace("Check leaf path=" + child_path + " type='" + leaf.type.name + "'")
         var present = name in obj
         if not present:
             if leaf.mandatory:
+                self._trace("Mandatory leaf missing at " + child_path)
                 self._errors.append(
                     ValidationError(
                         path=child_path,
@@ -224,6 +232,7 @@ struct DocumentValidator:
         ref val = obj[name]
         if val.is_null():
             if leaf.mandatory:
+                self._trace("Mandatory leaf null at " + child_path)
                 self._errors.append(
                     ValidationError(
                         path=child_path,
@@ -244,70 +253,41 @@ struct DocumentValidator:
             )
         for i in range(len(leaf.must)):
             ref must_ref = leaf.must[i][]
-            if self.use_alt_xpath:
-                try:
-                    var parser = XPathParser(must_ref.expression)
-                    var ast = parser.parse()
-                    var root_alt = Arc[AltXPathNode](AltXPathNode("/"))
-                    var current_alt = Arc[AltXPathNode](AltXPathNode(child_path))
-                    var leaf_str = _leaf_value_to_string(val)
-                    var ctx_alt = AltEvalContext(root=root_alt, expression=must_ref.expression, current_leaf_value=leaf_str)
-                    var ev_alt = AltXPathEvaluator()
-                    var result = ev_alt.eval(ast, ctx_alt, current_alt)
-                    if not alt_eval_result_to_bool(result):
-                        var msg = must_ref.error_message
-                        if len(msg) == 0:
-                            msg = "Must constraint violated"
-                        self._errors.append(
-                            ValidationError(
-                                path=child_path,
-                                message=msg,
-                                expression=must_ref.expression,
-                                severity=Severity("error"),
-                            ),
-                        )
-                except e:
+            self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
+            if not must_ref.parsed or not must_ref.xpath_ast:
+                continue
+            try:
+                var root_node = XPathNode("/")
+                var root_arc = Arc[XPathNode](root_node^)
+                var current_node = XPathNode(child_path)
+                var current_arc = Arc[XPathNode](current_node^)
+                var leaf_str = _leaf_value_to_string(val)
+                var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
+                var ev = XPathEvaluator()
+                var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                if not eval_result_to_bool(result):
+                    self._trace("Must failed at " + child_path)
+                    var msg = must_ref.error_message
+                    if len(msg) == 0:
+                        msg = "Must constraint violated"
                     self._errors.append(
                         ValidationError(
                             path=child_path,
-                            message="Must expression could not be evaluated",
+                            message=msg,
                             expression=must_ref.expression,
                             severity=Severity("error"),
                         ),
                     )
-            else:
-                if not must_ref.parsed or not must_ref.xpath_ast:
-                    continue
-                try:
-                    var root_node = XPathNode("/")
-                    var root_arc = Arc[XPathNode](root_node^)
-                    var current_node = XPathNode(child_path)
-                    var current_arc = Arc[XPathNode](current_node^)
-                    var leaf_str = _leaf_value_to_string(val)
-                    var ctx = EvalContext(root_arc, must_ref.expression, leaf_str)
-                    var ev = XPathEvaluator()
-                    var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
-                    if not eval_result_to_bool(result):
-                        var msg = must_ref.error_message
-                        if len(msg) == 0:
-                            msg = "Must constraint violated"
-                        self._errors.append(
-                            ValidationError(
-                                path=child_path,
-                                message=msg,
-                                expression=must_ref.expression,
-                                severity=Severity("error"),
-                            ),
-                        )
-                except:
-                    self._errors.append(
-                        ValidationError(
-                            path=child_path,
-                            message="Must expression could not be evaluated",
-                            expression=must_ref.expression,
-                            severity=Severity("error"),
-                        ),
-                    )
+            except:
+                self._trace("Must evaluation raised at " + child_path)
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="Must expression could not be evaluated",
+                        expression=must_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
 
     def _visit_list(
         mut self,
@@ -316,10 +296,13 @@ struct DocumentValidator:
         mut path: PathBuilder,
     ) raises:
         var name = list_node.name
+        self._trace("Check list path=" + path.child(name) + " schema='" + name + "'")
         if name not in obj:
+            self._trace("List missing at " + path.child(name))
             return
         ref arr_val = obj[name]
         if not arr_val.is_array():
+            self._trace("List value is not array at " + path.child(name))
             self._errors.append(
                 ValidationError(
                     path=path.child(name),
@@ -330,10 +313,12 @@ struct DocumentValidator:
             )
             return
         ref arr = arr_val.array()
+        self._trace("List entries at " + path.child(name) + ": " + String(len(arr)))
         var key_names = _key_names_from_key(list_node.key)
         for idx in range(len(arr)):
             ref entry = arr[idx]
             var key_str = _entry_key_string(entry, key_names)
+            self._trace("Visit list entry " + path.child(name, key_str))
             path.push(name, key_str)
             if entry.is_object():
                 self._visit_list_entry(entry.object(), list_node, path)
@@ -385,8 +370,10 @@ struct DocumentValidator:
         for i in range(len(choice.case_names)):
             if choice.case_names[i] in obj:
                 active = True
+                self._trace("Choice '" + choice.name + "' active case '" + choice.case_names[i] + "' at " + path.current())
                 break
         if not active and choice.mandatory:
+            self._trace("Mandatory choice missing active case at " + path.current() + " choice='" + choice.name + "'")
             self._errors.append(
                 ValidationError(
                     path=path.current(),
