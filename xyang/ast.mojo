@@ -29,12 +29,9 @@ struct YangMust(Movable):
 
     fn __del__(deinit self):
         if self.xpath_ast:
-            try:
-                self.xpath_ast[].free_tree()
-                self.xpath_ast.destroy_pointee()
-                self.xpath_ast.free()
-            except:
-                print("[YangMust.__del__] error freeing xpath_ast")
+            self.xpath_ast[].free_tree()
+            self.xpath_ast.destroy_pointee()
+            self.xpath_ast.free()
 
 
 @fieldwise_init
@@ -51,7 +48,7 @@ struct YangLeaf(Movable, JsonDeserializable):
             "YangLeaf("
             + self.name
             + ", type="
-            + String(self.type)
+            + self.type.__str__()
             + ", mandatory="
             + m
             + ", must="

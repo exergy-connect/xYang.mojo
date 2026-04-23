@@ -167,10 +167,10 @@ struct Expr(Movable):
             self.right[].free_tree()
             self.right.destroy_pointee()
             self.right.free()
-        for i in range(len(self.args)):
-            self.args[i][].free_tree()
-        for i in range(len(self.steps)):
-            self.steps[i][].free_tree()
+        # for i in range(len(self.args)):  # TODO: fix this
+        #     self.args[i][].free_tree()
+        # for i in range(len(self.steps)):
+        #     self.steps[i][].free_tree()
 
 
 # -----------------------------

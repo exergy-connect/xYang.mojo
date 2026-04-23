@@ -63,21 +63,21 @@ struct _YangParser(Movable):
             if stmt == "namespace":
                 self._consume()
                 namespace = self._consume_argument_value()
-                self._consume_if(";")
+                self._skip_if(";")
             elif stmt == "prefix":
                 self._consume()
                 prefix = self._consume_argument_value()
-                self._consume_if(";")
+                self._skip_if(";")
             elif stmt == "description":
                 self._consume()
                 _ = self._consume_argument_value()
-                self._consume_if(";")
+                self._skip_if(";")
             elif stmt == "revision":
                 self._consume()
                 _ = self._consume_argument_value()
                 if self._consume_if("{"):
                     self._skip_block_body()
-                self._consume_if(";")
+                self._skip_if(";")
             elif stmt == "container":
                 var c = self._parse_container_statement()
                 top_containers.append(Arc[YangContainer](c^))
@@ -85,7 +85,7 @@ struct _YangParser(Movable):
                 self._skip_statement()
 
         self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         return YangModule(
             name = module_name,
@@ -110,7 +110,7 @@ struct _YangParser(Movable):
                 if stmt == "description":
                     self._consume()
                     desc = self._consume_argument_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 elif stmt == "leaf":
                     var leaf = self._parse_leaf_statement()
                     leaves.append(Arc[YangLeaf](leaf^))
@@ -126,7 +126,7 @@ struct _YangParser(Movable):
                 else:
                     self._skip_statement()
             self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         return YangContainer(
             name = name,
@@ -154,11 +154,11 @@ struct _YangParser(Movable):
                 if stmt == "key":
                     self._consume()
                     key = self._consume_argument_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 elif stmt == "description":
                     self._consume()
                     desc = self._consume_argument_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 elif stmt == "leaf":
                     var leaf = self._parse_leaf_statement()
                     leaves.append(Arc[YangLeaf](leaf^))
@@ -174,7 +174,7 @@ struct _YangParser(Movable):
                 else:
                     self._skip_statement()
             self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         return YangList(
             name = name,
@@ -202,18 +202,18 @@ struct _YangParser(Movable):
                 elif stmt == "mandatory":
                     self._consume()
                     mandatory = self._parse_boolean_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 elif stmt == "must":
                     var m = self._parse_must_statement()
                     must.append(Arc[YangMust](m^))
                 elif stmt == "description":
                     self._consume()
                     _ = self._consume_argument_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 else:
                     self._skip_statement()
             self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         return YangLeaf(
             name = name,
@@ -235,7 +235,7 @@ struct _YangParser(Movable):
                 if stmt == "mandatory":
                     self._consume()
                     mandatory = self._parse_boolean_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 elif stmt == "case":
                     var names = self._parse_case_statement()
                     for i in range(len(names)):
@@ -255,7 +255,7 @@ struct _YangParser(Movable):
                 else:
                     self._skip_statement()
             self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         return YangChoice(
             name = name,
@@ -287,7 +287,7 @@ struct _YangParser(Movable):
                 else:
                     self._skip_statement()
             self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         return names^
 
@@ -297,7 +297,7 @@ struct _YangParser(Movable):
 
         if self._consume_if("{"):
             self._skip_block_body()
-        self._consume_if(";")
+        self._skip_if(";")
 
         return type_name
 
@@ -313,15 +313,15 @@ struct _YangParser(Movable):
                 if stmt == "error-message":
                     self._consume()
                     error_message = self._consume_argument_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 elif stmt == "description":
                     self._consume()
                     description = self._consume_argument_value()
-                    self._consume_if(";")
+                    self._skip_if(";")
                 else:
                     self._skip_statement()
             self._expect("}")
-        self._consume_if(";")
+        self._skip_if(";")
 
         var xpath_ast = Expr.ExprPointer()
         try:
@@ -381,7 +381,7 @@ struct _YangParser(Movable):
             return
         if self._consume_if("{"):
             self._skip_block_body()
-            self._consume_if(";")
+            self._skip_if(";")
             return
         while self._has_more():
             var v = self._peek()
@@ -391,7 +391,7 @@ struct _YangParser(Movable):
             if v == "{":
                 self._consume()
                 self._skip_block_body()
-                self._consume_if(";")
+                self._skip_if(";")
                 return
             if v == "}":
                 return
@@ -426,6 +426,10 @@ struct _YangParser(Movable):
             self.index += 1
             return True
         return False
+
+    def _skip_if(mut self, value: String):
+        if self._has_more() and self.tokens[self.index].value == value:
+            self.index += 1
 
     def _consume(mut self) raises:
         if not self._has_more():
