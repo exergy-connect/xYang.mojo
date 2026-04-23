@@ -58,16 +58,6 @@ struct Expr(Movable):
         self.args = args^
         self.steps = steps^
 
-    fn __del__(deinit self):
-        try:
-            with open(Self._DEBUG_LOG, "a") as f:
-                var null_p: Self.ExprPointer = Self.ExprPointer()
-                var left_s = "null" if self.left == null_p else "set"
-                var right_s = "null" if self.right == null_p else "set"
-                f.write("Expr destroyed kind=" + String(self.kind) + " left=" + left_s + " right=" + right_s + "\n")
-        except:
-            pass
-
     @staticmethod
     def number(v: Token) -> Self.ExprPointer:
         var ptr = alloc[Self](1)
@@ -379,11 +369,13 @@ struct Parser:
             if lbp < min_bp or lbp == 0:
                 break
 
+            # Copy only when we know this token is consumed as an infix op.
+            var op_tok = tok.copy()
             self.skip()
 
             var rhs = self.parse_expression(rbp)
 
-            lhs = Expr.binary(tok.copy(), lhs, rhs)
+            lhs = Expr.binary(op_tok, lhs, rhs)
 
         return lhs
 
