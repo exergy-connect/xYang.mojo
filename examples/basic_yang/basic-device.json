@@ -11,7 +11,14 @@
       {
         "name": "eth1",
         "mtu": 9000,
-        "admin-up": false
+        "admin-up": false,
+        "shutdown-reason": "maintenance-window"
+      },
+      {
+        "name": "eth2",
+        "mtu": 1500,
+        "admin-up": true,
+        "shutdown-reason": "should-not-be-set-when-up"
       }
     ]
   }

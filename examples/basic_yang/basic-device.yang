@@ -13,12 +13,32 @@ module basic-device {
       "Initial revision.";
   }
 
+  grouping interface-optional-settings {
+    description
+      "Optional interface attributes reused via uses.";
+
+    leaf description {
+      type string;
+      description "Human-readable interface description.";
+    }
+
+    leaf hold-time {
+      type uint16 {
+        range "0..300";
+      }
+      description "Link hold-time in seconds.";
+    }
+  }
+
   container system {
     description
       "Simple system configuration data.";
 
     leaf hostname {
       type string;
+      must "string-length(.) > 0" {
+        error-message "hostname must be non-empty";
+      }
       description "Device hostname.";
     }
 
@@ -31,6 +51,8 @@ module basic-device {
     list interface {
       key "name";
       description "List of network interfaces.";
+
+      uses interface-optional-settings;
 
       leaf name {
         type string;
@@ -48,6 +70,12 @@ module basic-device {
         type boolean;
         default true;
         description "Administrative state of the interface.";
+      }
+
+      leaf shutdown-reason {
+        when "../admin-up = false()";
+        type string;
+        description "Required context note when an interface is administratively down.";
       }
     }
   }

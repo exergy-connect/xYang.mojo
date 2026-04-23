@@ -1,7 +1,7 @@
 ## YANG document validator.
 ## Walks the data tree in lockstep with the schema tree (YangModule AST).
-## Performs: structural (mandatory, unknown field), choice mandatory, type checks, must (XPath evaluator).
-## No when/leafref (not in current Mojo AST).
+## Performs: structural (mandatory, unknown field), choice mandatory, when, type checks, must (XPath evaluator).
+## No leafref (not in current Mojo AST).
 
 from std.memory import ArcPointer
 from emberjson import Value, Object
@@ -110,6 +110,29 @@ def _leaf_value_to_string(ref val: Value) -> String:
     if val.is_null():
         return ""
     return ""
+
+
+def _eval_simple_when_on_object(expr: String, obj: Object) raises -> Int:
+    """Fast-path for common leaf when expressions like '../admin-up = false()'.
+    Returns: 1=true, 0=false, -1=unsupported expression shape.
+    """
+    var parts = expr.split("=")
+    if len(parts) != 2:
+        return -1
+    var lhs = String(String(parts[0]).strip())
+    var rhs = String(String(parts[1]).strip())
+    if len(lhs) < 3 or String(lhs[byte=0 : 3]) != "../":
+        return -1
+    if rhs != "true()" and rhs != "false()":
+        return -1
+    var sibling = String(lhs[byte=3 : len(lhs)])
+    if sibling not in obj:
+        return 0
+    ref v = obj[sibling]
+    if not v.is_bool():
+        return 0
+    var expected = rhs == "true()"
+    return 1 if v.bool() == expected else 0
 
 
 struct DocumentValidator:
@@ -247,6 +270,56 @@ struct DocumentValidator:
                     ),
                 )
             return
+        if leaf.with_when.has_when:
+            ref when_ref = leaf.with_when.when_statement
+            self._trace("Evaluate when at " + child_path + ": " + when_ref.expression)
+            var simple_when = _eval_simple_when_on_object(when_ref.expression, obj)
+            if simple_when == 0:
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message=(
+                            "Node '" + name + "' is present but its 'when' condition is false"
+                        ),
+                        expression=when_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
+                return
+            if simple_when == 1:
+                pass
+            elif when_ref.parsed and when_ref.xpath_ast:
+                try:
+                    var root_node = XPathNode("/", "/")
+                    var root_arc = Arc[XPathNode](root_node^)
+                    var leaf_str = _leaf_value_to_string(val)
+                    var current_node = XPathNode(child_path, leaf_str)
+                    var current_arc = Arc[XPathNode](current_node^)
+                    var ctx = EvalContext(current_arc, root_arc, when_ref.expression)
+                    var ev = XPathEvaluator()
+                    var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
+                    if not eval_result_to_bool(when_result):
+                        self._errors.append(
+                            ValidationError(
+                                path=child_path,
+                                message=(
+                                    "Node '" + name + "' is present but its 'when' condition is false"
+                                ),
+                                expression=when_ref.expression,
+                                severity=Severity("error"),
+                            ),
+                        )
+                        return
+                except:
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message="When expression could not be evaluated",
+                            expression=when_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
+                    return
         for msg in check_leaf_value(val, leaf.type, child_path, self._integer_bounds):
             self._errors.append(
                 ValidationError(
@@ -256,8 +329,8 @@ struct DocumentValidator:
                     severity=Severity("error"),
                 ),
             )
-        for i in range(len(leaf.must)):
-            ref must_ref = leaf.must[i][]
+        for i in range(len(leaf.with_must.must_statements)):
+            ref must_ref = leaf.with_must.must_statements[i][]
             self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
             if not must_ref.parsed or not must_ref.xpath_ast:
                 continue

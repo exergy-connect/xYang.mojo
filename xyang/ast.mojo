@@ -48,12 +48,40 @@ struct YangMust(Movable):
 
 
 @fieldwise_init
+struct YangWhen(Movable):
+    ## Represents a YANG `when` expression attached to a statement.
+    var expression: String
+    var description: String
+    var xpath_ast: Expr.ExprPointer
+    var parsed: Bool
+
+    fn __del__(deinit self):
+        if self.xpath_ast:
+            self.xpath_ast[].free_tree()
+            self.xpath_ast.destroy_pointee()
+            self.xpath_ast.free()
+
+
+@fieldwise_init
+struct YangStatementWithMust(Movable):
+    ## Python parity: base holder for statements that support must.
+    var must_statements: List[Arc[YangMust]]
+
+
+@fieldwise_init
+struct YangStatementWithWhen(Movable):
+    ## Python parity: base holder for statements that support when.
+    var has_when: Bool
+    var when_statement: YangWhen
+
+
+@fieldwise_init
 struct YangLeaf(Movable, JsonDeserializable):
     var name: String
     var type: YangType
     var mandatory: Bool
-    ## Zero or more must expressions (parsed from x-yang.must[]).
-    var must: List[Arc[YangMust]]
+    var with_must: YangStatementWithMust
+    var with_when: YangStatementWithWhen
 
     def __str__(self) -> String:
         var m = "true" if self.mandatory else "false"
@@ -65,7 +93,9 @@ struct YangLeaf(Movable, JsonDeserializable):
             + ", mandatory="
             + m
             + ", must="
-            + String(len(self.must))
+            + String(len(self.with_must.must_statements))
+            + ", has_when="
+            + ("true" if self.with_when.has_when else "false")
             + ")"
         )
 

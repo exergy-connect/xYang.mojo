@@ -11,6 +11,9 @@ from xyang.ast import (
     YangLeaf,
     YangType,
     YangMust,
+    YangWhen,
+    YangStatementWithMust,
+    YangStatementWithWhen,
 )
 
 comptime Arc = ArcPointer
@@ -125,13 +128,53 @@ def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[YangMust]]:
     return must_list^
 
 
+def _parse_yang_when(ref xy: Value) raises -> YangStatementWithWhen:
+    if "when" not in xy.object() or not xy.object()["when"].is_string():
+        return YangStatementWithWhen(
+            has_when = False,
+            when_statement = YangWhen(
+                expression = "",
+                description = "",
+                xpath_ast = Expr.ExprPointer(),
+                parsed = False,
+            ),
+        )
+    var expr = xy.object()["when"].string()
+    var ptr = Expr.ExprPointer()
+    var parsed = False
+    try:
+        ptr = parse_xpath(expr)
+        parsed = True
+    except e:
+        print("[x-yang when] parse_xpath failed for expression: ", expr, " error: ", String(e))
+    return YangStatementWithWhen(
+        has_when = True,
+        when_statement = YangWhen(
+            expression = expr,
+            description = "",
+            xpath_ast = ptr,
+            parsed = parsed,
+        ),
+    )
+
+
 def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLeaf:
     """Parse a leaf definition from a JSON Schema property."""
     var type_name = _leaf_type_name_from_prop(prop)
     var must_list = List[Arc[YangMust]]()
+    var with_when = YangStatementWithWhen(
+        has_when = False,
+        when_statement = YangWhen(
+            expression = "",
+            description = "",
+            xpath_ast = Expr.ExprPointer(),
+            parsed = False,
+        ),
+    )
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
         must_list = _parse_yang_must_list(xy)
+        with_when = _parse_yang_when(xy)
     return YangLeaf(
         name = name,
         type = YangType(
@@ -141,7 +184,8 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
             range_max = 0,
         ),
         mandatory = mandatory,
-        must = must_list^,
+        with_must = YangStatementWithMust(must_statements = must_list^),
+        with_when = with_when^,
     )
 
 

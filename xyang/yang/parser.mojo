@@ -16,6 +16,9 @@ from xyang.ast import (
     YangLeaf,
     YangType,
     YangMust,
+    YangWhen,
+    YangStatementWithMust,
+    YangStatementWithWhen,
 )
 from xyang.xpath import parse_xpath, Expr
 
@@ -31,6 +34,18 @@ comptime CP_BRACE_CLOSE = Codepoint.ord("}")
 comptime CP_SEMICOLON = Codepoint.ord(";")
 comptime CP_COLON = Codepoint.ord(":")
 comptime CP_PLUS = Codepoint.ord("+")
+
+
+def _empty_when_statement() -> YangStatementWithWhen:
+    return YangStatementWithWhen(
+        has_when = False,
+        when_statement = YangWhen(
+            expression = "",
+            description = "",
+            xpath_ast = Expr.ExprPointer(),
+            parsed = False,
+        ),
+    )
 
 
 @fieldwise_init
@@ -198,6 +213,7 @@ struct _YangParser(Movable):
         )
         var mandatory = False
         var must = List[Arc[YangMust]]()
+        var with_when = _empty_when_statement()
 
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
@@ -211,6 +227,9 @@ struct _YangParser(Movable):
                 elif stmt == "must":
                     var m = self._parse_must_statement()
                     must.append(Arc[YangMust](m^))
+                elif stmt == "when":
+                    var w = self._parse_when_statement()
+                    with_when = YangStatementWithWhen(has_when=True, when_statement=w^)
                 elif stmt == "description":
                     self._consume()
                     _ = self._consume_argument_value()
@@ -224,7 +243,8 @@ struct _YangParser(Movable):
             name = name,
             type = type_stmt^,
             mandatory = mandatory,
-            must = must^,
+            with_must = YangStatementWithMust(must_statements = must^),
+            with_when = with_when^,
         )
 
     def _parse_choice_statement(mut self) raises -> YangChoice:
@@ -366,6 +386,40 @@ struct _YangParser(Movable):
             return YangMust(
                 expression = expression,
                 error_message = error_message,
+                description = description,
+                xpath_ast = xpath_ast,
+                parsed = False,
+            )
+
+    def _parse_when_statement(mut self) raises -> YangWhen:
+        self._expect("when")
+        var expression = self._consume_argument_value()
+        var description = ""
+
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == "description":
+                    self._consume()
+                    description = self._consume_argument_value()
+                    self._skip_if(";")
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
+
+        var xpath_ast = Expr.ExprPointer()
+        try:
+            xpath_ast = parse_xpath(expression)
+            return YangWhen(
+                expression = expression,
+                description = description,
+                xpath_ast = xpath_ast,
+                parsed = True,
+            )
+        except:
+            return YangWhen(
+                expression = expression,
                 description = description,
                 xpath_ast = xpath_ast,
                 parsed = False,
