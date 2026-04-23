@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "mojo-syntax": {
+      "source": "modular/skills",
+      "sourceType": "github",
+      "computedHash": "60bfdf5717d6e63f2608c1d3259d7bdfcf2dc352d49afa12b9dc4d48b73a42ea"
+    }
+  }
+}

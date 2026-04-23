@@ -1,9 +1,5 @@
 ## Standalone test for a simple YANG `must` expression.
-## This targets the existing parser + validator: we describe a tiny schema
-## as JSON/YANG (`.yang.json` shape), parse it with xyang.json.parser to
-## get a YangModule AST, and then validate two documents. For now the
-## actual must rule is ignored by the validator; once must/when are wired
-## in, the invalid case should start failing structurally.
+## JSON/YANG schema is parsed with xyang.json.parser; validator evaluates must via xyang.xpath.
 
 from std.testing import assert_true, assert_false, TestSuite
 from emberjson import parse as parse_json, Value
@@ -84,8 +80,7 @@ def test_must_expression_valid() raises:
 
 
 def test_must_expression_invalid() raises:
-    # /data-model/name is empty -> must "string-length(.) > 0" would fail when enforced.
-    # Must evaluation is currently disabled (ENABLE_MUST_EVALUATION=False) due to evaluator crash (139).
+    # /data-model/name is empty -> must "string-length(.) > 0" fails.
     var json_str = """
     {
       "data-model": {
@@ -98,8 +93,7 @@ def test_must_expression_invalid() raises:
     var module = _build_module()
     var validator = YangValidator()
     var result = validator.validate(data, module)
-    # When must is enabled, change to: assert_false(result.is_valid)
-    assert_true(result.is_valid)
+    assert_false(result.is_valid)
 
 
 def main() raises:
