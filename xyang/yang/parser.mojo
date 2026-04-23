@@ -83,12 +83,6 @@ struct YangToken(Copyable, Movable):
 
 
 @fieldwise_init
-struct ParsedChoiceCase(Movable):
-    var name: String
-    var node_names: List[String]
-
-
-@fieldwise_init
 struct ParsedGrouping(Movable):
     var name: String
     var leaves: List[Arc[YangLeaf]]
@@ -490,18 +484,10 @@ struct _YangParser(Movable):
                     _ = self._consume_argument_value()
                     self._skip_if(";")
                 elif stmt == YANG_STMT_CASE:
-                    var parsed_case = self._parse_case_statement()
-                    for i in range(len(parsed_case.node_names)):
-                        case_names.append(parsed_case.node_names[i])
-                    cases.append(
-                        Arc[YangChoiceCase](
-                            YangChoiceCase(
-                                name=parsed_case.name,
-                                node_names=parsed_case.node_names.copy(),
-                                when=Optional[YangWhen](),
-                            ),
-                        ),
-                    )
+                    var c = self._parse_case_statement()
+                    for i in range(len(c.node_names)):
+                        case_names.append(c.node_names[i])
+                    cases.append(Arc[YangChoiceCase](c^))
                 elif stmt == YANG_STMT_LEAF:
                     self._consume()
                     var node_name = self._consume_name()
@@ -575,11 +561,12 @@ struct _YangParser(Movable):
             self._validate_choice_unique_node_names(built)
         return built^
 
-    def _parse_case_statement(mut self) raises -> ParsedChoiceCase:
+    def _parse_case_statement(mut self) raises -> YangChoiceCase:
         self._expect(YANG_STMT_CASE)
         var case_name = self._consume_name()
 
         var names = List[String]()
+        var case_when = Optional[YangWhen]()
 
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
@@ -600,6 +587,9 @@ struct _YangParser(Movable):
                     self._consume()
                     names.append(self._consume_name())
                     self._skip_statement_tail()
+                elif stmt == YANG_STMT_WHEN:
+                    var w = self._parse_when_statement()
+                    case_when = Optional(w^)
                 elif stmt == YANG_STMT_DESCRIPTION:
                     self._consume()
                     _ = self._consume_argument_value()
@@ -609,7 +599,7 @@ struct _YangParser(Movable):
             self._expect("}")
         self._skip_if(";")
 
-        return ParsedChoiceCase(name=case_name, node_names=names^)
+        return YangChoiceCase(name=case_name, node_names=names^, when=case_when^)
 
     def _parse_grouping_statement(mut self) raises:
         self._expect(YANG_STMT_GROUPING)
