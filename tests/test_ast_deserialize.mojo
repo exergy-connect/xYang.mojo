@@ -12,26 +12,39 @@ comptime Arc = ArcPointer
 
 
 @fieldwise_init
-struct YangType(Movable, JsonDeserializable):
+struct YangType(Defaultable, Movable, JsonDeserializable):
     var name: String
+
+    def __init__(out self):
+        self.name = ""
 
 
 @fieldwise_init
-struct YangLeaf(Movable, JsonDeserializable):
+struct YangLeaf(Defaultable, Movable, JsonDeserializable):
     var name: String
     var type: YangType
     var mandatory: Bool
 
+    def __init__(out self):
+        self.name = ""
+        self.type = YangType()
+        self.mandatory = False
+
 
 @fieldwise_init
-struct YangChoice(Movable, JsonDeserializable):
+struct YangChoice(Defaultable, Movable, JsonDeserializable):
     var name: String
     var mandatory: Bool
     var case_names: List[String]
 
+    def __init__(out self):
+        self.name = ""
+        self.mandatory = False
+        self.case_names = []
+
 
 @fieldwise_init
-struct YangContainer(Movable, JsonDeserializable):
+struct YangContainer(Defaultable, Movable, JsonDeserializable):
     var name: String
     var description: String
     var leaves: List[Arc[YangLeaf]]
@@ -39,9 +52,17 @@ struct YangContainer(Movable, JsonDeserializable):
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
 
+    def __init__(out self):
+        self.name = ""
+        self.description = ""
+        self.leaves = []
+        self.containers = []
+        self.lists = []
+        self.choices = []
+
 
 @fieldwise_init
-struct YangList(Movable, JsonDeserializable):
+struct YangList(Defaultable, Movable, JsonDeserializable):
     var name: String
     var key: String
     var description: String
@@ -50,9 +71,18 @@ struct YangList(Movable, JsonDeserializable):
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
 
+    def __init__(out self):
+        self.name = ""
+        self.key = ""
+        self.description = ""
+        self.leaves = []
+        self.containers = []
+        self.lists = []
+        self.choices = []
+
 
 @fieldwise_init
-struct YangModule(Movable, JsonDeserializable):
+struct YangModule(Defaultable, Movable, JsonDeserializable):
     var `$schema`: String
     var `$id`: String
     var name: String
@@ -60,8 +90,16 @@ struct YangModule(Movable, JsonDeserializable):
     var prefix: String
     var top_level_containers: List[Arc[YangContainer]]
 
+    def __init__(out self):
+        self.`$schema` = ""
+        self.`$id` = ""
+        self.name = ""
+        self.namespace = ""
+        self.prefix = ""
+        self.top_level_containers = []
 
-def test_deserialize_yang_module():
+
+def test_deserialize_yang_module() raises:
     # Minimal JSON representing a YangModule with one container and one leaf.
     var json_str = """
     {
@@ -104,5 +142,5 @@ def test_deserialize_yang_module():
     assert_true(len(c[].leaves) == 1)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

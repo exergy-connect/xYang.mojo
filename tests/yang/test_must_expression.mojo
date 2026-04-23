@@ -59,13 +59,13 @@ def _schema_json() -> String:
     """
 
 
-def _build_module() -> YangModule:
+def _build_module() raises -> YangModule:
     """Parse the inline schema JSON into a YangModule via the real parser."""
     var text = _schema_json()
     return parse_yang_module(text)
 
 
-def test_must_expression_valid():
+def test_must_expression_valid() raises:
     # /data-model/name is a non-empty string -> must holds.
     var json_str = """
     {
@@ -83,7 +83,7 @@ def test_must_expression_valid():
     assert_true(result.is_valid)
 
 
-def test_must_expression_invalid():
+def test_must_expression_invalid() raises:
     # /data-model/name is empty -> must "string-length(.) > 0" would fail when enforced.
     # Must evaluation is currently disabled (ENABLE_MUST_EVALUATION=False) due to evaluator crash (139).
     var json_str = """
@@ -102,6 +102,6 @@ def test_must_expression_invalid():
     assert_true(result.is_valid)
 
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
 

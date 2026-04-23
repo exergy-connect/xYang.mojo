@@ -5,7 +5,7 @@ from xyang.json.parser import parse_yang_module
 from xyang.validator import YangValidator
 
 
-def main():
+def main() raises:
     var schema_text: String
     with open("examples/meta-model.yang.json", "r") as f:
         schema_text = f.read()
