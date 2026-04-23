@@ -4,7 +4,7 @@ from xyang.utils import print_module_tree
 from xyang.validator import YangValidator
 
 
-def main():
+def main() raises:
     # Load JSON meta-model from examples file using Python-style file I/O.
     var text: String
     with open("examples/meta-model.yang.json", "r") as f:
