@@ -134,6 +134,9 @@ def _default_text_to_value_by_type_name(
     range_min: Int64 = 0,
     range_max: Int64 = 0,
     has_range: Bool = False,
+    has_decimal64_range: Bool = False,
+    dec_min: Float64 = 0.0,
+    dec_max: Float64 = 0.0,
 ) -> Optional[Value]:
     var text = String(default_text.strip())
     if type_name == "boolean":
@@ -155,7 +158,10 @@ def _default_text_to_value_by_type_name(
     if _is_float_type_name(type_name):
         try:
             var n = atof(text)
-            if has_range and (n < Float64(range_min) or n > Float64(range_max)):
+            if has_decimal64_range and type_name == "decimal64":
+                if n < dec_min or n > dec_max:
+                    return Optional[Value]()
+            elif has_range and (n < Float64(range_min) or n > Float64(range_max)):
                 return Optional[Value]()
             return Optional(Value(n))
         except:
@@ -172,12 +178,16 @@ def _default_text_to_value(
         if quoted_union_default:
             return Value(default_text)
         for i in range(len(type_stmt.union_types)):
+            var m = type_stmt.union_types[i][]
             var maybe = _default_text_to_value_by_type_name(
                 default_text,
-                type_stmt.union_types[i][].name,
-                type_stmt.union_types[i][].range_min,
-                type_stmt.union_types[i][].range_max,
-                type_stmt.union_types[i][].has_range,
+                m.name,
+                m.range_min,
+                m.range_max,
+                m.has_range,
+                m.has_decimal64_range,
+                m.decimal64_range_min,
+                m.decimal64_range_max,
             )
             if maybe:
                 return maybe.value().copy()
@@ -188,6 +198,9 @@ def _default_text_to_value(
         type_stmt.range_min,
         type_stmt.range_max,
         type_stmt.has_range,
+        type_stmt.has_decimal64_range,
+        type_stmt.decimal64_range_min,
+        type_stmt.decimal64_range_max,
     )
     if maybe:
         return maybe.value().copy()

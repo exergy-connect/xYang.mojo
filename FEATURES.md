@@ -44,9 +44,13 @@ Scope:
 |---|---|---|
 | Base scalar names (`string`, integer types, `boolean`, etc.) | Supported | Type-name based validation for a practical subset. |
 | Integer fixed-width bounds | Supported | int8/int16/int32, uint8/uint16/uint32/uint64 enforced. |
-| `range` on numeric type | Supported | Single interval (`min..max`) extracted and enforced. |
+| `range` on numeric type | Supported | Single interval (`min..max`) extracted and enforced (integers; `decimal64` uses a float range in the AST). |
 | `leafref` type | Supported | Scalar-type check plus referential integrity validation against resolved target values when `require-instance` is true. |
-| `identityref`, `union`, `enum`, `bits`, `decimal64`, etc. | Not yet | No RFC-complete support in current Mojo validator path. |
+| `enumeration` / `enum` | Supported | Enum labels in AST; string value must match a declared `enum` (text and JSON). |
+| `union` | Partial | Member types in AST; validator tries each member (same as “first matching branch” for instance data). Text parser and JSON `oneOf` round-trip. |
+| `decimal64` | Partial | `fraction-digits` and `range` parsed in text YANG; JSON Schema uses `number`, optional `multipleOf`, `minimum`/`maximum`, `x-yang` with `fraction-digits`. Validator checks numeric value and range; does not fully enforce fraction-digit string form of every value. |
+| `bits` | Partial | `bit` names from text YANG; instance value is a string of space-separated bit names; validator checks against declared bits. No `position` ordering semantics beyond name list. |
+| `identityref` | Partial | `base` stored in AST (text and `x-yang` in JSON); validator treats instance as a string (no resolution of identity-derived names against `identity` statements in the module tree). |
 | `path` and `require-instance` leafref substatements | Supported | Parsed from text YANG and JSON/YANG metadata; used by validator for leafref target resolution and enforcement. |
 
 ### Constraints
@@ -78,7 +82,7 @@ Implemented:
 - Mandatory leaf missing/null checks.
 - List node type checks (must be array).
 - Leaf-list node type checks (must be array).
-- Numeric type + `range` checks.
+- Numeric type + `range` checks; `union` (member types), `decimal64` (range), `bits` (space-separated names), `identityref` (string check).
 - Leaf-level `must` and `when` evaluation.
 - Leaf-list per-item `must` and type checks.
 - Basic choice mandatory check.
@@ -104,14 +108,15 @@ Partial:
 
 Supported:
 - Emit draft marker (`$schema: https://json-schema.org/draft/2020-12/schema`) and top-level `properties`.
-- Emit `x-yang` annotations for module metadata and node-level semantics used by this project (`type`, `key`, `mandatory`, `must`, `when`, leafref path/require-instance).
+- Emit `x-yang` annotations for module metadata and node-level semantics used by this project (`type`, `key`, `mandatory`, `must`, `when`, leafref path/require-instance, and for `decimal64` / `bits` / `identityref` the `fraction-digits`, `bits` name list, and `base` where set).
 - Encode integer types and explicit `range` as JSON Schema `minimum`/`maximum`.
+- Encode `union` as JSON Schema `oneOf` of member type schemas; `decimal64` as `number` with optional `multipleOf` and min/max; `bits` and `identityref` as `string` plus `x-yang` metadata.
 - Encode defaults for `leaf` and `leaf-list` when values are representable.
 - Emit choice structure with `oneOf` branches and `x-yang` choice metadata (including `when` on the choice and on each `case` when set).
 - Round-trip path covered by tests: text YANG → AST → JSON Schema JSON text → `parse_json_schema`.
 
 Partial:
-- Type mapping is pragmatic, not RFC-complete (for example no full `union`/`identityref`/`bits`/`decimal64` facet coverage).
+- Type mapping is still pragmatic: for example `identityref` is not round-tripped with a full set of allowed identity `derived` values; `decimal64` fraction-digits is not re-validated on every JSON number form; not every YANG `typedef` or facet is preserved in JSON Schema.
 - Emission is focused on current validator/parser interoperability, not full reversible fidelity for every RFC statement.
 
 ## Practical Use Guidance
@@ -121,11 +126,13 @@ Good fit today:
 - Basic structural + scalar validation.
 - Simple `must` / `when` checks (leaves, and `when` on choices and explicit cases where modeled).
 - Integer range enforcement.
+- `union` members, `decimal64` (numeric + range), `bits` and `identityref` (within the limitations above).
 
 Not production-complete yet for:
 - Full RFC 7950 conformance.
 - Advanced module composition (`augment`/`deviation`, plus full RFC `grouping`/`uses` semantics such as refine/if-feature processing).
-- Full identityref cross-node integrity and full XPath semantics.
+- Resolving `identityref` / `bits` / `union` to full RFC 7950 data-model rules (e.g. identity heritage, all `typedef` and facet combinations).
+- Full XPath semantics.
 
 ## Notes On Current Leafref Scope
 

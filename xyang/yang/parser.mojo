@@ -46,6 +46,9 @@ from xyang.yang.tokens import (
     YANG_STMT_PATH,
     YANG_STMT_PREFIX,
     YANG_STMT_RANGE,
+    YANG_STMT_FRACTION_DIGITS,
+    YANG_STMT_BIT,
+    YANG_STMT_BASE,
     YANG_STMT_REQUIRE_INSTANCE,
     YANG_STMT_REVISION,
     YANG_STMT_TYPE,
@@ -328,6 +331,12 @@ struct _YangParser(Movable):
             leafref_require_instance = True,
             leafref_xpath_ast = Expr.ExprPointer(),
             leafref_path_parsed = False,
+            fraction_digits = 0,
+            has_decimal64_range = False,
+            decimal64_range_min = Float64(0.0),
+            decimal64_range_max = Float64(0.0),
+            bits_names = List[String](),
+            identityref_base = "",
         )
         var mandatory = False
         var has_default = False
@@ -400,6 +409,12 @@ struct _YangParser(Movable):
             leafref_require_instance = True,
             leafref_xpath_ast = Expr.ExprPointer(),
             leafref_path_parsed = False,
+            fraction_digits = 0,
+            has_decimal64_range = False,
+            decimal64_range_min = Float64(0.0),
+            decimal64_range_max = Float64(0.0),
+            bits_names = List[String](),
+            identityref_base = "",
         )
         var must = List[Arc[YangMust]]()
         var when = Optional[YangWhen]()
@@ -728,6 +743,12 @@ struct _YangParser(Movable):
         var leafref_require_instance = True
         var leafref_xpath_ast = Expr.ExprPointer()
         var leafref_path_parsed = False
+        var fraction_digits = 0
+        var has_dec_range = False
+        var dec_lo = Float64(0.0)
+        var dec_hi = Float64(0.0)
+        var bits_names = List[String]()
+        var identityref_base = ""
 
         if self._consume_if("{"):
             while self._has_more() and self._peek() != "}":
@@ -736,7 +757,16 @@ struct _YangParser(Movable):
                     self._consume()
                     var range_expr = self._consume_argument_value()
                     var parts = range_expr.split("..")
-                    if len(parts) == 2:
+                    if len(parts) == 2 and type_name == "decimal64":
+                        try:
+                            var a = parts[0].strip()
+                            var b = parts[1].strip()
+                            dec_lo = atof(a)
+                            dec_hi = atof(b)
+                            has_dec_range = True
+                        except:
+                            has_dec_range = False
+                    elif len(parts) == 2:
                         try:
                             range_min = Int64(atol(parts[0].strip()))
                             range_max = Int64(atol(parts[1].strip()))
@@ -766,6 +796,23 @@ struct _YangParser(Movable):
                 elif stmt == YANG_STMT_TYPE and type_name == YANG_STMT_UNION:
                     var union_type = self._parse_type_statement()
                     union_types.append(Arc[YangType](union_type^))
+                elif stmt == YANG_STMT_FRACTION_DIGITS and type_name == "decimal64":
+                    self._consume()
+                    try:
+                        var fd = atol(self._consume_name().strip())
+                        if fd >= 1 and fd <= 18:
+                            fraction_digits = Int(fd)
+                    except:
+                        pass
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_BIT and type_name == "bits":
+                    self._consume()
+                    bits_names.append(self._consume_name())
+                    self._skip_statement_tail()
+                elif stmt == YANG_STMT_BASE and type_name == "identityref":
+                    self._consume()
+                    identityref_base = self._consume_argument_value()
+                    self._skip_if(";")
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -787,6 +834,12 @@ struct _YangParser(Movable):
                 leafref_require_instance = leafref_require_instance,
                 leafref_xpath_ast = leafref_xpath_ast,
                 leafref_path_parsed = leafref_path_parsed,
+                fraction_digits = fraction_digits,
+                has_decimal64_range = has_dec_range,
+                decimal64_range_min = dec_lo,
+                decimal64_range_max = dec_hi,
+                bits_names = bits_names^,
+                identityref_base = identityref_base,
             )
 
         return YangType(
@@ -801,6 +854,12 @@ struct _YangParser(Movable):
             leafref_require_instance = leafref_require_instance,
             leafref_xpath_ast = leafref_xpath_ast,
             leafref_path_parsed = leafref_path_parsed,
+            fraction_digits = fraction_digits,
+            has_decimal64_range = has_dec_range,
+            decimal64_range_min = dec_lo,
+            decimal64_range_max = dec_hi,
+            bits_names = bits_names^,
+            identityref_base = identityref_base,
         )
 
     def _parse_must_statement(mut self) raises -> YangMust:

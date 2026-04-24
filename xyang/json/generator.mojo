@@ -23,6 +23,7 @@ from xyang.json.schema_keys import (
     JSON_SCHEMA_MAXIMUM,
     JSON_SCHEMA_MAX_PROPERTIES,
     JSON_SCHEMA_MINIMUM,
+    JSON_SCHEMA_MULTIPLE_OF,
     JSON_SCHEMA_MIN_ITEMS,
     JSON_SCHEMA_MAX_ITEMS,
     JSON_SCHEMA_NAME,
@@ -46,6 +47,9 @@ from xyang.json.schema_keys import (
     XYANG_NAMESPACE,
     XYANG_ORGANIZATION,
     XYANG_PREFIX,
+    XYANG_FRACTION_DIGITS,
+    XYANG_BASE,
+    XYANG_BITS,
     XYANG_REQUIRE_INSTANCE,
     XYANG_TYPE,
     XYANG_PATH,
@@ -161,6 +165,44 @@ def _type_schema(read t: YangType) raises -> Object:
         for i in range(len(t.union_types)):
             branches.append(Value(_type_schema(t.union_types[i][])))
         o[JSON_SCHEMA_ONE_OF] = Value(branches^)
+        return o^
+    if tn == "decimal64":
+        var o = Object()
+        o[JSON_SCHEMA_TYPE] = Value("number")
+        if t.fraction_digits > 0:
+            var step = Float64(1.0)
+            for _i in range(t.fraction_digits):
+                step = step * Float64(0.1)
+            o[JSON_SCHEMA_MULTIPLE_OF] = Value(step)
+        if t.has_decimal64_range:
+            o[JSON_SCHEMA_MINIMUM] = Value(t.decimal64_range_min)
+            o[JSON_SCHEMA_MAXIMUM] = Value(t.decimal64_range_max)
+        var xy = Object()
+        xy[XYANG_TYPE] = Value("decimal64")
+        if t.fraction_digits > 0:
+            xy[XYANG_FRACTION_DIGITS] = Value(Int64(t.fraction_digits))
+        o[JSON_SCHEMA_X_YANG] = Value(xy^)
+        return o^
+    if tn == "bits":
+        var o = Object()
+        o[JSON_SCHEMA_TYPE] = Value("string")
+        var xy = Object()
+        xy[XYANG_TYPE] = Value("bits")
+        if len(t.bits_names) > 0:
+            var ba = Array()
+            for i in range(len(t.bits_names)):
+                ba.append(Value(t.bits_names[i]))
+            xy[XYANG_BITS] = Value(ba^)
+        o[JSON_SCHEMA_X_YANG] = Value(xy^)
+        return o^
+    if tn == "identityref":
+        var o = Object()
+        o[JSON_SCHEMA_TYPE] = Value("string")
+        var xy = Object()
+        xy[XYANG_TYPE] = Value("identityref")
+        if len(t.identityref_base) > 0:
+            xy[XYANG_BASE] = Value(t.identityref_base)
+        o[JSON_SCHEMA_X_YANG] = Value(xy^)
         return o^
     var s = Object()
     s[JSON_SCHEMA_TYPE] = Value("string")

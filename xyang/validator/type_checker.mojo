@@ -154,6 +154,59 @@ def _check_leafref_type(val: Value) -> List[String]:
     return errs^
 
 
+def _check_decimal64_type(val: Value, type_stmt: YangType) -> List[String]:
+    if val.is_null():
+        return List[String]()
+    if not val.is_float() and not val.is_int() and not val.is_uint():
+        var errs = List[String]()
+        errs.append("Expected decimal64 (number), got non-numeric value")
+        return errs^
+    if type_stmt.has_decimal64_range:
+        var fv = val.float()
+        if fv < type_stmt.decimal64_range_min or fv > type_stmt.decimal64_range_max:
+            var errs = List[String]()
+            errs.append("decimal64 out of range")
+            return errs^
+    return List[String]()
+
+
+def _bit_name_is_valid(name: String, read valid: List[String]) -> Bool:
+    for i in range(len(valid)):
+        if valid[i] == name:
+            return True
+    return False
+
+
+def _check_bits_type(val: Value, type_stmt: YangType) -> List[String]:
+    if val.is_null():
+        return List[String]()
+    if not val.is_string():
+        var errs = List[String]()
+        errs.append("Expected bits as a string, got non-string value")
+        return errs^
+    if len(type_stmt.bits_names) == 0:
+        return List[String]()
+    var s = val.string().strip()
+    if len(s) == 0:
+        return List[String]()
+    var parts = s.split(" ")
+    for i in range(len(parts)):
+        var p = String(parts[i].strip())
+        if len(p) == 0:
+            continue
+        if not _bit_name_is_valid(p, type_stmt.bits_names):
+            var errs = List[String]()
+            errs.append("Invalid bit name in bits value: " + p)
+            return errs^
+    return List[String]()
+
+
+def _check_identityref_type(val: Value) -> List[String]:
+    if val.is_null():
+        return List[String]()
+    return _check_string_type(val)
+
+
 def _check_enumeration_type(val: Value, type_stmt: YangType) -> List[String]:
     if val.is_null():
         return List[String]()
@@ -361,6 +414,12 @@ def check_leaf_value(
         return _check_leafref_type(val)
     if name == "enumeration":
         return _check_enumeration_type(val, type_stmt)
+    if name == "decimal64":
+        return _check_decimal64_type(val, type_stmt)
+    if name == "bits":
+        return _check_bits_type(val, type_stmt)
+    if name == "identityref":
+        return _check_identityref_type(val)
     if name == "union":
         for i in range(len(type_stmt.union_types)):
             var errs = check_leaf_value(

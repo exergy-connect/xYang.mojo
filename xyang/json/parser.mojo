@@ -26,6 +26,9 @@ from xyang.json.schema_keys import (
     JSON_SCHEMA_MAX_ITEMS,
     XYANG_ORDERED_BY,
     XYANG_UNIQUE,
+    XYANG_FRACTION_DIGITS,
+    XYANG_BASE,
+    XYANG_BITS,
 )
 
 comptime Arc = ArcPointer
@@ -103,6 +106,12 @@ def _empty_type(name: String) -> YangType:
         leafref_require_instance = True,
         leafref_xpath_ast = Expr.ExprPointer(),
         leafref_path_parsed = False,
+        fraction_digits = 0,
+        has_decimal64_range = False,
+        decimal64_range_min = Float64(0.0),
+        decimal64_range_max = Float64(0.0),
+        bits_names = List[String](),
+        identityref_base = "",
     )
 
 
@@ -140,6 +149,12 @@ def _parse_type_from_schema_property(prop: Value) raises -> YangType:
                 t.name = xyang_type
             elif xyang_type == "enumeration" and len(t.enum_values) > 0:
                 t.name = xyang_type
+            elif (
+                xyang_type == "decimal64"
+                or xyang_type == "bits"
+                or xyang_type == "identityref"
+            ):
+                t.name = xyang_type
         if t.name == YANG_TYPE_LEAFREF:
             if "path" in xy.object() and xy.object()["path"].is_string():
                 t.has_leafref_path = True
@@ -152,6 +167,25 @@ def _parse_type_from_schema_property(prop: Value) raises -> YangType:
                     t.leafref_path_parsed = False
             if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
                 t.leafref_require_instance = xy.object()["require-instance"].bool()
+        if t.name == "decimal64":
+            if XYANG_FRACTION_DIGITS in xy.object() and xy.object()[XYANG_FRACTION_DIGITS].is_int():
+                t.fraction_digits = Int(xy.object()[XYANG_FRACTION_DIGITS].int())
+            if "minimum" in obj and "maximum" in obj:
+                ref minv = obj["minimum"]
+                ref maxv = obj["maximum"]
+                if (minv.is_int() or minv.is_uint() or minv.is_float()) and (
+                    maxv.is_int() or maxv.is_uint() or maxv.is_float()
+                ):
+                    t.has_decimal64_range = True
+                    t.decimal64_range_min = minv.float()
+                    t.decimal64_range_max = maxv.float()
+        if t.name == "bits" and XYANG_BITS in xy.object() and xy.object()[XYANG_BITS].is_array():
+            ref barr = xy.object()[XYANG_BITS].array()
+            for i in range(len(barr)):
+                if barr[i].is_string():
+                    t.bits_names.append(barr[i].string())
+        if t.name == "identityref" and XYANG_BASE in xy.object() and xy.object()[XYANG_BASE].is_string():
+            t.identityref_base = xy.object()[XYANG_BASE].string()
 
     return t^
 

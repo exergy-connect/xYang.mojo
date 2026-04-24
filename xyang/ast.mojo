@@ -20,6 +20,16 @@ struct YangType(Movable, JsonDeserializable):
     var leafref_require_instance: Bool
     var leafref_xpath_ast: Expr.ExprPointer
     var leafref_path_parsed: Bool
+    ## `decimal64`: 1..18; 0 when not set or not applicable.
+    var fraction_digits: Int
+    ## `decimal64` range in value space (used when `has_decimal64_range` is true).
+    var has_decimal64_range: Bool
+    var decimal64_range_min: Float64
+    var decimal64_range_max: Float64
+    ## `bits`: valid bit names (in declaration order).
+    var bits_names: List[String]
+    ## `identityref`: `base` argument (unprefixed or prefixed string).
+    var identityref_base: String
 
     fn __del__(deinit self):
         if self.leafref_xpath_ast:
