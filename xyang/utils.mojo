@@ -10,6 +10,12 @@ def _print_list(list_node: YangList, indent: String):
     for i in range(len(list_node.leaves)):
         ref leaf = list_node.leaves[i][]
         print(inner + "leaf " + leaf.name + " : " + leaf.type.name + (" (mandatory)" if leaf.mandatory else ""))
+    for i in range(len(list_node.anydatas)):
+        ref ad = list_node.anydatas[i][]
+        print(inner + "anydata " + ad.name + (" (mandatory)" if ad.mandatory else ""))
+    for i in range(len(list_node.anyxmls)):
+        ref ax = list_node.anyxmls[i][]
+        print(inner + "anyxml " + ax.name + (" (mandatory)" if ax.mandatory else ""))
     for i in range(len(list_node.containers)):
         _print_container(list_node.containers[i][], inner)
     for i in range(len(list_node.lists)):
@@ -26,6 +32,12 @@ def _print_container(container: YangContainer, indent: String):
     for i in range(len(container.leaves)):
         ref leaf = container.leaves[i][]
         print(inner + "leaf " + leaf.name + " : " + leaf.type.name + (" (mandatory)" if leaf.mandatory else ""))
+    for i in range(len(container.anydatas)):
+        ref ad = container.anydatas[i][]
+        print(inner + "anydata " + ad.name + (" (mandatory)" if ad.mandatory else ""))
+    for i in range(len(container.anyxmls)):
+        ref ax = container.anyxmls[i][]
+        print(inner + "anyxml " + ax.name + (" (mandatory)" if ax.mandatory else ""))
     if len(container.containers) > 0:
         for c in container.containers:
             _print_container(c[], inner)

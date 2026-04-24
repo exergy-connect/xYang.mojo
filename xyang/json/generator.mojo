@@ -9,6 +9,8 @@ from xyang.ast import (
     YangChoice,
     YangLeaf,
     YangLeafList,
+    YangAnydata,
+    YangAnyxml,
     YangType,
     YangMust,
     YangWhen,
@@ -102,6 +104,63 @@ def _leaf_xyang(read leaf: YangLeaf) raises -> Object:
     if leaf.mandatory:
         xy[XYANG_MANDATORY] = Value(True)
     return xy^
+
+
+def _open_json_instance_type_array() raises -> Array:
+    ## RFC 7950 anydata/anyxml: unconstrained JSON instance (Python `_ANY_JSON_INSTANCE_SCHEMA`).
+    var t = Array()
+    t.append(Value("array"))
+    t.append(Value("boolean"))
+    t.append(Value("integer"))
+    t.append(Value("null"))
+    t.append(Value("number"))
+    t.append(Value("object"))
+    t.append(Value("string"))
+    return t^
+
+
+def _anydata_xyang(read a: YangAnydata) raises -> Object:
+    var xy = Object()
+    xy[XYANG_TYPE] = Value("anydata")
+    if len(a.must_statements) > 0:
+        var arr = _must_array_from_arc_list(a.must_statements)
+        xy[XYANG_MUST] = Value(arr^)
+    if a.has_when():
+        ref w = a.when.value()
+        xy[XYANG_WHEN] = Value(_when_object(w))
+    if a.mandatory:
+        xy[XYANG_MANDATORY] = Value(True)
+    return xy^
+
+
+def _anyxml_xyang(read x: YangAnyxml) raises -> Object:
+    var xy = Object()
+    xy[XYANG_TYPE] = Value("anyxml")
+    if len(x.must_statements) > 0:
+        var arr = _must_array_from_arc_list(x.must_statements)
+        xy[XYANG_MUST] = Value(arr^)
+    if x.has_when():
+        ref w = x.when.value()
+        xy[XYANG_WHEN] = Value(_when_object(w))
+    if x.mandatory:
+        xy[XYANG_MANDATORY] = Value(True)
+    return xy^
+
+
+def _anydata_property(read a: YangAnydata) raises -> Object:
+    var out = Object()
+    out[JSON_SCHEMA_TYPE] = Value(_open_json_instance_type_array())
+    out[JSON_SCHEMA_DESCRIPTION] = Value(a.description)
+    out[JSON_SCHEMA_X_YANG] = Value(_anydata_xyang(a))
+    return out^
+
+
+def _anyxml_property(read x: YangAnyxml) raises -> Object:
+    var out = Object()
+    out[JSON_SCHEMA_TYPE] = Value(_open_json_instance_type_array())
+    out[JSON_SCHEMA_DESCRIPTION] = Value(x.description)
+    out[JSON_SCHEMA_X_YANG] = Value(_anyxml_xyang(x))
+    return out^
 
 
 def _leaf_list_xyang(read ll: YangLeafList) raises -> Object:
@@ -314,6 +373,8 @@ def _find_named_property(
     name: String,
     read leaves: List[Arc[YangLeaf]],
     read leaf_lists: List[Arc[YangLeafList]],
+    read anydatas: List[Arc[YangAnydata]],
+    read anyxmls: List[Arc[YangAnyxml]],
     read containers: List[Arc[YangContainer]],
     read lists: List[Arc[YangList]],
 ) raises -> Object:
@@ -323,6 +384,12 @@ def _find_named_property(
     for i in range(len(leaf_lists)):
         if leaf_lists[i][].name == name:
             return _leaf_list_property(leaf_lists[i][])
+    for i in range(len(anydatas)):
+        if anydatas[i][].name == name:
+            return _anydata_property(anydatas[i][])
+    for i in range(len(anyxmls)):
+        if anyxmls[i][].name == name:
+            return _anyxml_property(anyxmls[i][])
     for i in range(len(containers)):
         if containers[i][].name == name:
             return _container_property(containers[i][])
@@ -336,6 +403,8 @@ def _choice_property(
     read choice: YangChoice,
     read leaves: List[Arc[YangLeaf]],
     read leaf_lists: List[Arc[YangLeafList]],
+    read anydatas: List[Arc[YangAnydata]],
+    read anyxmls: List[Arc[YangAnyxml]],
     read containers: List[Arc[YangContainer]],
     read lists: List[Arc[YangList]],
 ) raises -> Object:
@@ -368,7 +437,7 @@ def _choice_property(
         for j in range(len(case_node.node_names)):
             var nm = case_node.node_names[j]
             props[nm] = Value(
-                _find_named_property(nm, leaves, leaf_lists, containers, lists)
+                _find_named_property(nm, leaves, leaf_lists, anydatas, anyxmls, containers, lists)
             )
             req.append(Value(nm))
         var branch = Object()
@@ -401,6 +470,16 @@ def _container_property(read c: YangContainer) raises -> Object:
     for i in range(len(c.leaf_lists)):
         ref ll = c.leaf_lists[i][]
         props[ll.name] = Value(_leaf_list_property(ll))
+    for i in range(len(c.anydatas)):
+        ref ad = c.anydatas[i][]
+        props[ad.name] = Value(_anydata_property(ad))
+        if ad.mandatory:
+            req.append(Value(ad.name))
+    for i in range(len(c.anyxmls)):
+        ref ax = c.anyxmls[i][]
+        props[ax.name] = Value(_anyxml_property(ax))
+        if ax.mandatory:
+            req.append(Value(ax.name))
     for i in range(len(c.containers)):
         ref ch = c.containers[i][]
         props[ch.name] = Value(_container_property(ch))
@@ -410,7 +489,15 @@ def _container_property(read c: YangContainer) raises -> Object:
     for i in range(len(c.choices)):
         ref ch = c.choices[i][]
         props[ch.name] = Value(
-            _choice_property(ch, c.leaves, c.leaf_lists, c.containers, c.lists)
+            _choice_property(
+                ch,
+                c.leaves,
+                c.leaf_lists,
+                c.anydatas,
+                c.anyxmls,
+                c.containers,
+                c.lists,
+            )
         )
 
     var xy = Object()
@@ -438,6 +525,16 @@ def _list_items_schema(read lst: YangList) raises -> Object:
     for i in range(len(lst.leaf_lists)):
         ref ll = lst.leaf_lists[i][]
         props[ll.name] = Value(_leaf_list_property(ll))
+    for i in range(len(lst.anydatas)):
+        ref ad = lst.anydatas[i][]
+        props[ad.name] = Value(_anydata_property(ad))
+        if ad.mandatory:
+            req.append(Value(ad.name))
+    for i in range(len(lst.anyxmls)):
+        ref ax = lst.anyxmls[i][]
+        props[ax.name] = Value(_anyxml_property(ax))
+        if ax.mandatory:
+            req.append(Value(ax.name))
     for i in range(len(lst.containers)):
         ref ch = lst.containers[i][]
         props[ch.name] = Value(_container_property(ch))
@@ -447,7 +544,15 @@ def _list_items_schema(read lst: YangList) raises -> Object:
     for i in range(len(lst.choices)):
         ref ch = lst.choices[i][]
         props[ch.name] = Value(
-            _choice_property(ch, lst.leaves, lst.leaf_lists, lst.containers, lst.lists)
+            _choice_property(
+                ch,
+                lst.leaves,
+                lst.leaf_lists,
+                lst.anydatas,
+                lst.anyxmls,
+                lst.containers,
+                lst.lists,
+            )
         )
 
     var items = Object()

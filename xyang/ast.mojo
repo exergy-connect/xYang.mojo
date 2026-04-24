@@ -363,6 +363,50 @@ struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasW
 
 
 @fieldwise_init
+struct YangAnydata(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+    ## RFC 7950 §7.12 — instance is any JSON-compatible value (not further constrained here).
+    var name: String
+    var description: String
+    var mandatory: Bool
+    var must_statements: List[Arc[YangMust]]
+    var when: Optional[YangWhen]
+
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
+
+
+@fieldwise_init
+struct YangAnyxml(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+    ## RFC 7950 §7.11 — same JSON treatment as anydata for encoding and validation.
+    var name: String
+    var description: String
+    var mandatory: Bool
+    var must_statements: List[Arc[YangMust]]
+    var when: Optional[YangWhen]
+
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
+
+
+@fieldwise_init
 struct YangChoiceCase(Movable, JsonDeserializable, YangHasWhen):
     var name: String
     var node_names: List[String]
@@ -412,6 +456,8 @@ struct YangContainer(Movable, JsonDeserializable):
     var description: String
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
+    var anydatas: List[Arc[YangAnydata]]
+    var anyxmls: List[Arc[YangAnyxml]]
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
@@ -419,10 +465,30 @@ struct YangContainer(Movable, JsonDeserializable):
     def __str__(self) -> String:
         var nleaf = len(self.leaves)
         var nleaflist = len(self.leaf_lists)
+        var na = len(self.anydatas)
+        var nx = len(self.anyxmls)
         var ncont = len(self.containers)
         var nlist = len(self.lists)
         var nchoice = len(self.choices)
-        return "YangContainer(" + self.name + ", leaves=" + String(nleaf) + ", leaf-lists=" + String(nleaflist) + ", containers=" + String(ncont) + ", lists=" + String(nlist) + ", choices=" + String(nchoice) + ")"
+        return (
+            "YangContainer("
+            + self.name
+            + ", leaves="
+            + String(nleaf)
+            + ", leaf-lists="
+            + String(nleaflist)
+            + ", anydata="
+            + String(na)
+            + ", anyxml="
+            + String(nx)
+            + ", containers="
+            + String(ncont)
+            + ", lists="
+            + String(nlist)
+            + ", choices="
+            + String(nchoice)
+            + ")"
+        )
 
 
 @fieldwise_init
@@ -432,6 +498,8 @@ struct YangList(Movable, JsonDeserializable):
     var description: String
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
+    var anydatas: List[Arc[YangAnydata]]
+    var anyxmls: List[Arc[YangAnyxml]]
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
@@ -448,7 +516,27 @@ struct YangList(Movable, JsonDeserializable):
         var ncont = len(self.containers)
         var nlist = len(self.lists)
         var nchoice = len(self.choices)
-        return "YangList(" + self.name + ", key=" + self.key + ", leaves=" + String(nleaf) + ", leaf-lists=" + String(nleaflist) + ", containers=" + String(ncont) + ", lists=" + String(nlist) + ", choices=" + String(nchoice) + ")"
+        return (
+            "YangList("
+            + self.name
+            + ", key="
+            + self.key
+            + ", leaves="
+            + String(nleaf)
+            + ", leaf-lists="
+            + String(nleaflist)
+            + ", anydata="
+            + String(len(self.anydatas))
+            + ", anyxml="
+            + String(len(self.anyxmls))
+            + ", containers="
+            + String(ncont)
+            + ", lists="
+            + String(nlist)
+            + ", choices="
+            + String(nchoice)
+            + ")"
+        )
 
 
 @fieldwise_init

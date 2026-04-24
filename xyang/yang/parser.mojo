@@ -17,6 +17,8 @@ from xyang.ast import (
     YangChoiceCase,
     YangLeaf,
     YangLeafList,
+    YangAnydata,
+    YangAnyxml,
     YangType,
     YangTypePlain,
     YangTypeIntegerRange,
@@ -40,10 +42,13 @@ from xyang.yang.tokens import (
     YANG_STMT_DESCRIPTION,
     YANG_STMT_ERROR_MESSAGE,
     YANG_STMT_ENUM,
+    YANG_STMT_IF_FEATURE,
     YANG_STMT_GROUPING,
     YANG_STMT_KEY,
     YANG_STMT_LEAF,
     YANG_STMT_LEAF_LIST,
+    YANG_STMT_ANYDATA,
+    YANG_STMT_ANYXML,
     YANG_STMT_LIST,
     YANG_STMT_MANDATORY,
     YANG_STMT_MODULE,
@@ -58,6 +63,8 @@ from xyang.yang.tokens import (
     YANG_STMT_BASE,
     YANG_STMT_REQUIRE_INSTANCE,
     YANG_STMT_REVISION,
+    YANG_STMT_AUGMENT,
+    YANG_STMT_REFINE,
     YANG_STMT_TYPE,
     YANG_STMT_UNION,
     YANG_STMT_USES,
@@ -153,6 +160,20 @@ struct ParsedGrouping(Movable):
     var name: String
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
+    var anydatas: List[Arc[YangAnydata]]
+    var anyxmls: List[Arc[YangAnyxml]]
+    var containers: List[Arc[YangContainer]]
+    var lists: List[Arc[YangList]]
+    var choices: List[Arc[YangChoice]]
+
+
+@fieldwise_init
+struct ParsedAugment(Movable):
+    var path: String
+    var leaves: List[Arc[YangLeaf]]
+    var leaf_lists: List[Arc[YangLeafList]]
+    var anydatas: List[Arc[YangAnydata]]
+    var anyxmls: List[Arc[YangAnyxml]]
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
@@ -163,12 +184,14 @@ struct _YangParser(Movable):
     var index: Int
     var grouping_names: List[String]
     var groupings: List[Arc[ParsedGrouping]]
+    var pending_module_augments: List[Arc[ParsedAugment]]
 
     def __init__(out self, var tokens: List[YangToken]):
         self.tokens = tokens^
         self.index = 0
         self.grouping_names = List[String]()
         self.groupings = List[Arc[ParsedGrouping]]()
+        self.pending_module_augments = List[Arc[ParsedAugment]]()
 
     def parse_module(mut self) raises -> YangModule:
         self._expect(YANG_STMT_MODULE)
@@ -216,11 +239,14 @@ struct _YangParser(Movable):
                 top_containers.append(Arc[YangContainer](c^))
             elif stmt == YANG_STMT_GROUPING:
                 self._parse_grouping_statement()
+            elif stmt == YANG_STMT_AUGMENT:
+                self._parse_module_augment_statement(top_containers)
             else:
                 self._skip_statement()
 
         self._expect("}")
         self._skip_if(";")
+        self._apply_pending_module_augments(top_containers)
 
         return YangModule(
             name = module_name,
@@ -240,6 +266,8 @@ struct _YangParser(Movable):
         var desc = ""
         var leaves = List[Arc[YangLeaf]]()
         var leaf_lists = List[Arc[YangLeafList]]()
+        var anydatas = List[Arc[YangAnydata]]()
+        var anyxmls = List[Arc[YangAnyxml]]()
         var containers = List[Arc[YangContainer]]()
         var lists = List[Arc[YangList]]()
         var choices = List[Arc[YangChoice]]()
@@ -257,6 +285,12 @@ struct _YangParser(Movable):
                 elif stmt == YANG_STMT_LEAF_LIST:
                     var leaf_list = self._parse_leaf_list_statement()
                     leaf_lists.append(Arc[YangLeafList](leaf_list^))
+                elif stmt == YANG_STMT_ANYDATA:
+                    var ad = self._parse_anydata_statement()
+                    anydatas.append(Arc[YangAnydata](ad^))
+                elif stmt == YANG_STMT_ANYXML:
+                    var ax = self._parse_anyxml_statement()
+                    anyxmls.append(Arc[YangAnyxml](ax^))
                 elif stmt == YANG_STMT_CONTAINER:
                     var child_container = self._parse_container_statement()
                     containers.append(Arc[YangContainer](child_container^))
@@ -270,10 +304,24 @@ struct _YangParser(Movable):
                     self._parse_uses_statement(
                         leaves,
                         leaf_lists,
+                        anydatas,
+                        anyxmls,
                         containers,
                         lists,
                         choices,
                     )
+                elif stmt == YANG_STMT_AUGMENT:
+                    self._parse_relative_augment_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                elif self._peek_prefixed_extension():
+                    self._skip_prefixed_extension_statement()
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -284,6 +332,8 @@ struct _YangParser(Movable):
             description = desc,
             leaves = leaves^,
             leaf_lists = leaf_lists^,
+            anydatas = anydatas^,
+            anyxmls = anyxmls^,
             containers = containers^,
             lists = lists^,
             choices = choices^,
@@ -301,6 +351,8 @@ struct _YangParser(Movable):
         var unique_specs = List[List[String]]()
         var leaves = List[Arc[YangLeaf]]()
         var leaf_lists = List[Arc[YangLeafList]]()
+        var anydatas = List[Arc[YangAnydata]]()
+        var anyxmls = List[Arc[YangAnyxml]]()
         var containers = List[Arc[YangContainer]]()
         var lists = List[Arc[YangList]]()
         var choices = List[Arc[YangChoice]]()
@@ -341,6 +393,12 @@ struct _YangParser(Movable):
                 elif stmt == YANG_STMT_LEAF_LIST:
                     var leaf_list = self._parse_leaf_list_statement()
                     leaf_lists.append(Arc[YangLeafList](leaf_list^))
+                elif stmt == YANG_STMT_ANYDATA:
+                    var ad = self._parse_anydata_statement()
+                    anydatas.append(Arc[YangAnydata](ad^))
+                elif stmt == YANG_STMT_ANYXML:
+                    var ax = self._parse_anyxml_statement()
+                    anyxmls.append(Arc[YangAnyxml](ax^))
                 elif stmt == YANG_STMT_CONTAINER:
                     var child_container = self._parse_container_statement()
                     containers.append(Arc[YangContainer](child_container^))
@@ -354,10 +412,24 @@ struct _YangParser(Movable):
                     self._parse_uses_statement(
                         leaves,
                         leaf_lists,
+                        anydatas,
+                        anyxmls,
                         containers,
                         lists,
                         choices,
                     )
+                elif stmt == YANG_STMT_AUGMENT:
+                    self._parse_relative_augment_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                elif self._peek_prefixed_extension():
+                    self._skip_prefixed_extension_statement()
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -369,6 +441,8 @@ struct _YangParser(Movable):
             description = desc,
             leaves = leaves^,
             leaf_lists = leaf_lists^,
+            anydatas = anydatas^,
+            anyxmls = anyxmls^,
             containers = containers^,
             lists = lists^,
             choices = choices^,
@@ -497,6 +571,103 @@ struct _YangParser(Movable):
             ordered_by = ordered_by,
         )
 
+    def _peek_prefixed_extension(ref self) -> Bool:
+        ## True when the next statement looks like `prefix:extension-name ...` (RFC 7950 extension).
+        if self.index + 2 >= len(self.tokens):
+            return False
+        return self.tokens[self.index + 1].value == ":"
+
+    def _skip_prefixed_extension_statement(mut self) raises:
+        _ = self._consume_value()
+        if not self._consume_if(":"):
+            return
+        _ = self._consume_value()
+        self._skip_statement_tail()
+
+    def _parse_anydata_statement(mut self) raises -> YangAnydata:
+        self._expect(YANG_STMT_ANYDATA)
+        var node_name = self._consume_name()
+        var description = ""
+        var mandatory = False
+        var must = List[Arc[YangMust]]()
+        var when = Optional[YangWhen]()
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == YANG_STMT_DESCRIPTION:
+                    self._consume()
+                    description = self._consume_argument_value()
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MANDATORY:
+                    self._consume()
+                    mandatory = self._parse_boolean_value()
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MUST:
+                    var m = self._parse_must_statement()
+                    must.append(Arc[YangMust](m^))
+                elif stmt == YANG_STMT_WHEN:
+                    var w = self._parse_when_statement()
+                    when = Optional(w^)
+                elif stmt == YANG_STMT_IF_FEATURE:
+                    self._consume()
+                    _ = self._consume_argument_value()
+                    self._skip_statement_tail()
+                elif self._peek_prefixed_extension():
+                    self._skip_prefixed_extension_statement()
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
+        return YangAnydata(
+            name = node_name,
+            description = description^,
+            mandatory = mandatory,
+            must_statements = must^,
+            when = when^,
+        )
+
+    def _parse_anyxml_statement(mut self) raises -> YangAnyxml:
+        self._expect(YANG_STMT_ANYXML)
+        var node_name = self._consume_name()
+        var description = ""
+        var mandatory = False
+        var must = List[Arc[YangMust]]()
+        var when = Optional[YangWhen]()
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == YANG_STMT_DESCRIPTION:
+                    self._consume()
+                    description = self._consume_argument_value()
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MANDATORY:
+                    self._consume()
+                    mandatory = self._parse_boolean_value()
+                    self._skip_if(";")
+                elif stmt == YANG_STMT_MUST:
+                    var m = self._parse_must_statement()
+                    must.append(Arc[YangMust](m^))
+                elif stmt == YANG_STMT_WHEN:
+                    var w = self._parse_when_statement()
+                    when = Optional(w^)
+                elif stmt == YANG_STMT_IF_FEATURE:
+                    self._consume()
+                    _ = self._consume_argument_value()
+                    self._skip_statement_tail()
+                elif self._peek_prefixed_extension():
+                    self._skip_prefixed_extension_statement()
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
+        return YangAnyxml(
+            name = node_name,
+            description = description^,
+            mandatory = mandatory,
+            must_statements = must^,
+            when = when^,
+        )
+
     def _parse_choice_statement(mut self) raises -> YangChoice:
         self._expect(YANG_STMT_CHOICE)
         var name = self._consume_name()
@@ -586,6 +757,34 @@ struct _YangParser(Movable):
                         ),
                     ))
                     self._skip_statement_tail()
+                elif stmt == YANG_STMT_ANYDATA:
+                    self._consume()
+                    var node_name = self._consume_name()
+                    case_names.append(node_name)
+                    var implicit_names = List[String]()
+                    implicit_names.append(node_name)
+                    cases.append(Arc[YangChoiceCase](
+                        YangChoiceCase(
+                            name=node_name,
+                            node_names=implicit_names^,
+                            when=Optional[YangWhen](),
+                        ),
+                    ))
+                    self._skip_statement_tail()
+                elif stmt == YANG_STMT_ANYXML:
+                    self._consume()
+                    var node_name = self._consume_name()
+                    case_names.append(node_name)
+                    var implicit_names = List[String]()
+                    implicit_names.append(node_name)
+                    cases.append(Arc[YangChoiceCase](
+                        YangChoiceCase(
+                            name=node_name,
+                            node_names=implicit_names^,
+                            when=Optional[YangWhen](),
+                        ),
+                    ))
+                    self._skip_statement_tail()
                 else:
                     self._skip_statement()
             self._expect("}")
@@ -629,6 +828,14 @@ struct _YangParser(Movable):
                     self._consume()
                     names.append(self._consume_name())
                     self._skip_statement_tail()
+                elif stmt == YANG_STMT_ANYDATA:
+                    self._consume()
+                    names.append(self._consume_name())
+                    self._skip_statement_tail()
+                elif stmt == YANG_STMT_ANYXML:
+                    self._consume()
+                    names.append(self._consume_name())
+                    self._skip_statement_tail()
                 elif stmt == YANG_STMT_WHEN:
                     var w = self._parse_when_statement()
                     case_when = Optional(w^)
@@ -649,6 +856,8 @@ struct _YangParser(Movable):
 
         var leaves = List[Arc[YangLeaf]]()
         var leaf_lists = List[Arc[YangLeafList]]()
+        var anydatas = List[Arc[YangAnydata]]()
+        var anyxmls = List[Arc[YangAnyxml]]()
         var containers = List[Arc[YangContainer]]()
         var lists = List[Arc[YangList]]()
         var choices = List[Arc[YangChoice]]()
@@ -662,6 +871,12 @@ struct _YangParser(Movable):
                 elif stmt == YANG_STMT_LEAF_LIST:
                     var leaf_list = self._parse_leaf_list_statement()
                     leaf_lists.append(Arc[YangLeafList](leaf_list^))
+                elif stmt == YANG_STMT_ANYDATA:
+                    var ad = self._parse_anydata_statement()
+                    anydatas.append(Arc[YangAnydata](ad^))
+                elif stmt == YANG_STMT_ANYXML:
+                    var ax = self._parse_anyxml_statement()
+                    anyxmls.append(Arc[YangAnyxml](ax^))
                 elif stmt == YANG_STMT_CONTAINER:
                     var child_container = self._parse_container_statement()
                     containers.append(Arc[YangContainer](child_container^))
@@ -675,6 +890,18 @@ struct _YangParser(Movable):
                     self._parse_uses_statement(
                         leaves,
                         leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                elif stmt == YANG_STMT_AUGMENT:
+                    self._parse_relative_augment_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
                         containers,
                         lists,
                         choices,
@@ -690,12 +917,14 @@ struct _YangParser(Movable):
 
         self._store_grouping(
             ParsedGrouping(
-                name = name,
-                leaves = leaves^,
-                leaf_lists = leaf_lists^,
-                containers = containers^,
-                lists = lists^,
-                choices = choices^,
+                name,
+                leaves^,
+                leaf_lists^,
+                anydatas^,
+                anyxmls^,
+                containers^,
+                lists^,
+                choices^,
             ),
         )
 
@@ -711,27 +940,61 @@ struct _YangParser(Movable):
         mut self,
         mut leaves: List[Arc[YangLeaf]],
         mut leaf_lists: List[Arc[YangLeafList]],
+        mut anydatas: List[Arc[YangAnydata]],
+        mut anyxmls: List[Arc[YangAnyxml]],
         mut containers: List[Arc[YangContainer]],
         mut lists: List[Arc[YangList]],
         mut choices: List[Arc[YangChoice]],
     ) raises:
         self._expect(YANG_STMT_USES)
         var grouping_name = self._consume_name()
-        self._skip_statement_tail()
         self._append_grouping_nodes_by_name(
             grouping_name,
             leaves,
             leaf_lists,
+            anydatas,
+            anyxmls,
             containers,
             lists,
             choices,
         )
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == YANG_STMT_IF_FEATURE:
+                    self._parse_if_feature_statement()
+                elif stmt == YANG_STMT_REFINE:
+                    self._parse_refine_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                elif stmt == YANG_STMT_AUGMENT:
+                    self._parse_relative_augment_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
 
     def _append_grouping_nodes_by_name(
-        mut self,
+        ref self,
         grouping_name: String,
         mut leaves: List[Arc[YangLeaf]],
         mut leaf_lists: List[Arc[YangLeafList]],
+        mut anydatas: List[Arc[YangAnydata]],
+        mut anyxmls: List[Arc[YangAnyxml]],
         mut containers: List[Arc[YangContainer]],
         mut lists: List[Arc[YangList]],
         mut choices: List[Arc[YangChoice]],
@@ -741,21 +1004,1397 @@ struct _YangParser(Movable):
             self._error("Unknown grouping '" + grouping_name + "' in uses statement")
             return
         for i in range(len(self.groupings[idx][].leaves)):
-            leaves.append(self.groupings[idx][].leaves[i].copy())
+            var leaf_src = self.groupings[idx][].leaves[i].copy()
+            leaves.append(self._clone_leaf_arc(leaf_src))
         for i in range(len(self.groupings[idx][].leaf_lists)):
-            leaf_lists.append(self.groupings[idx][].leaf_lists[i].copy())
+            var ll_src = self.groupings[idx][].leaf_lists[i].copy()
+            leaf_lists.append(self._clone_leaf_list_arc(ll_src))
+        for i in range(len(self.groupings[idx][].anydatas)):
+            var ad_src = self.groupings[idx][].anydatas[i].copy()
+            anydatas.append(self._clone_anydata_arc(ad_src))
+        for i in range(len(self.groupings[idx][].anyxmls)):
+            var ax_src = self.groupings[idx][].anyxmls[i].copy()
+            anyxmls.append(self._clone_anyxml_arc(ax_src))
         for i in range(len(self.groupings[idx][].containers)):
-            containers.append(self.groupings[idx][].containers[i].copy())
+            var c_src = self.groupings[idx][].containers[i].copy()
+            containers.append(self._clone_container_arc(c_src))
         for i in range(len(self.groupings[idx][].lists)):
-            lists.append(self.groupings[idx][].lists[i].copy())
+            var l_src = self.groupings[idx][].lists[i].copy()
+            lists.append(self._clone_list_arc(l_src))
         for i in range(len(self.groupings[idx][].choices)):
-            choices.append(self.groupings[idx][].choices[i].copy())
+            var ch_src = self.groupings[idx][].choices[i].copy()
+            choices.append(self._clone_choice_arc(ch_src))
 
     def _find_grouping_index(ref self, grouping_name: String) -> Int:
         for i in range(len(self.grouping_names)):
             if self.grouping_names[i] == grouping_name:
                 return i
         return -1
+
+    def _parse_if_feature_statement(mut self) raises:
+        self._expect(YANG_STMT_IF_FEATURE)
+        _ = self._consume_argument_value()
+        self._skip_if(";")
+
+    def _parse_refine_statement(
+        mut self,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut anydatas: List[Arc[YangAnydata]],
+        mut anyxmls: List[Arc[YangAnyxml]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) raises:
+        _ = anydatas
+        _ = anyxmls
+        self._expect(YANG_STMT_REFINE)
+        var refine_path = self._consume_argument_value()
+        var segments = self._split_schema_path(refine_path)
+        if len(segments) == 0:
+            self._error("refine requires a descendant schema-node identifier")
+            self._skip_statement_tail()
+            return
+
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == YANG_STMT_DESCRIPTION:
+                    self._consume()
+                    var desc = self._consume_argument_value()
+                    self._skip_if(";")
+                    if not self._refine_set_description_at_path(
+                        segments,
+                        0,
+                        desc,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_MANDATORY:
+                    self._consume()
+                    var mandatory = self._parse_boolean_value()
+                    self._skip_if(";")
+                    if not self._refine_set_mandatory_at_path(
+                        segments,
+                        0,
+                        mandatory,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_DEFAULT:
+                    self._consume()
+                    var default_value = self._consume_argument_value()
+                    self._skip_if(";")
+                    if not self._refine_set_default_at_path(
+                        segments,
+                        0,
+                        default_value,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_MUST:
+                    var must_stmt = self._parse_must_statement()
+                    if not self._refine_add_must_at_path(
+                        segments,
+                        0,
+                        must_stmt,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_WHEN:
+                    var when_stmt = self._parse_when_statement()
+                    if not self._refine_set_when_at_path(
+                        segments,
+                        0,
+                        when_stmt,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_TYPE:
+                    var type_stmt = self._parse_type_statement()
+                    if not self._refine_set_type_at_path(
+                        segments,
+                        0,
+                        type_stmt,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                        choices,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_MIN_ELEMENTS:
+                    self._consume()
+                    var min_el = self._parse_non_negative_int("min-elements")
+                    self._skip_if(";")
+                    if not self._refine_set_min_elements_at_path(
+                        segments,
+                        0,
+                        min_el,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_MAX_ELEMENTS:
+                    self._consume()
+                    var max_el = self._parse_non_negative_int("max-elements")
+                    self._skip_if(";")
+                    if not self._refine_set_max_elements_at_path(
+                        segments,
+                        0,
+                        max_el,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_ORDERED_BY:
+                    self._consume()
+                    var ordered_by = self._parse_ordered_by_argument()
+                    self._skip_if(";")
+                    if not self._refine_set_ordered_by_at_path(
+                        segments,
+                        0,
+                        ordered_by,
+                        leaves,
+                        leaf_lists,
+                        containers,
+                        lists,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_KEY:
+                    self._consume()
+                    var key = self._consume_argument_value()
+                    self._skip_if(";")
+                    if not self._refine_set_key_at_path(
+                        segments,
+                        0,
+                        key,
+                        containers,
+                        lists,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_UNIQUE:
+                    self._consume()
+                    var uarg = self._consume_argument_value()
+                    var ucomp = self._unique_components_from_argument(uarg)
+                    self._skip_if(";")
+                    if not self._refine_add_unique_at_path(
+                        segments,
+                        0,
+                        ucomp,
+                        containers,
+                        lists,
+                    ):
+                        self._error("Unknown refine target path '" + refine_path + "'")
+                elif stmt == YANG_STMT_IF_FEATURE:
+                    self._parse_if_feature_statement()
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
+
+    def _parse_relative_augment_statement(
+        mut self,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut anydatas: List[Arc[YangAnydata]],
+        mut anyxmls: List[Arc[YangAnyxml]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) raises:
+        var parsed = self._parse_augment_statement_body()
+        if len(parsed.path) > 0 and String(parsed.path[byte=0 : 1]) == "/":
+            self.pending_module_augments.append(Arc[ParsedAugment](parsed^))
+            return
+        if not self._apply_augment_to_path(
+            parsed.path,
+            leaves,
+            leaf_lists,
+            anydatas,
+            anyxmls,
+            containers,
+            lists,
+            choices,
+            parsed,
+        ):
+            self._error("Unknown augment target path '" + parsed.path + "'")
+
+    def _parse_module_augment_statement(
+        mut self,
+        mut top_containers: List[Arc[YangContainer]],
+    ) raises:
+        var parsed = self._parse_augment_statement_body()
+        if len(parsed.path) > 0 and String(parsed.path[byte=0 : 1]) == "/":
+            self.pending_module_augments.append(Arc[ParsedAugment](parsed^))
+            return
+        var root_leaves = List[Arc[YangLeaf]]()
+        var root_leaf_lists = List[Arc[YangLeafList]]()
+        var root_anydatas = List[Arc[YangAnydata]]()
+        var root_anyxmls = List[Arc[YangAnyxml]]()
+        var root_lists = List[Arc[YangList]]()
+        var root_choices = List[Arc[YangChoice]]()
+        if not self._apply_augment_to_path(
+            parsed.path,
+            root_leaves,
+            root_leaf_lists,
+            root_anydatas,
+            root_anyxmls,
+            top_containers,
+            root_lists,
+            root_choices,
+            parsed,
+        ):
+            self._error("Unknown augment target path '" + parsed.path + "'")
+
+    def _apply_pending_module_augments(
+        mut self,
+        mut top_containers: List[Arc[YangContainer]],
+    ) raises:
+        var root_leaves = List[Arc[YangLeaf]]()
+        var root_leaf_lists = List[Arc[YangLeafList]]()
+        var root_anydatas = List[Arc[YangAnydata]]()
+        var root_anyxmls = List[Arc[YangAnyxml]]()
+        var root_lists = List[Arc[YangList]]()
+        var root_choices = List[Arc[YangChoice]]()
+        for i in range(len(self.pending_module_augments)):
+            var aug_arc = self.pending_module_augments[i].copy()
+            ref aug = aug_arc[]
+            if not self._apply_augment_to_path(
+                aug.path,
+                root_leaves,
+                root_leaf_lists,
+                root_anydatas,
+                root_anyxmls,
+                top_containers,
+                root_lists,
+                root_choices,
+                aug,
+            ):
+                self._error("Unknown augment target path '" + aug.path + "'")
+
+    def _parse_augment_statement_body(mut self) raises -> ParsedAugment:
+        self._expect(YANG_STMT_AUGMENT)
+        var target_path = self._consume_argument_value()
+
+        var leaves = List[Arc[YangLeaf]]()
+        var leaf_lists = List[Arc[YangLeafList]]()
+        var anydatas = List[Arc[YangAnydata]]()
+        var anyxmls = List[Arc[YangAnyxml]]()
+        var containers = List[Arc[YangContainer]]()
+        var lists = List[Arc[YangList]]()
+        var choices = List[Arc[YangChoice]]()
+
+        if self._consume_if("{"):
+            while self._has_more() and self._peek() != "}":
+                var stmt = self._peek()
+                if stmt == YANG_STMT_LEAF:
+                    var leaf = self._parse_leaf_statement()
+                    leaves.append(Arc[YangLeaf](leaf^))
+                elif stmt == YANG_STMT_LEAF_LIST:
+                    var leaf_list = self._parse_leaf_list_statement()
+                    leaf_lists.append(Arc[YangLeafList](leaf_list^))
+                elif stmt == YANG_STMT_ANYDATA:
+                    var ad = self._parse_anydata_statement()
+                    anydatas.append(Arc[YangAnydata](ad^))
+                elif stmt == YANG_STMT_ANYXML:
+                    var ax = self._parse_anyxml_statement()
+                    anyxmls.append(Arc[YangAnyxml](ax^))
+                elif stmt == YANG_STMT_CONTAINER:
+                    var child_container = self._parse_container_statement()
+                    containers.append(Arc[YangContainer](child_container^))
+                elif stmt == YANG_STMT_LIST:
+                    var child_list = self._parse_list_statement()
+                    lists.append(Arc[YangList](child_list^))
+                elif stmt == YANG_STMT_CHOICE:
+                    var choice = self._parse_choice_statement()
+                    choices.append(Arc[YangChoice](choice^))
+                elif stmt == YANG_STMT_USES:
+                    self._parse_uses_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                elif stmt == YANG_STMT_IF_FEATURE:
+                    self._parse_if_feature_statement()
+                elif stmt == YANG_STMT_AUGMENT:
+                    self._parse_relative_augment_statement(
+                        leaves,
+                        leaf_lists,
+                        anydatas,
+                        anyxmls,
+                        containers,
+                        lists,
+                        choices,
+                    )
+                else:
+                    self._skip_statement()
+            self._expect("}")
+        self._skip_if(";")
+
+        return ParsedAugment(
+            target_path,
+            leaves^,
+            leaf_lists^,
+            anydatas^,
+            anyxmls^,
+            containers^,
+            lists^,
+            choices^,
+        )
+
+    def _apply_augment_to_path(
+        ref self,
+        path: String,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut anydatas: List[Arc[YangAnydata]],
+        mut anyxmls: List[Arc[YangAnyxml]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+        read aug: ParsedAugment,
+    ) -> Bool:
+        var segments = self._split_schema_path(path)
+        if len(segments) == 0:
+            return False
+        return self._apply_augment_segments(
+            segments,
+            0,
+            leaves,
+            leaf_lists,
+            anydatas,
+            anyxmls,
+            containers,
+            lists,
+            choices,
+            aug,
+        )
+
+    def _apply_augment_segments(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut anydatas: List[Arc[YangAnydata]],
+        mut anyxmls: List[Arc[YangAnyxml]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+        read aug: ParsedAugment,
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(containers)):
+                if self._ident_local_name(containers[i][].name) == seg:
+                    for j in range(len(aug.leaves)):
+                        containers[i][].leaves.append(self._clone_leaf_arc(aug.leaves[j]))
+                    for j in range(len(aug.leaf_lists)):
+                        containers[i][].leaf_lists.append(
+                            self._clone_leaf_list_arc(aug.leaf_lists[j]),
+                        )
+                    for j in range(len(aug.anydatas)):
+                        containers[i][].anydatas.append(self._clone_anydata_arc(aug.anydatas[j]))
+                    for j in range(len(aug.anyxmls)):
+                        containers[i][].anyxmls.append(self._clone_anyxml_arc(aug.anyxmls[j]))
+                    for j in range(len(aug.containers)):
+                        containers[i][].containers.append(
+                            self._clone_container_arc(aug.containers[j]),
+                        )
+                    for j in range(len(aug.lists)):
+                        containers[i][].lists.append(self._clone_list_arc(aug.lists[j]))
+                    for j in range(len(aug.choices)):
+                        containers[i][].choices.append(self._clone_choice_arc(aug.choices[j]))
+                    applied = True
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    for j in range(len(aug.leaves)):
+                        lists[i][].leaves.append(self._clone_leaf_arc(aug.leaves[j]))
+                    for j in range(len(aug.leaf_lists)):
+                        lists[i][].leaf_lists.append(self._clone_leaf_list_arc(aug.leaf_lists[j]))
+                    for j in range(len(aug.anydatas)):
+                        lists[i][].anydatas.append(self._clone_anydata_arc(aug.anydatas[j]))
+                    for j in range(len(aug.anyxmls)):
+                        lists[i][].anyxmls.append(self._clone_anyxml_arc(aug.anyxmls[j]))
+                    for j in range(len(aug.containers)):
+                        lists[i][].containers.append(self._clone_container_arc(aug.containers[j]))
+                    for j in range(len(aug.lists)):
+                        lists[i][].lists.append(self._clone_list_arc(aug.lists[j]))
+                    for j in range(len(aug.choices)):
+                        lists[i][].choices.append(self._clone_choice_arc(aug.choices[j]))
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._apply_augment_segments(
+                    segments,
+                    seg_idx + 1,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].anydatas,
+                    containers[i][].anyxmls,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                    aug,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._apply_augment_segments(
+                    segments,
+                    seg_idx + 1,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].anydatas,
+                    lists[i][].anyxmls,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                    aug,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_description_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        description: String,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(containers)):
+                if self._ident_local_name(containers[i][].name) == seg:
+                    containers[i][].description = description
+                    applied = True
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    lists[i][].description = description
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_description_at_path(
+                    segments,
+                    seg_idx + 1,
+                    description,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_description_at_path(
+                    segments,
+                    seg_idx + 1,
+                    description,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_mandatory_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        mandatory: Bool,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaves)):
+                if self._ident_local_name(leaves[i][].name) == seg:
+                    leaves[i][].mandatory = mandatory
+                    applied = True
+            for i in range(len(choices)):
+                if self._ident_local_name(choices[i][].name) == seg:
+                    choices[i][].mandatory = mandatory
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_mandatory_at_path(
+                    segments,
+                    seg_idx + 1,
+                    mandatory,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_mandatory_at_path(
+                    segments,
+                    seg_idx + 1,
+                    mandatory,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_default_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        default_value: String,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaves)):
+                if self._ident_local_name(leaves[i][].name) == seg:
+                    leaves[i][].default_value = default_value
+                    leaves[i][].has_default = True
+                    applied = True
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].default_values.append(default_value)
+                    applied = True
+            for i in range(len(choices)):
+                if self._ident_local_name(choices[i][].name) == seg:
+                    choices[i][].default_case = default_value
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_default_at_path(
+                    segments,
+                    seg_idx + 1,
+                    default_value,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_default_at_path(
+                    segments,
+                    seg_idx + 1,
+                    default_value,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_add_must_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        read must_stmt: YangMust,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaves)):
+                if self._ident_local_name(leaves[i][].name) == seg:
+                    leaves[i][].must_statements.append(Arc[YangMust](self._clone_must(must_stmt)))
+                    applied = True
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].must_statements.append(
+                        Arc[YangMust](self._clone_must(must_stmt)),
+                    )
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_add_must_at_path(
+                    segments,
+                    seg_idx + 1,
+                    must_stmt,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_add_must_at_path(
+                    segments,
+                    seg_idx + 1,
+                    must_stmt,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_when_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        read when_stmt: YangWhen,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaves)):
+                if self._ident_local_name(leaves[i][].name) == seg:
+                    leaves[i][].when = Optional(self._clone_when(when_stmt))
+                    applied = True
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].when = Optional(self._clone_when(when_stmt))
+                    applied = True
+            for i in range(len(choices)):
+                if self._ident_local_name(choices[i][].name) == seg:
+                    choices[i][].when = Optional(self._clone_when(when_stmt))
+                    applied = True
+                for j in range(len(choices[i][].cases)):
+                    if self._ident_local_name(choices[i][].cases[j][].name) == seg:
+                        choices[i][].cases[j][].when = Optional(self._clone_when(when_stmt))
+                        applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_when_at_path(
+                    segments,
+                    seg_idx + 1,
+                    when_stmt,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_when_at_path(
+                    segments,
+                    seg_idx + 1,
+                    when_stmt,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_type_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        read type_stmt: YangType,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+        mut choices: List[Arc[YangChoice]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaves)):
+                if self._ident_local_name(leaves[i][].name) == seg:
+                    leaves[i][].type = self._clone_yang_type(type_stmt)
+                    applied = True
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].type = self._clone_yang_type(type_stmt)
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_type_at_path(
+                    segments,
+                    seg_idx + 1,
+                    type_stmt,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_type_at_path(
+                    segments,
+                    seg_idx + 1,
+                    type_stmt,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                    lists[i][].choices,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_min_elements_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        value: Int,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].min_elements = value
+                    applied = True
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    lists[i][].min_elements = value
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_min_elements_at_path(
+                    segments,
+                    seg_idx + 1,
+                    value,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_min_elements_at_path(
+                    segments,
+                    seg_idx + 1,
+                    value,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_max_elements_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        value: Int,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].max_elements = value
+                    applied = True
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    lists[i][].max_elements = value
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_max_elements_at_path(
+                    segments,
+                    seg_idx + 1,
+                    value,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_max_elements_at_path(
+                    segments,
+                    seg_idx + 1,
+                    value,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_ordered_by_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        value: String,
+        mut leaves: List[Arc[YangLeaf]],
+        mut leaf_lists: List[Arc[YangLeafList]],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(leaf_lists)):
+                if self._ident_local_name(leaf_lists[i][].name) == seg:
+                    leaf_lists[i][].ordered_by = value
+                    applied = True
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    lists[i][].ordered_by = value
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_ordered_by_at_path(
+                    segments,
+                    seg_idx + 1,
+                    value,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_ordered_by_at_path(
+                    segments,
+                    seg_idx + 1,
+                    value,
+                    lists[i][].leaves,
+                    lists[i][].leaf_lists,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_set_key_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        key: String,
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    lists[i][].key = key
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_set_key_at_path(
+                    segments,
+                    seg_idx + 1,
+                    key,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_set_key_at_path(
+                    segments,
+                    seg_idx + 1,
+                    key,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                ):
+                    applied = True
+        return applied
+
+    def _refine_add_unique_at_path(
+        ref self,
+        read segments: List[String],
+        seg_idx: Int,
+        read unique_spec: List[String],
+        mut containers: List[Arc[YangContainer]],
+        mut lists: List[Arc[YangList]],
+    ) -> Bool:
+        var seg = segments[seg_idx]
+        if seg_idx == len(segments) - 1:
+            var applied = False
+            for i in range(len(lists)):
+                if self._ident_local_name(lists[i][].name) == seg:
+                    lists[i][].unique_specs.append(unique_spec.copy())
+                    applied = True
+            return applied
+
+        var applied = False
+        for i in range(len(containers)):
+            if self._ident_local_name(containers[i][].name) == seg:
+                if self._refine_add_unique_at_path(
+                    segments,
+                    seg_idx + 1,
+                    unique_spec,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                ):
+                    applied = True
+        for i in range(len(lists)):
+            if self._ident_local_name(lists[i][].name) == seg:
+                if self._refine_add_unique_at_path(
+                    segments,
+                    seg_idx + 1,
+                    unique_spec,
+                    lists[i][].containers,
+                    lists[i][].lists,
+                ):
+                    applied = True
+        return applied
+
+    def _split_schema_path(ref self, path: String) -> List[String]:
+        var out = List[String]()
+        var trimmed = path.strip()
+        var parts = trimmed.split("/")
+        for i in range(len(parts)):
+            var raw = String(String(parts[i]).strip())
+            if len(raw) == 0 or raw == ".":
+                continue
+            out.append(self._ident_local_name(raw))
+        return out^
+
+    def _ident_local_name(ref self, ident: String) -> String:
+        var parts = ident.split(":")
+        if len(parts) == 0:
+            return ident
+        return String(String(parts[len(parts) - 1]).strip())
+
+    def _clone_must(ref self, read src: YangMust) -> YangMust:
+        var xpath_ast = Expr.ExprPointer()
+        try:
+            xpath_ast = parse_xpath(src.expression)
+            return YangMust(
+                expression = src.expression,
+                error_message = src.error_message,
+                description = src.description,
+                xpath_ast = xpath_ast,
+                parsed = True,
+            )
+        except:
+            return YangMust(
+                expression = src.expression,
+                error_message = src.error_message,
+                description = src.description,
+                xpath_ast = xpath_ast,
+                parsed = False,
+            )
+
+    def _clone_when(ref self, read src: YangWhen) -> YangWhen:
+        var xpath_ast = Expr.ExprPointer()
+        try:
+            xpath_ast = parse_xpath(src.expression)
+            return YangWhen(
+                expression = src.expression,
+                description = src.description,
+                xpath_ast = xpath_ast,
+                parsed = True,
+            )
+        except:
+            return YangWhen(
+                expression = src.expression,
+                description = src.description,
+                xpath_ast = xpath_ast,
+                parsed = False,
+            )
+
+    def _clone_yang_type(ref self, read src: YangType) -> YangType:
+        var union_members = List[Arc[YangType]]()
+        for i in range(src.union_members_len()):
+            union_members.append(Arc[YangType](self._clone_yang_type(src.union_member_arc(i)[])))
+
+        if src.name == "enumeration":
+            var enum_values = List[String]()
+            for i in range(src.enum_values_len()):
+                enum_values.append(src.enum_value_at(i))
+            return YangType(
+                name = src.name,
+                constraints = YangTypeEnumeration(enum_values^),
+                union_members = union_members^,
+            )
+
+        if src.name == "decimal64":
+            return YangType(
+                name = src.name,
+                constraints = YangTypeDecimal64(
+                    src.fraction_digits(),
+                    src.has_decimal64_range(),
+                    src.decimal64_range_min(),
+                    src.decimal64_range_max(),
+                ),
+                union_members = union_members^,
+            )
+
+        if src.name == YANG_TYPE_LEAFREF:
+            var xpath_ast = Expr.ExprPointer()
+            var parsed = False
+            if src.has_leafref_path():
+                try:
+                    xpath_ast = parse_xpath(src.leafref_path())
+                    parsed = True
+                except:
+                    parsed = False
+            return YangType(
+                name = src.name,
+                constraints = YangTypeLeafref(
+                    src.has_leafref_path(),
+                    src.leafref_path(),
+                    src.leafref_require_instance(),
+                    xpath_ast,
+                    parsed,
+                ),
+                union_members = union_members^,
+            )
+
+        if src.name == "bits":
+            var names = List[String]()
+            for i in range(src.bits_names_len()):
+                names.append(src.bits_name_at(i))
+            return YangType(
+                name = src.name,
+                constraints = YangTypeBits(names^),
+                union_members = union_members^,
+            )
+
+        if src.name == "identityref":
+            return YangType(
+                name = src.name,
+                constraints = YangTypeIdentityref(src.identityref_base()),
+                union_members = union_members^,
+            )
+
+        if src.name == "union":
+            return YangType(
+                name = src.name,
+                constraints = YangTypePlain(_pad=0),
+                union_members = union_members^,
+            )
+
+        if (
+            src.name == "integer"
+            or src.name == "int8"
+            or src.name == "int16"
+            or src.name == "int32"
+            or src.name == "int64"
+            or src.name == "uint8"
+            or src.name == "uint16"
+            or src.name == "uint32"
+            or src.name == "uint64"
+            or src.name == "number"
+        ):
+            return YangType(
+                name = src.name,
+                constraints = YangTypeIntegerRange(
+                    src.has_range(),
+                    src.range_min(),
+                    src.range_max(),
+                ),
+                union_members = union_members^,
+            )
+
+        return YangType(
+            name = src.name,
+            constraints = YangTypePlain(_pad=0),
+            union_members = union_members^,
+        )
+
+    def _clone_leaf_arc(ref self, read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
+        var musts = List[Arc[YangMust]]()
+        for i in range(len(src[].must_statements)):
+            musts.append(Arc[YangMust](self._clone_must(src[].must_statements[i][])))
+
+        var when = Optional[YangWhen]()
+        if Bool(src[].when):
+            when = Optional(self._clone_when(src[].when.value()))
+
+        return Arc[YangLeaf](
+            YangLeaf(
+                name = src[].name,
+                type = self._clone_yang_type(src[].type),
+                mandatory = src[].mandatory,
+                has_default = src[].has_default,
+                default_value = src[].default_value,
+                must_statements = musts^,
+                when = when^,
+            ),
+        )
+
+    def _clone_leaf_list_arc(ref self, read src: Arc[YangLeafList]) -> Arc[YangLeafList]:
+        var musts = List[Arc[YangMust]]()
+        for i in range(len(src[].must_statements)):
+            musts.append(Arc[YangMust](self._clone_must(src[].must_statements[i][])))
+
+        var when = Optional[YangWhen]()
+        if Bool(src[].when):
+            when = Optional(self._clone_when(src[].when.value()))
+
+        return Arc[YangLeafList](
+            YangLeafList(
+                name = src[].name,
+                type = self._clone_yang_type(src[].type),
+                default_values = src[].default_values.copy(),
+                must_statements = musts^,
+                when = when^,
+                min_elements = src[].min_elements,
+                max_elements = src[].max_elements,
+                ordered_by = src[].ordered_by,
+            ),
+        )
+
+    def _clone_choice_arc(ref self, read src: Arc[YangChoice]) -> Arc[YangChoice]:
+        var cases = List[Arc[YangChoiceCase]]()
+        for i in range(len(src[].cases)):
+            var case_when = Optional[YangWhen]()
+            if Bool(src[].cases[i][].when):
+                case_when = Optional(self._clone_when(src[].cases[i][].when.value()))
+            cases.append(Arc[YangChoiceCase](
+                YangChoiceCase(
+                    name = src[].cases[i][].name,
+                    node_names = src[].cases[i][].node_names.copy(),
+                    when = case_when^,
+                ),
+            ))
+
+        var choice_when = Optional[YangWhen]()
+        if Bool(src[].when):
+            choice_when = Optional(self._clone_when(src[].when.value()))
+
+        return Arc[YangChoice](
+            YangChoice(
+                name = src[].name,
+                mandatory = src[].mandatory,
+                default_case = src[].default_case,
+                case_names = src[].case_names.copy(),
+                cases = cases^,
+                when = choice_when^,
+            ),
+        )
+
+    def _clone_anydata_arc(ref self, read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
+        var musts = List[Arc[YangMust]]()
+        for i in range(len(src[].must_statements)):
+            musts.append(Arc[YangMust](self._clone_must(src[].must_statements[i][])))
+        var when = Optional[YangWhen]()
+        if src[].has_when():
+            when = Optional(self._clone_when(src[].when.value()))
+        return Arc[YangAnydata](
+            YangAnydata(
+                name = src[].name,
+                description = src[].description,
+                mandatory = src[].mandatory,
+                must_statements = musts^,
+                when = when^,
+            ),
+        )
+
+    def _clone_anyxml_arc(ref self, read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
+        var musts = List[Arc[YangMust]]()
+        for i in range(len(src[].must_statements)):
+            musts.append(Arc[YangMust](self._clone_must(src[].must_statements[i][])))
+        var when = Optional[YangWhen]()
+        if src[].has_when():
+            when = Optional(self._clone_when(src[].when.value()))
+        return Arc[YangAnyxml](
+            YangAnyxml(
+                name = src[].name,
+                description = src[].description,
+                mandatory = src[].mandatory,
+                must_statements = musts^,
+                when = when^,
+            ),
+        )
+
+    def _clone_container_arc(ref self, read src: Arc[YangContainer]) -> Arc[YangContainer]:
+        var leaves = List[Arc[YangLeaf]]()
+        var leaf_lists = List[Arc[YangLeafList]]()
+        var anydatas = List[Arc[YangAnydata]]()
+        var anyxmls = List[Arc[YangAnyxml]]()
+        var containers = List[Arc[YangContainer]]()
+        var lists = List[Arc[YangList]]()
+        var choices = List[Arc[YangChoice]]()
+
+        for i in range(len(src[].leaves)):
+            leaves.append(self._clone_leaf_arc(src[].leaves[i]))
+        for i in range(len(src[].leaf_lists)):
+            leaf_lists.append(self._clone_leaf_list_arc(src[].leaf_lists[i]))
+        for i in range(len(src[].anydatas)):
+            anydatas.append(self._clone_anydata_arc(src[].anydatas[i]))
+        for i in range(len(src[].anyxmls)):
+            anyxmls.append(self._clone_anyxml_arc(src[].anyxmls[i]))
+        for i in range(len(src[].containers)):
+            containers.append(self._clone_container_arc(src[].containers[i]))
+        for i in range(len(src[].lists)):
+            lists.append(self._clone_list_arc(src[].lists[i]))
+        for i in range(len(src[].choices)):
+            choices.append(self._clone_choice_arc(src[].choices[i]))
+
+        return Arc[YangContainer](
+            YangContainer(
+                name = src[].name,
+                description = src[].description,
+                leaves = leaves^,
+                leaf_lists = leaf_lists^,
+                anydatas = anydatas^,
+                anyxmls = anyxmls^,
+                containers = containers^,
+                lists = lists^,
+                choices = choices^,
+            ),
+        )
+
+    def _clone_list_arc(ref self, read src: Arc[YangList]) -> Arc[YangList]:
+        var leaves = List[Arc[YangLeaf]]()
+        var leaf_lists = List[Arc[YangLeafList]]()
+        var anydatas = List[Arc[YangAnydata]]()
+        var anyxmls = List[Arc[YangAnyxml]]()
+        var containers = List[Arc[YangContainer]]()
+        var lists = List[Arc[YangList]]()
+        var choices = List[Arc[YangChoice]]()
+        var unique_specs = List[List[String]]()
+
+        for i in range(len(src[].leaves)):
+            leaves.append(self._clone_leaf_arc(src[].leaves[i]))
+        for i in range(len(src[].leaf_lists)):
+            leaf_lists.append(self._clone_leaf_list_arc(src[].leaf_lists[i]))
+        for i in range(len(src[].anydatas)):
+            anydatas.append(self._clone_anydata_arc(src[].anydatas[i]))
+        for i in range(len(src[].anyxmls)):
+            anyxmls.append(self._clone_anyxml_arc(src[].anyxmls[i]))
+        for i in range(len(src[].containers)):
+            containers.append(self._clone_container_arc(src[].containers[i]))
+        for i in range(len(src[].lists)):
+            lists.append(self._clone_list_arc(src[].lists[i]))
+        for i in range(len(src[].choices)):
+            choices.append(self._clone_choice_arc(src[].choices[i]))
+        for i in range(len(src[].unique_specs)):
+            unique_specs.append(src[].unique_specs[i].copy())
+
+        return Arc[YangList](
+            YangList(
+                name = src[].name,
+                key = src[].key,
+                description = src[].description,
+                leaves = leaves^,
+                leaf_lists = leaf_lists^,
+                anydatas = anydatas^,
+                anyxmls = anyxmls^,
+                containers = containers^,
+                lists = lists^,
+                choices = choices^,
+                min_elements = src[].min_elements,
+                max_elements = src[].max_elements,
+                ordered_by = src[].ordered_by,
+                unique_specs = unique_specs^,
+            ),
+        )
 
     def _parse_type_statement(mut self) raises -> YangType:
         self._expect(YANG_STMT_TYPE)

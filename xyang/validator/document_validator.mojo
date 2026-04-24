@@ -14,6 +14,9 @@ from xyang.ast import (
     YangChoiceCase,
     YangLeaf,
     YangLeafList,
+    YangAnydata,
+    YangAnyxml,
+    YangMust,
     YangType,
     YangWhen,
 )
@@ -268,6 +271,16 @@ def _container_allowed_instance_keys(obj: Object, container: YangContainer) rais
         if _choice_member_choice_index_container(container, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
+    for i in range(len(container.anydatas)):
+        var nm = container.anydatas[i][].name
+        if _choice_member_choice_index_container(container, nm) < 0:
+            if not _string_in_list(nm, keys):
+                keys.append(nm)
+    for i in range(len(container.anyxmls)):
+        var nm = container.anyxmls[i][].name
+        if _choice_member_choice_index_container(container, nm) < 0:
+            if not _string_in_list(nm, keys):
+                keys.append(nm)
     for i in range(len(container.choices)):
         var extra = _choice_instance_keys(obj, container.choices[i][])
         for j in range(len(extra)):
@@ -298,6 +311,16 @@ def _list_allowed_instance_keys(obj: Object, list_node: YangList) raises -> List
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
+    for i in range(len(list_node.anydatas)):
+        var nm = list_node.anydatas[i][].name
+        if _choice_member_choice_index_list(list_node, nm) < 0:
+            if not _string_in_list(nm, keys):
+                keys.append(nm)
+    for i in range(len(list_node.anyxmls)):
+        var nm = list_node.anyxmls[i][].name
+        if _choice_member_choice_index_list(list_node, nm) < 0:
+            if not _string_in_list(nm, keys):
+                keys.append(nm)
     for i in range(len(list_node.choices)):
         var extra = _choice_instance_keys(obj, list_node.choices[i][])
         for j in range(len(extra)):
@@ -312,6 +335,21 @@ def _leaf_mandatory_must_exist(
     enforce_mandatory_choice: Bool,
     read case_stack: List[Arc[YangChoiceCase]],
 ) -> Bool:
+    if enforce_mandatory_choice:
+        return True
+    if len(case_stack) == 0:
+        return True
+    return _case_has_any_data(case_stack[len(case_stack) - 1][], obj)
+
+
+def _open_node_mandatory_must_exist(
+    mandatory: Bool,
+    obj: Object,
+    enforce_mandatory_choice: Bool,
+    read case_stack: List[Arc[YangChoiceCase]],
+) -> Bool:
+    if not mandatory:
+        return False
     if enforce_mandatory_choice:
         return True
     if len(case_stack) == 0:
@@ -729,6 +767,38 @@ struct DocumentValidator:
             if _choice_member_choice_index_container(container, nm) >= 0:
                 continue
             self._visit_leaf_list(obj, container.leaf_lists[i][], path, root_data, child_enforce)
+        for i in range(len(container.anydatas)):
+            var nm = container.anydatas[i][].name
+            if _choice_member_choice_index_container(container, nm) >= 0:
+                continue
+            ref ad = container.anydatas[i][]
+            self._visit_untyped_data_node(
+                obj,
+                ad.name,
+                ad.mandatory,
+                ad.must_statements,
+                ad.when,
+                path,
+                root_data,
+                child_enforce,
+                "anydata",
+            )
+        for i in range(len(container.anyxmls)):
+            var nm = container.anyxmls[i][].name
+            if _choice_member_choice_index_container(container, nm) >= 0:
+                continue
+            ref ax = container.anyxmls[i][]
+            self._visit_untyped_data_node(
+                obj,
+                ax.name,
+                ax.mandatory,
+                ax.must_statements,
+                ax.when,
+                path,
+                root_data,
+                child_enforce,
+                "anyxml",
+            )
         for c in container.containers:
             ref child_cont = c[]
             if child_cont.name in obj:
@@ -752,6 +822,8 @@ struct DocumentValidator:
                 child_enforce,
                 container.leaves,
                 container.leaf_lists,
+                container.anydatas,
+                container.anyxmls,
                 container.containers,
                 container.lists,
                 container.choices,
@@ -937,6 +1009,170 @@ struct DocumentValidator:
                     ),
                 )
 
+    def _visit_untyped_data_node(
+        mut self,
+        obj: Object,
+        name: String,
+        mandatory: Bool,
+        read must_statements: List[Arc[YangMust]],
+        when_stmt: Optional[YangWhen],
+        mut path: PathBuilder,
+        root_data: Value,
+        enforce_mandatory_choice: Bool,
+        kind_keyword: String,
+    ) raises:
+        var child_path = path.child(name)
+        self._trace("Check " + kind_keyword + " path=" + child_path)
+        var present = name in obj
+        if not present:
+            if _open_node_mandatory_must_exist(
+                mandatory,
+                obj,
+                enforce_mandatory_choice,
+                self._case_stack,
+            ):
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="Mandatory "
+                        + kind_keyword
+                        + " '"
+                        + name
+                        + "' is missing",
+                        expression="",
+                        severity=Severity("error"),
+                    ),
+                )
+            return
+        ref val = obj[name]
+        if val.is_null():
+            if _open_node_mandatory_must_exist(
+                mandatory,
+                obj,
+                enforce_mandatory_choice,
+                self._case_stack,
+            ):
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="Mandatory "
+                        + kind_keyword
+                        + " '"
+                        + name
+                        + "' is null",
+                        expression="",
+                        severity=Severity("error"),
+                    ),
+                )
+            return
+        if when_stmt:
+            ref when_ref = when_stmt.value()
+            self._trace("Evaluate when at " + child_path + ": " + when_ref.expression)
+            var simple_when = _eval_simple_when_on_object(when_ref.expression, obj)
+            if simple_when == 0:
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message=(
+                            "Node '"
+                            + name
+                            + "' is present but its 'when' condition is false"
+                        ),
+                        expression=when_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
+                return
+            if simple_when == 1:
+                pass
+            elif not when_ref.parsed or not when_ref.xpath_ast:
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="When expression could not be parsed",
+                        expression=when_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
+                return
+            else:
+                try:
+                    var root_node = XPathNode("/", "/")
+                    var root_arc = Arc[XPathNode](root_node^)
+                    var current_node = XPathNode(child_path, child_path)
+                    var current_arc = Arc[XPathNode](current_node^)
+                    var ctx = EvalContext(current_arc, root_arc, when_ref.expression, 0, 0)
+                    var ev = XPathEvaluator()
+                    var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
+                    if not eval_result_to_bool(when_result):
+                        self._errors.append(
+                            ValidationError(
+                                path=child_path,
+                                message=(
+                                    "Node '"
+                                    + name
+                                    + "' is present but its 'when' condition is false"
+                                ),
+                                expression=when_ref.expression,
+                                severity=Severity("error"),
+                            ),
+                        )
+                        return
+                except:
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message="When expression could not be evaluated",
+                            expression=when_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
+                    return
+        for i in range(len(must_statements)):
+            ref must_ref = must_statements[i][]
+            self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
+            if not must_ref.parsed or not must_ref.xpath_ast:
+                if len(must_ref.expression) > 0:
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message="Must expression could not be parsed",
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
+                continue
+            try:
+                var root_node = XPathNode("/", "/")
+                var root_arc = Arc[XPathNode](root_node^)
+                var current_node = XPathNode(child_path, child_path)
+                var current_arc = Arc[XPathNode](current_node^)
+                var ctx = EvalContext(current_arc, root_arc, must_ref.expression, 0, 0)
+                var ev = XPathEvaluator()
+                var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                if not eval_result_to_bool(result):
+                    var msg = must_ref.error_message
+                    if len(msg) == 0:
+                        msg = "Must constraint violated"
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message=msg,
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
+            except:
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="Must expression could not be evaluated",
+                        expression=must_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
+        _ = root_data
+
     ## Returns: 1 when true, 0 when false, -1 on parse/eval error (errors appended).
     def _eval_when_on_parent_object(
         mut self,
@@ -1054,6 +1290,8 @@ struct DocumentValidator:
         name: String,
         read pleaves: List[Arc[YangLeaf]],
         read pleaf_lists: List[Arc[YangLeafList]],
+        read panydatas: List[Arc[YangAnydata]],
+        read panyxmls: List[Arc[YangAnyxml]],
         read pcontainers: List[Arc[YangContainer]],
         read plists: List[Arc[YangList]],
         read pchoices: List[Arc[YangChoice]],
@@ -1068,6 +1306,36 @@ struct DocumentValidator:
         for i in range(len(pleaf_lists)):
             if pleaf_lists[i][].name == name:
                 self._visit_leaf_list(obj, pleaf_lists[i][], path, root_data, inner_enforce)
+                return
+        for i in range(len(panydatas)):
+            if panydatas[i][].name == name:
+                ref ad = panydatas[i][]
+                self._visit_untyped_data_node(
+                    obj,
+                    ad.name,
+                    ad.mandatory,
+                    ad.must_statements,
+                    ad.when,
+                    path,
+                    root_data,
+                    inner_enforce,
+                    "anydata",
+                )
+                return
+        for i in range(len(panyxmls)):
+            if panyxmls[i][].name == name:
+                ref ax = panyxmls[i][]
+                self._visit_untyped_data_node(
+                    obj,
+                    ax.name,
+                    ax.mandatory,
+                    ax.must_statements,
+                    ax.when,
+                    path,
+                    root_data,
+                    inner_enforce,
+                    "anyxml",
+                )
                 return
         for c in pcontainers:
             ref ch = c[]
@@ -1092,6 +1360,8 @@ struct DocumentValidator:
                     inner_enforce,
                     pleaves,
                     pleaf_lists,
+                    panydatas,
+                    panyxmls,
                     pcontainers,
                     plists,
                     pchoices,
@@ -1396,6 +1666,38 @@ struct DocumentValidator:
             if _choice_member_choice_index_list(list_node, nm) >= 0:
                 continue
             self._visit_leaf_list(obj, list_node.leaf_lists[i][], path, root_data, child_enforce)
+        for i in range(len(list_node.anydatas)):
+            var nm = list_node.anydatas[i][].name
+            if _choice_member_choice_index_list(list_node, nm) >= 0:
+                continue
+            ref ad = list_node.anydatas[i][]
+            self._visit_untyped_data_node(
+                obj,
+                ad.name,
+                ad.mandatory,
+                ad.must_statements,
+                ad.when,
+                path,
+                root_data,
+                child_enforce,
+                "anydata",
+            )
+        for i in range(len(list_node.anyxmls)):
+            var nm = list_node.anyxmls[i][].name
+            if _choice_member_choice_index_list(list_node, nm) >= 0:
+                continue
+            ref ax = list_node.anyxmls[i][]
+            self._visit_untyped_data_node(
+                obj,
+                ax.name,
+                ax.mandatory,
+                ax.must_statements,
+                ax.when,
+                path,
+                root_data,
+                child_enforce,
+                "anyxml",
+            )
         for c in list_node.containers:
             ref child_cont = c[]
             if child_cont.name in obj:
@@ -1419,6 +1721,8 @@ struct DocumentValidator:
                 child_enforce,
                 list_node.leaves,
                 list_node.leaf_lists,
+                list_node.anydatas,
+                list_node.anyxmls,
                 list_node.containers,
                 list_node.lists,
                 list_node.choices,
@@ -1433,6 +1737,8 @@ struct DocumentValidator:
         enforce_mandatory_choice: Bool,
         read pleaves: List[Arc[YangLeaf]],
         read pleaf_lists: List[Arc[YangLeafList]],
+        read panydatas: List[Arc[YangAnydata]],
+        read panyxmls: List[Arc[YangAnyxml]],
         read pcontainers: List[Arc[YangContainer]],
         read plists: List[Arc[YangList]],
         read pchoices: List[Arc[YangChoice]],
@@ -1509,6 +1815,8 @@ struct DocumentValidator:
                         act.node_names[j],
                         pleaves,
                         pleaf_lists,
+                        panydatas,
+                        panyxmls,
                         pcontainers,
                         plists,
                         pchoices,

@@ -32,10 +32,10 @@ Scope:
 | `choice` | Supported | Parsed; `when` on the choice is captured and evaluated in the validator; mandatory choice check implemented. |
 | `case` | Supported | Parsed under choice as case-name set. Explicit `case { ... }` blocks may include `when` in the text parser (as well as JSON Schema / JSON round-trip); validator evaluates case `when` when that case is active. |
 | `leaf-list` | Supported | Dedicated AST node and text-parser support; validator enforces array shape plus per-item type/leafref/must checks. |
-| `anydata`, `anyxml` | Not yet | Not modeled in current Mojo AST/validator path. |
+| `anydata`, `anyxml` | Supported | Parsed into AST; JSON Schema uses open instance `type` array plus `x-yang.type` (`anydata` / `anyxml`); validator enforces presence/mandatory, `when`, and `must` only (instance JSON unconstrained). Bodies accept `if-feature` and prefixed extensions like Python xYang. Optional draft subtree validation is not implemented (CLI flags remain unavailable). |
 | `grouping` | Supported | Text parser parses and stores groupings and supports grouped schema nodes used by this project (`leaf`, `leaf-list`, `container`, `list`, `choice`). |
-| `uses` | Partial | Text parser expands `uses` in `container`/`list`/`grouping` for in-module groupings; advanced `uses` substatements (`refine`, `if-feature`, etc.) are not applied yet. |
-| `augment` | Not yet | No augment processing. |
+| `uses` | Partial | Text parser expands `uses` in `container`/`list`/`grouping` for in-module groupings and applies `refine` plus `augment` substatements; `if-feature` is parsed/accepted but feature resolution is not yet enforced. |
+| `augment` | Partial | Text parser applies `augment` for in-module targets (including absolute module paths and relative paths under `uses`) for supported node kinds. |
 | `rpc`, `action`, `notification` | Not yet | Not modeled/validated. |
 | `deviation`/`deviate` | Not yet | Not modeled/validated. |
 
@@ -130,7 +130,7 @@ Good fit today:
 
 Not production-complete yet for:
 - Full RFC 7950 conformance.
-- Advanced module composition (`augment`/`deviation`, plus full RFC `grouping`/`uses` semantics such as refine/if-feature processing).
+- Advanced module composition (`deviation`, full feature-resolution for `if-feature`, and remaining RFC edge cases in `grouping`/`uses`/`augment`).
 - Resolving `identityref` / `bits` / `union` to full RFC 7950 data-model rules (e.g. identity heritage, all `typedef` and facet combinations).
 - Full XPath semantics.
 
