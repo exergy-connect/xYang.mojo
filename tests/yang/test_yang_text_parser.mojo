@@ -1,6 +1,6 @@
 from std.testing import assert_equal, assert_true, TestSuite
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
-from xyang.yang import parse_yang_file
+from xyang.yang import parse_yang_file, parse_yang_string
 
 
 def _find_leaf_index_by_name_in_container(name: String, path: String) raises -> Int:
@@ -88,6 +88,29 @@ def test_parse_basic_yang_file() raises:
     assert_true(interface_list.leaves[hold_time_idx][].type.has_range())
     assert_equal(interface_list.leaves[hold_time_idx][].type.range_min(), 0)
     assert_equal(interface_list.leaves[hold_time_idx][].type.range_max(), 300)
+
+
+def test_parse_mixed_single_double_quoted_string() raises:
+    var module = parse_yang_string(
+        """
+module quote-test {
+  namespace "urn:example:quote-test";
+  prefix qt;
+
+  container system {
+    leaf mixed {
+      type string;
+      default '"' + "'";
+    }
+  }
+}
+""",
+    )
+
+    ref system = module.top_level_containers[0][]
+    ref mixed = system.leaves[0][]
+    assert_true(mixed.has_default)
+    assert_equal(mixed.default_value, "\"'")
 
 
 def main() raises:

@@ -1,7 +1,7 @@
 from std.collections import Dict
 from std.collections.string import Codepoint
 from xyang.yang.parser.types import YangToken
-import xyang.yang.parser.yang_token as tk
+from xyang.yang.parser.yang_token import make_keyword_type_map
 
 comptime CP_NEWLINE = Codepoint.ord("\n")
 comptime CP_SLASH = Codepoint.ord("/")
@@ -14,11 +14,14 @@ comptime CP_BRACE_CLOSE = Codepoint.ord("}")
 comptime CP_SEMICOLON = Codepoint.ord(";")
 comptime CP_COLON = Codepoint.ord(":")
 comptime CP_PLUS = Codepoint.ord("+")
+comptime CP_MINUS = Codepoint.ord("-")
+comptime CP_UNDERSCORE = Codepoint.ord("_")
+comptime CP_DOT = Codepoint.ord(".")
 
 
 def tokenize_yang_impl(source: String) -> List[YangToken]:
     var tokens = List[YangToken]()
-    var keyword_types = _make_keyword_type_map()
+    var keyword_types = make_keyword_type_map()
 
     var i = 0
     var n = len(source)
@@ -156,101 +159,46 @@ def _token_type_for_lexeme(
     lexeme: String,
     read keyword_types: Dict[String, Int],
 ) -> Int:
+    if _starts_identifier_lexeme(lexeme):
+        return _keyword_type_for_lexeme(lexeme, keyword_types)
     if _is_integer_lexeme(lexeme):
         return YangToken.INTEGER
     if _is_dotted_number_lexeme(lexeme):
         return YangToken.DOTTED_NUMBER
-    return _keyword_type_for_lexeme(lexeme, keyword_types)
+    return YangToken.UNKNOWN
 
 
 def _keyword_type_for_lexeme(
     lexeme: String,
     read keyword_types: Dict[String, Int],
 ) -> Int:
-    var tok_type = keyword_types.get(lexeme)
-    if tok_type:
-        return tok_type.value()
-    return YangToken.IDENTIFIER
+    return keyword_types.get(lexeme).or_else(YangToken.IDENTIFIER)
 
 
-def _make_keyword_type_map() -> Dict[String, Int]:
-    var d = Dict[String, Int]()
+def _starts_numeric_lexeme(lexeme: String) -> Bool:
+    var n = len(lexeme)
+    if n == 0:
+        return False
+    var c0 = _codepoint_at_byte(lexeme, 0)
+    if c0.is_ascii_digit():
+        return True
+    if c0 == CP_MINUS and n > 1:
+        return _codepoint_at_byte(lexeme, 1).is_ascii_digit()
+    return False
 
-    ## YANG_TYPE_* keywords
-    d[tk.YANG_TYPE_LEAFREF] = YangToken.LEAFREF
-    d[tk.YANG_TYPE_UNKNOWN] = YangToken.IDENTIFIER
-    d[tk.YANG_TYPE_ENUMERATION] = YangToken.ENUMERATION
-    d[tk.YANG_TYPE_BINARY] = YangToken.BINARY
-    d[tk.YANG_TYPE_BITS] = YangToken.BITS
-    d[tk.YANG_TYPE_BOOLEAN] = YangToken.BOOLEAN_KW
-    d[tk.YANG_TYPE_DECIMAL64] = YangToken.DECIMAL64
-    d[tk.YANG_TYPE_EMPTY] = YangToken.EMPTY
-    d[tk.YANG_TYPE_IDENTITYREF] = YangToken.IDENTITYREF
-    d[tk.YANG_TYPE_INSTANCE_IDENTIFIER] = YangToken.INSTANCE_IDENTIFIER
-    d[tk.YANG_TYPE_INT8] = YangToken.INT8_KW
-    d[tk.YANG_TYPE_INT16] = YangToken.INT16_KW
-    d[tk.YANG_TYPE_INT32] = YangToken.INT32_KW
-    d[tk.YANG_TYPE_INT64] = YangToken.INT64_KW
-    d[tk.YANG_TYPE_STRING] = YangToken.STRING_KW
-    d[tk.YANG_TYPE_UINT8] = YangToken.UINT8_KW
-    d[tk.YANG_TYPE_UINT16] = YangToken.UINT16_KW
-    d[tk.YANG_TYPE_UINT32] = YangToken.UINT32_KW
-    d[tk.YANG_TYPE_UINT64] = YangToken.UINT64_KW
 
-    ## YANG_BOOL_* keywords
-    d[tk.YANG_BOOL_TRUE] = YangToken.TRUE
-    d[tk.YANG_BOOL_FALSE] = YangToken.FALSE
-
-    ## YANG_STMT_* keywords
-    d[tk.YANG_STMT_MODULE] = YangToken.MODULE
-    d[tk.YANG_STMT_NAMESPACE] = YangToken.NAMESPACE
-    d[tk.YANG_STMT_PREFIX] = YangToken.PREFIX
-    d[tk.YANG_STMT_DESCRIPTION] = YangToken.DESCRIPTION
-    d[tk.YANG_STMT_REVISION] = YangToken.REVISION
-    d[tk.YANG_STMT_ORGANIZATION] = YangToken.ORGANIZATION
-    d[tk.YANG_STMT_CONTACT] = YangToken.CONTACT
-    d[tk.YANG_STMT_CONTAINER] = YangToken.CONTAINER
-    d[tk.YANG_STMT_GROUPING] = YangToken.GROUPING
-    d[tk.YANG_STMT_USES] = YangToken.USES
-    d[tk.YANG_STMT_REFINE] = YangToken.REFINE
-    d[tk.YANG_STMT_IF_FEATURE] = YangToken.IF_FEATURE
-    d[tk.YANG_STMT_AUGMENT] = YangToken.AUGMENT
-    d[tk.YANG_STMT_LIST] = YangToken.LIST
-    d[tk.YANG_STMT_KEY] = YangToken.KEY
-    d[tk.YANG_STMT_LEAF] = YangToken.LEAF
-    d[tk.YANG_STMT_LEAF_LIST] = YangToken.LEAF_LIST
-    d[tk.YANG_STMT_ANYDATA] = YangToken.ANYDATA
-    d[tk.YANG_STMT_ANYXML] = YangToken.ANYXML
-    d[tk.YANG_STMT_CHOICE] = YangToken.CHOICE
-    d[tk.YANG_STMT_CASE] = YangToken.CASE
-    d[tk.YANG_STMT_TYPE] = YangToken.TYPE
-    d[tk.YANG_STMT_UNION] = YangToken.UNION
-    d[tk.YANG_STMT_ENUM] = YangToken.ENUM
-    d[tk.YANG_STMT_MANDATORY] = YangToken.MANDATORY
-    d[tk.YANG_STMT_DEFAULT] = YangToken.DEFAULT
-    d[tk.YANG_STMT_MUST] = YangToken.MUST
-    d[tk.YANG_STMT_WHEN] = YangToken.WHEN
-    d[tk.YANG_STMT_RANGE] = YangToken.RANGE
-    d[tk.YANG_STMT_PATH] = YangToken.PATH
-    d[tk.YANG_STMT_FRACTION_DIGITS] = YangToken.FRACTION_DIGITS
-    d[tk.YANG_STMT_BIT] = YangToken.BIT
-    d[tk.YANG_STMT_BASE] = YangToken.BASE
-    d[tk.YANG_STMT_POSITION] = YangToken.POSITION
-    d[tk.YANG_STMT_REQUIRE_INSTANCE] = YangToken.REQUIRE_INSTANCE
-    d[tk.YANG_STMT_ERROR_MESSAGE] = YangToken.ERROR_MESSAGE
-    d[tk.YANG_STMT_MIN_ELEMENTS] = YangToken.MIN_ELEMENTS
-    d[tk.YANG_STMT_MAX_ELEMENTS] = YangToken.MAX_ELEMENTS
-    d[tk.YANG_STMT_ORDERED_BY] = YangToken.ORDERED_BY
-    d[tk.YANG_STMT_UNIQUE] = YangToken.UNIQUE
-
-    return d^
+def _starts_identifier_lexeme(lexeme: String) -> Bool:
+    if len(lexeme) == 0:
+        return False
+    var c0 = _codepoint_at_byte(lexeme, 0)
+    return c0.is_ascii_upper() or c0.is_ascii_lower() or c0 == CP_UNDERSCORE
 
 
 def _is_integer_lexeme(lexeme: String) -> Bool:
     if len(lexeme) == 0:
         return False
     var i = 0
-    if lexeme[byte=0 : 1] == "-":
+    if _codepoint_at_byte(lexeme, 0) == CP_MINUS:
         if len(lexeme) == 1:
             return False
         i = 1
@@ -275,7 +223,7 @@ def _is_dotted_number_lexeme(lexeme: String) -> Bool:
             saw_digit = True
             i += 1
             continue
-        if c == Codepoint.ord("."):
+        if c == CP_DOT:
             if i == 0 or i + 1 >= n:
                 return False
             var next_c = _codepoint_at_byte(lexeme, i + 1)

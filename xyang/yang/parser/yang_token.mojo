@@ -1,3 +1,5 @@
+from std.collections import Dict
+
 ## YANG parser/validator string constants.
 ## Moved here so parser token definitions own their keyword lexemes.
 
@@ -84,72 +86,73 @@ struct YangToken(Copyable):
     comptime IDENTIFIER: Self.Type = 8
     comptime INTEGER: Self.Type = 9
     comptime DOTTED_NUMBER: Self.Type = 10
+    comptime UNKNOWN: Self.Type = 11
 
     ## YANG_TYPE_* keywords
-    comptime LEAFREF: Self.Type = 11
-    comptime ENUMERATION: Self.Type = 12
-    comptime BINARY: Self.Type = 13
-    comptime BITS: Self.Type = 14
-    comptime BOOLEAN_KW: Self.Type = 15
-    comptime DECIMAL64: Self.Type = 16
-    comptime EMPTY: Self.Type = 17
-    comptime IDENTITYREF: Self.Type = 18
-    comptime INSTANCE_IDENTIFIER: Self.Type = 19
-    comptime INT8_KW: Self.Type = 20
-    comptime INT16_KW: Self.Type = 21
-    comptime INT32_KW: Self.Type = 22
-    comptime INT64_KW: Self.Type = 23
-    comptime STRING_KW: Self.Type = 24
-    comptime UINT8_KW: Self.Type = 25
-    comptime UINT16_KW: Self.Type = 26
-    comptime UINT32_KW: Self.Type = 27
-    comptime UINT64_KW: Self.Type = 28
+    comptime LEAFREF: Self.Type = 12
+    comptime ENUMERATION: Self.Type = 13
+    comptime BINARY: Self.Type = 14
+    comptime BITS: Self.Type = 15
+    comptime BOOLEAN_KW: Self.Type = 16
+    comptime DECIMAL64: Self.Type = 17
+    comptime EMPTY: Self.Type = 18
+    comptime IDENTITYREF: Self.Type = 19
+    comptime INSTANCE_IDENTIFIER: Self.Type = 20
+    comptime INT8_KW: Self.Type = 21
+    comptime INT16_KW: Self.Type = 22
+    comptime INT32_KW: Self.Type = 23
+    comptime INT64_KW: Self.Type = 24
+    comptime STRING_KW: Self.Type = 25
+    comptime UINT8_KW: Self.Type = 26
+    comptime UINT16_KW: Self.Type = 27
+    comptime UINT32_KW: Self.Type = 28
+    comptime UINT64_KW: Self.Type = 29
 
     ## YANG_BOOL_* keywords
-    comptime TRUE: Self.Type = 29
-    comptime FALSE: Self.Type = 30
+    comptime TRUE: Self.Type = 30
+    comptime FALSE: Self.Type = 31
 
     ## YANG_STMT_* keywords
-    comptime MODULE: Self.Type = 31
-    comptime NAMESPACE: Self.Type = 32
-    comptime PREFIX: Self.Type = 33
-    comptime DESCRIPTION: Self.Type = 34
-    comptime REVISION: Self.Type = 35
-    comptime ORGANIZATION: Self.Type = 36
-    comptime CONTACT: Self.Type = 37
-    comptime CONTAINER: Self.Type = 38
-    comptime GROUPING: Self.Type = 39
-    comptime USES: Self.Type = 40
-    comptime REFINE: Self.Type = 41
-    comptime IF_FEATURE: Self.Type = 42
-    comptime AUGMENT: Self.Type = 43
-    comptime LIST: Self.Type = 44
-    comptime KEY: Self.Type = 45
-    comptime LEAF: Self.Type = 46
-    comptime LEAF_LIST: Self.Type = 47
-    comptime ANYDATA: Self.Type = 48
-    comptime ANYXML: Self.Type = 49
-    comptime CHOICE: Self.Type = 50
-    comptime CASE: Self.Type = 51
-    comptime TYPE: Self.Type = 52
-    comptime UNION: Self.Type = 53
-    comptime ENUM: Self.Type = 54
-    comptime MANDATORY: Self.Type = 55
-    comptime DEFAULT: Self.Type = 56
-    comptime MUST: Self.Type = 57
-    comptime WHEN: Self.Type = 58
-    comptime RANGE: Self.Type = 59
-    comptime PATH: Self.Type = 60
-    comptime FRACTION_DIGITS: Self.Type = 61
-    comptime BIT: Self.Type = 62
-    comptime BASE: Self.Type = 63
-    comptime POSITION: Self.Type = 64
-    comptime REQUIRE_INSTANCE: Self.Type = 65
-    comptime ERROR_MESSAGE: Self.Type = 66
-    comptime MIN_ELEMENTS: Self.Type = 67
-    comptime MAX_ELEMENTS: Self.Type = 68
-    comptime ORDERED_BY: Self.Type = 69
-    comptime UNIQUE: Self.Type = 70
+    comptime MODULE: Self.Type = 32
+    comptime NAMESPACE: Self.Type = 33
+    comptime PREFIX: Self.Type = 34
+    comptime DESCRIPTION: Self.Type = 35
+    comptime REVISION: Self.Type = 36
+    comptime ORGANIZATION: Self.Type = 37
+    comptime CONTACT: Self.Type = 38
+    comptime CONTAINER: Self.Type = 39
+    comptime GROUPING: Self.Type = 40
+    comptime USES: Self.Type = 41
+    comptime REFINE: Self.Type = 42
+    comptime IF_FEATURE: Self.Type = 43
+    comptime AUGMENT: Self.Type = 44
+    comptime LIST: Self.Type = 45
+    comptime KEY: Self.Type = 46
+    comptime LEAF: Self.Type = 47
+    comptime LEAF_LIST: Self.Type = 48
+    comptime ANYDATA: Self.Type = 49
+    comptime ANYXML: Self.Type = 50
+    comptime CHOICE: Self.Type = 51
+    comptime CASE: Self.Type = 52
+    comptime TYPE: Self.Type = 53
+    comptime UNION: Self.Type = 54
+    comptime ENUM: Self.Type = 55
+    comptime MANDATORY: Self.Type = 56
+    comptime DEFAULT: Self.Type = 57
+    comptime MUST: Self.Type = 58
+    comptime WHEN: Self.Type = 59
+    comptime RANGE: Self.Type = 60
+    comptime PATH: Self.Type = 61
+    comptime FRACTION_DIGITS: Self.Type = 62
+    comptime BIT: Self.Type = 63
+    comptime BASE: Self.Type = 64
+    comptime POSITION: Self.Type = 65
+    comptime REQUIRE_INSTANCE: Self.Type = 66
+    comptime ERROR_MESSAGE: Self.Type = 67
+    comptime MIN_ELEMENTS: Self.Type = 68
+    comptime MAX_ELEMENTS: Self.Type = 69
+    comptime ORDERED_BY: Self.Type = 70
+    comptime UNIQUE: Self.Type = 71
 
     var type: Self.Type
     var start: Int
@@ -162,3 +165,76 @@ struct YangToken(Copyable):
                 source[byte=self.start + 1 : self.start + self.length - 1]
             )
         return String(source[byte=self.start : self.start + self.length])
+
+
+def make_keyword_type_map() -> Dict[String, YangToken.Type]:
+    var d = Dict[String, YangToken.Type]()
+
+    ## YANG_TYPE_* keywords
+    d[YANG_TYPE_LEAFREF] = YangToken.LEAFREF
+    d[YANG_TYPE_UNKNOWN] = YangToken.IDENTIFIER
+    d[YANG_TYPE_ENUMERATION] = YangToken.ENUMERATION
+    d[YANG_TYPE_BINARY] = YangToken.BINARY
+    d[YANG_TYPE_BITS] = YangToken.BITS
+    d[YANG_TYPE_BOOLEAN] = YangToken.BOOLEAN_KW
+    d[YANG_TYPE_DECIMAL64] = YangToken.DECIMAL64
+    d[YANG_TYPE_EMPTY] = YangToken.EMPTY
+    d[YANG_TYPE_IDENTITYREF] = YangToken.IDENTITYREF
+    d[YANG_TYPE_INSTANCE_IDENTIFIER] = YangToken.INSTANCE_IDENTIFIER
+    d[YANG_TYPE_INT8] = YangToken.INT8_KW
+    d[YANG_TYPE_INT16] = YangToken.INT16_KW
+    d[YANG_TYPE_INT32] = YangToken.INT32_KW
+    d[YANG_TYPE_INT64] = YangToken.INT64_KW
+    d[YANG_TYPE_STRING] = YangToken.STRING_KW
+    d[YANG_TYPE_UINT8] = YangToken.UINT8_KW
+    d[YANG_TYPE_UINT16] = YangToken.UINT16_KW
+    d[YANG_TYPE_UINT32] = YangToken.UINT32_KW
+    d[YANG_TYPE_UINT64] = YangToken.UINT64_KW
+
+    ## YANG_BOOL_* keywords
+    d[YANG_BOOL_TRUE] = YangToken.TRUE
+    d[YANG_BOOL_FALSE] = YangToken.FALSE
+
+    ## YANG_STMT_* keywords
+    d[YANG_STMT_MODULE] = YangToken.MODULE
+    d[YANG_STMT_NAMESPACE] = YangToken.NAMESPACE
+    d[YANG_STMT_PREFIX] = YangToken.PREFIX
+    d[YANG_STMT_DESCRIPTION] = YangToken.DESCRIPTION
+    d[YANG_STMT_REVISION] = YangToken.REVISION
+    d[YANG_STMT_ORGANIZATION] = YangToken.ORGANIZATION
+    d[YANG_STMT_CONTACT] = YangToken.CONTACT
+    d[YANG_STMT_CONTAINER] = YangToken.CONTAINER
+    d[YANG_STMT_GROUPING] = YangToken.GROUPING
+    d[YANG_STMT_USES] = YangToken.USES
+    d[YANG_STMT_REFINE] = YangToken.REFINE
+    d[YANG_STMT_IF_FEATURE] = YangToken.IF_FEATURE
+    d[YANG_STMT_AUGMENT] = YangToken.AUGMENT
+    d[YANG_STMT_LIST] = YangToken.LIST
+    d[YANG_STMT_KEY] = YangToken.KEY
+    d[YANG_STMT_LEAF] = YangToken.LEAF
+    d[YANG_STMT_LEAF_LIST] = YangToken.LEAF_LIST
+    d[YANG_STMT_ANYDATA] = YangToken.ANYDATA
+    d[YANG_STMT_ANYXML] = YangToken.ANYXML
+    d[YANG_STMT_CHOICE] = YangToken.CHOICE
+    d[YANG_STMT_CASE] = YangToken.CASE
+    d[YANG_STMT_TYPE] = YangToken.TYPE
+    d[YANG_STMT_UNION] = YangToken.UNION
+    d[YANG_STMT_ENUM] = YangToken.ENUM
+    d[YANG_STMT_MANDATORY] = YangToken.MANDATORY
+    d[YANG_STMT_DEFAULT] = YangToken.DEFAULT
+    d[YANG_STMT_MUST] = YangToken.MUST
+    d[YANG_STMT_WHEN] = YangToken.WHEN
+    d[YANG_STMT_RANGE] = YangToken.RANGE
+    d[YANG_STMT_PATH] = YangToken.PATH
+    d[YANG_STMT_FRACTION_DIGITS] = YangToken.FRACTION_DIGITS
+    d[YANG_STMT_BIT] = YangToken.BIT
+    d[YANG_STMT_BASE] = YangToken.BASE
+    d[YANG_STMT_POSITION] = YangToken.POSITION
+    d[YANG_STMT_REQUIRE_INSTANCE] = YangToken.REQUIRE_INSTANCE
+    d[YANG_STMT_ERROR_MESSAGE] = YangToken.ERROR_MESSAGE
+    d[YANG_STMT_MIN_ELEMENTS] = YangToken.MIN_ELEMENTS
+    d[YANG_STMT_MAX_ELEMENTS] = YangToken.MAX_ELEMENTS
+    d[YANG_STMT_ORDERED_BY] = YangToken.ORDERED_BY
+    d[YANG_STMT_UNIQUE] = YangToken.UNIQUE
+
+    return d^

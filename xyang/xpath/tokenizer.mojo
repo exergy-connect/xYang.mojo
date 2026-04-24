@@ -29,6 +29,7 @@ comptime CP_BACKSLASH = Codepoint.ord("\\")
 comptime CP_UNDERSCORE = Codepoint.ord("_")
 comptime CP_COLON = Codepoint.ord(":")
 comptime CP_NEWLINE = Codepoint.ord("\n")
+comptime CP_EOF = Codepoint(0)
 
 
 struct XPathTokenizer(Movable):
@@ -73,8 +74,6 @@ struct XPathTokenizer(Movable):
 
 def _at_end(ref self: XPathTokenizer) -> Bool:
     return self.pos >= len(self.expression)
-
-comptime CP_EOF = Codepoint(0)
 
 def _peek(ref self: XPathTokenizer) raises -> Codepoint:
     if _at_end(self):
