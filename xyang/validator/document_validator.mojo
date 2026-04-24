@@ -836,7 +836,17 @@ struct DocumentValidator:
                 return
             if simple_when == 1:
                 pass
-            elif when_ref.parsed and when_ref.xpath_ast:
+            elif not when_ref.parsed or not when_ref.xpath_ast:
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="When expression could not be parsed",
+                        expression=when_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
+                return
+            else:
                 try:
                     var root_node = XPathNode("/", "/")
                     var root_arc = Arc[XPathNode](root_node^)
@@ -898,6 +908,15 @@ struct DocumentValidator:
             ref must_ref = leaf.must_statements[i][]
             self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
             if not must_ref.parsed or not must_ref.xpath_ast:
+                if len(must_ref.expression) > 0:
+                    self._errors.append(
+                        ValidationError(
+                            path=child_path,
+                            message="Must expression could not be parsed",
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
                 continue
             try:
                 var root_node = XPathNode("/", "/")
@@ -932,30 +951,47 @@ struct DocumentValidator:
                     ),
                 )
 
+    ## Returns: 1 when true, 0 when false, -1 on parse/eval error (errors appended).
     def _eval_when_on_parent_object(
         mut self,
         obj: Object,
         when_path: String,
         read when_ref: YangWhen,
-    ) raises -> Bool:
+    ) raises -> Int:
         var simple_when = _eval_simple_when_on_object(when_ref.expression, obj)
         if simple_when == 0:
-            return False
+            return 0
         if simple_when == 1:
-            return True
-        if when_ref.parsed and when_ref.xpath_ast:
-            try:
-                var root_node = XPathNode("/", "/")
-                var root_arc = Arc[XPathNode](root_node^)
-                var current_node = XPathNode(when_path, when_path)
-                var current_arc = Arc[XPathNode](current_node^)
-                var ctx = EvalContext(current_arc, root_arc, when_ref.expression, 0, 0)
-                var ev = XPathEvaluator()
-                var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
-                return eval_result_to_bool(when_result)
-            except:
-                return True
-        return True
+            return 1
+        if not when_ref.parsed or not when_ref.xpath_ast:
+            self._errors.append(
+                ValidationError(
+                    path=when_path,
+                    message="When expression could not be parsed",
+                    expression=when_ref.expression,
+                    severity=Severity("error"),
+                ),
+            )
+            return -1
+        try:
+            var root_node = XPathNode("/", "/")
+            var root_arc = Arc[XPathNode](root_node^)
+            var current_node = XPathNode(when_path, when_path)
+            var current_arc = Arc[XPathNode](current_node^)
+            var ctx = EvalContext(current_arc, root_arc, when_ref.expression, 0, 0)
+            var ev = XPathEvaluator()
+            var when_result = ev.eval(when_ref.xpath_ast, ctx, current_arc)
+            return 1 if eval_result_to_bool(when_result) else 0
+        except:
+            self._errors.append(
+                ValidationError(
+                    path=when_path,
+                    message="When expression could not be evaluated",
+                    expression=when_ref.expression,
+                    severity=Severity("error"),
+                ),
+            )
+            return -1
 
     def _list_has_duplicate_keys(
         mut self,
@@ -1118,7 +1154,19 @@ struct DocumentValidator:
                     ),
                 )
                 return
-            if simple_when != 1 and when_ref.parsed and when_ref.xpath_ast:
+            if simple_when == 1:
+                pass
+            elif not when_ref.parsed or not when_ref.xpath_ast:
+                self._errors.append(
+                    ValidationError(
+                        path=child_path,
+                        message="When expression could not be parsed",
+                        expression=when_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
+                return
+            else:
                 try:
                     var root_node = XPathNode("/", "/")
                     var root_arc = Arc[XPathNode](root_node^)
@@ -1208,6 +1256,15 @@ struct DocumentValidator:
             for j in range(len(leaf_list.must_statements)):
                 ref must_ref = leaf_list.must_statements[j][]
                 if not must_ref.parsed or not must_ref.xpath_ast:
+                    if len(must_ref.expression) > 0:
+                        self._errors.append(
+                            ValidationError(
+                                path=item_path,
+                                message="Must expression could not be parsed",
+                                expression=must_ref.expression,
+                                severity=Severity("error"),
+                            ),
+                        )
                     continue
                 try:
                     var root_node = XPathNode("/", "/")
@@ -1396,7 +1453,10 @@ struct DocumentValidator:
     ) raises:
         if choice.has_when():
             ref wf = choice.when.value()
-            if not self._eval_when_on_parent_object(obj, path.current(), wf):
+            var when_res = self._eval_when_on_parent_object(obj, path.current(), wf)
+            if when_res < 0:
+                return
+            if when_res == 0:
                 if _choice_has_any_branch_data(choice, obj):
                     self._errors.append(
                         ValidationError(
@@ -1436,7 +1496,10 @@ struct DocumentValidator:
             ref act = choice.cases[active[0]][]
             if act.has_when():
                 ref cw = act.when.value()
-                if not self._eval_when_on_parent_object(obj, path.current(), cw):
+                var case_when = self._eval_when_on_parent_object(obj, path.current(), cw)
+                if case_when < 0:
+                    return
+                if case_when == 0:
                     if _case_has_any_data(act, obj):
                         self._errors.append(
                             ValidationError(

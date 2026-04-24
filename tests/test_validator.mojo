@@ -1,6 +1,7 @@
 ## Smoke test: parse module, parse data, run validator.
 
 from emberjson import parse, Value
+from std.testing import assert_true
 from xyang.json.parser import parse_yang_module
 from xyang.validator import YangValidator
 
@@ -17,6 +18,7 @@ def main() raises:
     var validator = YangValidator()
     var result = validator.validate(data, module)
 
-    print("Valid:" if result.is_valid else "Invalid")
-    for i in range(len(result.errors)):
-        print("  error: " + result.errors[i])
+    if not result.is_valid:
+        for i in range(len(result.errors)):
+            print("  error: " + result.errors[i])
+    assert_true(result.is_valid)

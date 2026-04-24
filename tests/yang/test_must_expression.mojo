@@ -141,5 +141,42 @@ def test_list_element_must_invalid() raises:
     assert_false(result.is_valid)
 
 
+def test_must_unparsed_expression_is_validation_error() raises:
+    # XPath parse failure must surface as a validation error, not be skipped.
+    var schema = """
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:test:badmust",
+      "x-yang": {
+        "module": "badmust",
+        "yang-version": "1.1",
+        "namespace": "urn:test:badmust",
+        "prefix": "b"
+      },
+      "type": "object",
+      "properties": {
+        "data-model": {
+          "type": "object",
+          "x-yang": { "type": "container" },
+          "properties": {
+            "name": {
+              "type": "string",
+              "x-yang": {
+                "type": "leaf",
+                "must": [{"must": "('a','b')"}]
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    var mod = parse_yang_module(schema)
+    var data: Value = parse_json('{"data-model": {"name": "x"}}')
+    var validator = YangValidator()
+    var result = validator.validate(data, mod)
+    assert_false(result.is_valid)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
