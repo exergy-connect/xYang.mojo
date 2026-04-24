@@ -287,9 +287,6 @@ struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen)
     var mandatory: Bool
     var has_default: Bool
     var default_value: String
-    ## True when the YANG `default` argument was a quoted string, or JSON Schema default is a string on a union type.
-    ## Used so JSON `default` keeps the user’s type (e.g. string `"42"` vs integer `42`) for `oneOf` unions.
-    var default_argument_was_quoted: Bool
     var must_statements: List[Arc[YangMust]]
     var when: Optional[YangWhen]
 

@@ -240,11 +240,8 @@ def _default_json_value(default_text: String, type_name: String) raises -> Optio
 def _default_json_value_for_type(
     default_text: String,
     read type_stmt: YangType,
-    default_argument_was_quoted: Bool,
 ) raises -> Optional[Value]:
     if type_stmt.name == YANG_STMT_UNION:
-        if default_argument_was_quoted:
-            return Optional(Value(default_text))
         for i in range(type_stmt.union_members_len()):
             var dv = _default_json_value(default_text, type_stmt.union_member_arc(i)[].name)
             if dv:
@@ -263,11 +260,7 @@ def _leaf_property(read leaf: YangLeaf) raises -> Object:
     out[JSON_SCHEMA_DESCRIPTION] = Value("")
     out[JSON_SCHEMA_X_YANG] = Value(_leaf_xyang(leaf))
     if leaf.has_default:
-        var dv = _default_json_value_for_type(
-            leaf.default_value,
-            leaf.type,
-            leaf.default_argument_was_quoted,
-        )
+        var dv = _default_json_value_for_type(leaf.default_value, leaf.type)
         if dv:
             out[JSON_SCHEMA_DEFAULT] = dv.value().copy()
     return out^
@@ -300,7 +293,7 @@ def _leaf_list_property(read ll: YangLeafList) raises -> Object:
     if len(ll.default_values) > 0:
         var darr = Array()
         for i in range(len(ll.default_values)):
-            var dv = _default_json_value_for_type(ll.default_values[i], ll.type, False)
+            var dv = _default_json_value_for_type(ll.default_values[i], ll.type)
             if dv:
                 darr.append(dv.value().copy())
         if len(darr) > 0:

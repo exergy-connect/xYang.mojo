@@ -91,8 +91,8 @@ def test_generate_and_roundtrip_enum_and_union() raises:
     assert_true(id_or_name_prop["oneOf"].is_array())
     assert_true(len(id_or_name_prop["oneOf"].array()) == 2)
     assert_true("default" in id_or_name_prop)
-    assert_true(id_or_name_prop["default"].is_string())
-    assert_equal(id_or_name_prop["default"].string(), "42")
+    assert_true(id_or_name_prop["default"].is_int())
+    assert_equal(id_or_name_prop["default"].int(), 42)
 
     var json_text = schema_to_yang_json(module)
     var roundtrip = parse_json_schema(json_text)

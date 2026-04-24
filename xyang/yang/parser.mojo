@@ -390,7 +390,6 @@ struct _YangParser(Movable):
         var mandatory = False
         var has_default = False
         var default_value = ""
-        var default_argument_was_quoted = False
         var must = List[Arc[YangMust]]()
         var when = Optional[YangWhen]()
 
@@ -405,15 +404,9 @@ struct _YangParser(Movable):
                     self._skip_if(";")
                 elif stmt == YANG_STMT_DEFAULT:
                     self._consume()
-                    var any_quoted = False
-                    if self._has_more():
-                        any_quoted = self.tokens[self.index].quoted
                     default_value = self._consume_value()
                     while self._consume_if("+"):
-                        if self._has_more() and self.tokens[self.index].quoted:
-                            any_quoted = True
                         default_value += self._consume_value()
-                    default_argument_was_quoted = any_quoted
                     has_default = True
                     self._skip_if(";")
                 elif stmt == YANG_STMT_MUST:
@@ -437,7 +430,6 @@ struct _YangParser(Movable):
             mandatory = mandatory,
             has_default = has_default,
             default_value = default_value,
-            default_argument_was_quoted = default_argument_was_quoted,
             must_statements = must^,
             when = when^,
         )

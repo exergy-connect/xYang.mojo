@@ -357,15 +357,12 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
     var when = Optional[YangWhen]()
     var has_default = False
     var default_value = ""
-    var default_argument_was_quoted = False
     if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
         ref xy = prop.object()["x-yang"]
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
     if "default" in prop.object():
         ref dv = prop.object()["default"]
-        if type_stmt.name == YANG_STMT_UNION and dv.is_string():
-            default_argument_was_quoted = True
         default_value = _default_scalar_to_string(dv)
         has_default = len(default_value) > 0
     return YangLeaf(
@@ -374,7 +371,6 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
         mandatory = mandatory,
         has_default = has_default,
         default_value = default_value,
-        default_argument_was_quoted = default_argument_was_quoted,
         must_statements = must_list^,
         when = when^,
     )

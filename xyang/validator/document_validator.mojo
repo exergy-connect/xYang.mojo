@@ -165,14 +165,8 @@ def _default_text_to_value_for_type(
     return Optional(Value(default_text))
 
 
-def _default_text_to_value(
-    default_text: String,
-    type_stmt: YangType,
-    quoted_union_default: Bool,
-) -> Value:
+def _default_text_to_value(default_text: String, type_stmt: YangType) -> Value:
     if type_stmt.name == "union":
-        if quoted_union_default:
-            return Value(default_text)
         for i in range(type_stmt.union_members_len()):
             var maybe = _default_text_to_value_for_type(
                 default_text, type_stmt.union_member_arc(i)[]
@@ -562,11 +556,7 @@ struct DocumentValidator:
                 # Conservative: if we cannot determine effective when context cheaply,
                 # do not realize the default value.
                 return
-        obj[leaf.name] = _default_text_to_value(
-            leaf.default_value,
-            leaf.type,
-            leaf.default_argument_was_quoted,
-        )
+        obj[leaf.name] = _default_text_to_value(leaf.default_value, leaf.type)
 
     def _realize_leaf_list_default(mut self, mut obj: Object, leaf_list: YangLeafList) raises:
         if leaf_list.name in obj or len(leaf_list.default_values) == 0:
@@ -581,11 +571,7 @@ struct DocumentValidator:
         var arr = Array()
         for i in range(len(leaf_list.default_values)):
             arr.append(
-                _default_text_to_value(
-                    leaf_list.default_values[i],
-                    leaf_list.type,
-                    False,
-                ),
+                _default_text_to_value(leaf_list.default_values[i], leaf_list.type),
             )
         obj[leaf_list.name] = Value(arr^)
 
