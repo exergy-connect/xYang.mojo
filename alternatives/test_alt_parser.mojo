@@ -17,21 +17,21 @@ from alternatives.xpath.ast import (
 # Atoms: number, string (via parse())
 # -----------------------------
 
-def test_alt_parse_number():
+def test_alt_parse_number() raises:
     var parser = XPathParser("42")
     var node = parser.parse()
     assert_true(node[].isa[LiteralNode]())
     assert_equal(node[][LiteralNode].value.text(parser.expression), "42")
 
 
-def test_alt_parse_string():
+def test_alt_parse_string() raises:
     var parser = XPathParser("'hello'")
     var node = parser.parse()
     assert_true(node[].isa[LiteralNode]())
     assert_equal(node[][LiteralNode].value.text(parser.expression, strip_quotes=True), "hello")
 
 
-def test_alt_parse_parens():
+def test_alt_parse_parens() raises:
     var parser = XPathParser("(7)")
     var node = parser.parse()
     assert_true(node[].isa[LiteralNode]())
@@ -42,7 +42,7 @@ def test_alt_parse_parens():
 # Binary operators (parse())
 # -----------------------------
 
-def test_alt_parse_binary_plus():
+def test_alt_parse_binary_plus() raises:
     var parser = XPathParser("1 + 2")
     var node = parser.parse()
     assert_true(node[].isa[BinaryOpNode]())
@@ -54,7 +54,7 @@ def test_alt_parse_binary_plus():
     assert_equal(bin_node.right[][LiteralNode].value.text(parser.expression), "2")
 
 
-def test_alt_parse_binary_and():
+def test_alt_parse_binary_and() raises:
     var parser = XPathParser("a and b")
     var node = parser.parse()
     assert_true(node[].isa[BinaryOpNode]())
@@ -66,21 +66,21 @@ def test_alt_parse_binary_and():
     assert_equal(bin_node.right[][PathNode].segments[0][].step.text(parser.expression), "b")
 
 
-def test_alt_parse_binary_or():
+def test_alt_parse_binary_or() raises:
     var parser = XPathParser("x or y")
     var node = parser.parse()
     assert_true(node[].isa[BinaryOpNode]())
     assert_equal(node[][BinaryOpNode].operator.text(parser.expression), "or")
 
 
-def test_alt_parse_binary_equals():
+def test_alt_parse_binary_equals() raises:
     var parser = XPathParser("1 = 1")
     var node = parser.parse()
     assert_true(node[].isa[BinaryOpNode]())
     assert_equal(node[][BinaryOpNode].operator.text(parser.expression), "=")
 
 
-def test_alt_parse_binary_precedence_plus_times():
+def test_alt_parse_binary_precedence_plus_times() raises:
     var parser = XPathParser("3 + 4 * 5")
     var node = parser.parse()
     assert_true(node[].isa[BinaryOpNode]())
@@ -97,7 +97,7 @@ def test_alt_parse_binary_precedence_plus_times():
 # Function calls (parse())
 # -----------------------------
 
-def test_alt_parse_call_no_args():
+def test_alt_parse_call_no_args() raises:
     var parser = XPathParser("f()")
     var node = parser.parse()
     assert_true(node[].isa[FunctionCallNode]())
@@ -106,7 +106,7 @@ def test_alt_parse_call_no_args():
     assert_equal(len(call.args), 0)
 
 
-def test_alt_parse_call_one_arg():
+def test_alt_parse_call_one_arg() raises:
     var parser = XPathParser("string(1)")
     var node = parser.parse()
     assert_true(node[].isa[FunctionCallNode]())
@@ -117,7 +117,7 @@ def test_alt_parse_call_one_arg():
     assert_equal(call.args[0][][LiteralNode].value.text(parser.expression), "1")
 
 
-def test_alt_parse_call_two_args():
+def test_alt_parse_call_two_args() raises:
     var parser = XPathParser("substring(x, 2)")
     var node = parser.parse()
     assert_true(node[].isa[FunctionCallNode]())
@@ -134,7 +134,7 @@ def test_alt_parse_call_two_args():
 # Paths via parse_path()
 # -----------------------------
 
-def test_alt_parse_path_one_step():
+def test_alt_parse_path_one_step() raises:
     var parser = XPathParser("/a")
     var path = parser.parse_path()
     assert_true(path[].is_absolute)
@@ -142,7 +142,7 @@ def test_alt_parse_path_one_step():
     assert_equal(path[].segments[0][].step.text(parser.expression), "a")
 
 
-def test_alt_parse_path_two_steps():
+def test_alt_parse_path_two_steps() raises:
     var parser = XPathParser("/a/b")
     var path = parser.parse_path()
     assert_true(path[].is_absolute)
@@ -151,7 +151,7 @@ def test_alt_parse_path_two_steps():
     assert_equal(path[].segments[1][].step.text(parser.expression), "b")
 
 
-def test_alt_parse_path_three_steps():
+def test_alt_parse_path_three_steps() raises:
     var parser = XPathParser("/foo/bar/baz")
     var path = parser.parse_path()
     assert_equal(len(path[].segments), 3)
@@ -164,7 +164,7 @@ def test_alt_parse_path_three_steps():
 # Path as expression (parse() returns PathNode inside variant)
 # -----------------------------
 
-def test_alt_parse_name_as_path():
+def test_alt_parse_name_as_path() raises:
     var parser = XPathParser("foo")
     var node = parser.parse()
     assert_true(node[].isa[PathNode]())
@@ -174,14 +174,14 @@ def test_alt_parse_name_as_path():
     assert_equal(path.segments[0][].step.text(parser.expression), "foo")
 
 
-def test_alt_parse_dot_as_path():
+def test_alt_parse_dot_as_path() raises:
     var parser = XPathParser(".")
     var node = parser.parse()
     assert_true(node[].isa[PathNode]())
     assert_equal(node[][PathNode].segments[0][].step.text(parser.expression), ".")
 
 
-def test_alt_parse_dotdot_as_path():
+def test_alt_parse_dotdot_as_path() raises:
     var parser = XPathParser("..")
     var node = parser.parse()
     assert_true(node[].isa[PathNode]())
@@ -192,5 +192,5 @@ def test_alt_parse_dotdot_as_path():
 # Runner
 # -----------------------------
 
-def main():
+def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -6,6 +6,12 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
+# Compile `xyang/` into `build/xyang.mojopkg` (requires EmberJson on MOJO import path; uses pixi env).
+package = "bash -lc 'mkdir -p build && export MODULAR_MOJO_IMPORT_PATH=\"$PWD/.pixi/envs/default/lib/mojo\" && mojo package -I. -o build/xyang.mojopkg xyang'"
+
+# Run tests with `xyang` from `build/xyang.mojopkg` only. Run `package` first. Skips `alternatives/test_alt_parser.mojo` (not part of `xyang` package).
+tests-mojopkg = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; test -f build/xyang.mojopkg || { echo \"Run: pixi run package\"; exit 1; }; for f in tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/json/test_generator.mojo tests/xpath/test_pratt_parser.mojo tests/xpath/test_evaluator.mojo tests/yang/test_default_semantics.mojo tests/yang/test_enum_union.mojo tests/yang/test_leaf_list_validation.mojo tests/yang/test_leafref_validation.mojo tests/yang/test_must_expression.mojo tests/yang/test_range_validation.mojo tests/yang/test_when_expression.mojo tests/yang/test_yang_text_parser.mojo; do echo \"== $f\"; mojo -I build -I \"$M\" \"$f\"; done'"
+
 # Run all Mojo tests with module imports resolved from the repo root.
 tests = "mojo -I . tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/yang/test_must_expression.mojo tests/crash/test.mojo"
 

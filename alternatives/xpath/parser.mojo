@@ -48,7 +48,7 @@ struct XPathParser:
             raise Error("Unexpected token in expression: " + self._token_text(t))
         return node^
 
-    def parse_path(mut self) -> Arc[PathNode]:
+    def parse_path(mut self) raises -> Arc[PathNode]:
         """Parse the expression strictly as a path and return a PathNode."""
         if self.current_token.type == Token.EOF:
             raise Error("Empty path expression")

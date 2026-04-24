@@ -4,3 +4,6 @@
 
 # mojo build output of main.mojo (binary name `main` in repo root)
 /main
+
+# Packaged library and smoke-test binary (`pixi run package`)
+/build/
