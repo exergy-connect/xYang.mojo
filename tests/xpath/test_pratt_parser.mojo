@@ -87,6 +87,20 @@ def test_parse_parens() raises:
     _free_expr(ptr)
 
 
+def test_parse_parens_comma_list() raises:
+    var ex = "../type = ('date','datetime')"
+    var ptr = parse_xpath(ex)
+    assert_equal(ptr[].kind, Expr.BINARY)
+    assert_equal(_val(ptr[], ex), "=")
+    assert_equal(ptr[].right[].kind, Expr.BINARY)
+    assert_equal(_val(ptr[].right[], ex), ",")
+    assert_equal(ptr[].right[].left[].kind, Expr.STRING)
+    assert_equal(ptr[].right[].right[].kind, Expr.STRING)
+    assert_equal(ptr[].right[].left[].value.text(ex, strip_quotes=True), "date")
+    assert_equal(ptr[].right[].right[].value.text(ex, strip_quotes=True), "datetime")
+    _free_expr(ptr)
+
+
 # -----------------------------
 # Binary operators and precedence
 # -----------------------------

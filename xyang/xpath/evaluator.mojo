@@ -195,6 +195,23 @@ struct XPathEvaluator(ExprEvalVisitor):
     ) raises -> EvalResult:
         return eval_accept(self, expr, ctx, current)
 
+    def _is_comma_list(self, ref node: Expr, expression: String) raises -> Bool:
+        return node.kind == Expr.BINARY and node.value.text(expression) == ","
+
+    def _compare_left_against_list(
+        self,
+        left_value: EvalResult,
+        ref list_node: Expr,
+        ctx: EvalContext,
+        current: Arc[XPathNode],
+    ) raises -> Bool:
+        if self._is_comma_list(list_node, ctx.expression):
+            return self._compare_left_against_list(left_value, list_node.left[], ctx, current) or self._compare_left_against_list(
+                left_value, list_node.right[], ctx, current
+            )
+        var right_value = eval_accept(self, list_node, ctx, current)
+        return _compare_eq(left_value, right_value)
+
     def visit_number(
         self, ref node: Expr, ctx: EvalContext, current: Arc[XPathNode]
     ) raises -> EvalResult:
@@ -242,12 +259,20 @@ struct XPathEvaluator(ExprEvalVisitor):
             return EvalResult(_yang_bool(eval_accept(self, node.right[], ctx, current)))
         if op == "/" or op == "//":
             return self._eval_composition(node, ctx, current)
-        var left = eval_accept(self, node.left[], ctx, current)
-        var right = eval_accept(self, node.right[], ctx, current)
         if op == "=":
+            var left = eval_accept(self, node.left[], ctx, current)
+            if self._is_comma_list(node.right[], ctx.expression):
+                return EvalResult(self._compare_left_against_list(left, node.right[], ctx, current))
+            var right = eval_accept(self, node.right[], ctx, current)
             return EvalResult(_compare_eq(left, right))
         if op == "!=":
+            var left = eval_accept(self, node.left[], ctx, current)
+            if self._is_comma_list(node.right[], ctx.expression):
+                return EvalResult(not self._compare_left_against_list(left, node.right[], ctx, current))
+            var right = eval_accept(self, node.right[], ctx, current)
             return EvalResult(not _compare_eq(left, right))
+        var left = eval_accept(self, node.left[], ctx, current)
+        var right = eval_accept(self, node.right[], ctx, current)
         if op == "+":
             return EvalResult(_result_to_float(left) + _result_to_float(right))
         if op == "-":

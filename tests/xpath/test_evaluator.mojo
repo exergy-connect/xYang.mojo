@@ -1,7 +1,7 @@
 ## Test XPath evaluator (eval_accept + XPathEvaluator).
 
 from std.memory import ArcPointer
-from std.testing import assert_equal, assert_true, TestSuite
+from std.testing import assert_equal, assert_false, assert_true, TestSuite
 from xyang.xpath.pratt_parser import parse_xpath, Expr
 from xyang.xpath.evaluator import (
     XPathNode,
@@ -127,6 +127,45 @@ def test_eval_slash_slash_composition() raises:
     _free_expr(ptr)
     assert_true(result.isa[List[Arc[XPathNode]]]())
     assert_equal(result[List[Arc[XPathNode]]][0][].path, "/a/b")
+
+
+def test_eval_equals_parenthesized_comma_list() raises:
+    var ex = "'date' = ('date','datetime')"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[Bool]())
+    assert_true(result[Bool])
+
+
+def test_eval_not_equals_parenthesized_comma_list() raises:
+    var ex = "'string' != ('date','datetime')"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[Bool]())
+    assert_true(result[Bool])
+
+
+def test_eval_not_equals_parenthesized_comma_list_false() raises:
+    var ex = "'date' != ('date','datetime')"
+    var ptr = parse_xpath(ex)
+    var root = XPathNode("/", "/")
+    var root_arc = Arc[XPathNode](root^)
+    var ctx = EvalContext(root_arc, root_arc, ex, 0, 0)
+    var ev = XPathEvaluator()
+    var result = ev.eval(ptr, ctx, root_arc)
+    _free_expr(ptr)
+    assert_true(result.isa[Bool]())
+    assert_false(result[Bool])
 
 
 def main() raises:

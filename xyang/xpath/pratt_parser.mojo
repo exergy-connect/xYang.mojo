@@ -401,6 +401,12 @@ struct Parser:
 
         if tok.type == Token.PAREN_OPEN:
             var expr = self.parse_expression()
+            # Accept parenthesized comma lists used by some x-yang `must` rules,
+            # e.g. ../type = ('date','datetime').
+            while self.current().type == Token.COMMA:
+                var comma_tok = self.expect(Token.COMMA)
+                var rhs = self.parse_expression()
+                expr = Expr.binary(comma_tok.copy(), expr, rhs)
             self.skip_or_raise(Token.PAREN_CLOSE)
             return expr
 
