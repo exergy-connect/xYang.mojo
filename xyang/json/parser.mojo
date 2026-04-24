@@ -12,6 +12,12 @@ from xyang.ast import (
     YangLeaf,
     YangLeafList,
     YangType,
+    YangTypePlain,
+    YangTypeDecimal64,
+    YangTypeEnumeration,
+    YangTypeLeafref,
+    YangTypeBits,
+    YangTypeIdentityref,
     YangMust,
     YangWhen,
 )
@@ -95,37 +101,36 @@ def _leaf_type_name_from_prop(prop: Value) raises -> String:
 
 def _empty_type(name: String) -> YangType:
     return YangType(
-        name = name,
-        has_range = False,
-        range_min = 0,
-        range_max = 0,
-        enum_values = List[String](),
-        union_types = List[Arc[YangType]](),
-        has_leafref_path = False,
-        leafref_path = "",
-        leafref_require_instance = True,
-        leafref_xpath_ast = Expr.ExprPointer(),
-        leafref_path_parsed = False,
-        fraction_digits = 0,
-        has_decimal64_range = False,
-        decimal64_range_min = Float64(0.0),
-        decimal64_range_max = Float64(0.0),
-        bits_names = List[String](),
-        identityref_base = "",
+        name=name,
+        constraints=YangTypePlain(_pad=0),
+        union_members=List[Arc[YangType]](),
     )
 
 
 def _parse_type_from_schema_property(prop: Value) raises -> YangType:
     ref obj = prop.object()
-    var t = _empty_type(_leaf_type_name_from_prop(prop))
+    var ty_name = _leaf_type_name_from_prop(prop)
+    var enum_values = List[String]()
+    var union_members = List[Arc[YangType]]()
+    var has_lr_path = False
+    var lr_path = ""
+    var lr_require_inst = True
+    var lr_ast = Expr.ExprPointer()
+    var lr_parsed = False
+    var fraction_digits = 0
+    var has_dec_range = False
+    var dec_min = Float64(0.0)
+    var dec_max = Float64(0.0)
+    var bits_names = List[String]()
+    var identityref_base = ""
 
     if "enum" in obj and obj["enum"].is_array():
         ref earr = obj["enum"].array()
         if len(earr) > 0:
-            t.name = "enumeration"
+            ty_name = "enumeration"
             for i in range(len(earr)):
                 if earr[i].is_string():
-                    t.enum_values.append(earr[i].string())
+                    enum_values.append(earr[i].string())
 
     if "oneOf" in obj and obj["oneOf"].is_array():
         ref one_of = obj["oneOf"].array()
@@ -136,58 +141,112 @@ def _parse_type_from_schema_property(prop: Value) raises -> YangType:
             var member = _parse_type_from_schema_property(one_of[i])
             members.append(Arc[YangType](member^))
         if len(members) > 0:
-            t.name = YANG_STMT_UNION
-            t.union_types = members^
+            ty_name = YANG_STMT_UNION
+            union_members = members^
 
     if "x-yang" in obj and obj["x-yang"].is_object():
         ref xy = obj["x-yang"]
         if "type" in xy.object() and xy.object()["type"].is_string():
             var xyang_type = xy.object()["type"].string()
             if xyang_type == YANG_TYPE_LEAFREF:
-                t.name = xyang_type
-            elif xyang_type == YANG_STMT_UNION and len(t.union_types) > 0:
-                t.name = xyang_type
-            elif xyang_type == "enumeration" and len(t.enum_values) > 0:
-                t.name = xyang_type
+                ty_name = xyang_type
+            elif xyang_type == YANG_STMT_UNION and len(union_members) > 0:
+                ty_name = xyang_type
+            elif xyang_type == "enumeration" and len(enum_values) > 0:
+                ty_name = xyang_type
             elif (
                 xyang_type == "decimal64"
                 or xyang_type == "bits"
                 or xyang_type == "identityref"
             ):
-                t.name = xyang_type
-        if t.name == YANG_TYPE_LEAFREF:
+                ty_name = xyang_type
+        if ty_name == YANG_TYPE_LEAFREF:
             if "path" in xy.object() and xy.object()["path"].is_string():
-                t.has_leafref_path = True
-                t.leafref_path = xy.object()["path"].string()
+                has_lr_path = True
+                lr_path = xy.object()["path"].string()
                 try:
-                    t.leafref_xpath_ast = parse_xpath(t.leafref_path)
-                    t.leafref_path_parsed = True
+                    lr_ast = parse_xpath(lr_path)
+                    lr_parsed = True
                 except:
-                    t.leafref_xpath_ast = Expr.ExprPointer()
-                    t.leafref_path_parsed = False
+                    lr_ast = Expr.ExprPointer()
+                    lr_parsed = False
             if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
-                t.leafref_require_instance = xy.object()["require-instance"].bool()
-        if t.name == "decimal64":
+                lr_require_inst = xy.object()["require-instance"].bool()
+        if ty_name == "decimal64":
             if XYANG_FRACTION_DIGITS in xy.object() and xy.object()[XYANG_FRACTION_DIGITS].is_int():
-                t.fraction_digits = Int(xy.object()[XYANG_FRACTION_DIGITS].int())
+                fraction_digits = Int(xy.object()[XYANG_FRACTION_DIGITS].int())
             if "minimum" in obj and "maximum" in obj:
                 ref minv = obj["minimum"]
                 ref maxv = obj["maximum"]
                 if (minv.is_int() or minv.is_uint() or minv.is_float()) and (
                     maxv.is_int() or maxv.is_uint() or maxv.is_float()
                 ):
-                    t.has_decimal64_range = True
-                    t.decimal64_range_min = minv.float()
-                    t.decimal64_range_max = maxv.float()
-        if t.name == "bits" and XYANG_BITS in xy.object() and xy.object()[XYANG_BITS].is_array():
+                    has_dec_range = True
+                    dec_min = minv.float()
+                    dec_max = maxv.float()
+        if ty_name == "bits" and XYANG_BITS in xy.object() and xy.object()[XYANG_BITS].is_array():
             ref barr = xy.object()[XYANG_BITS].array()
             for i in range(len(barr)):
                 if barr[i].is_string():
-                    t.bits_names.append(barr[i].string())
-        if t.name == "identityref" and XYANG_BASE in xy.object() and xy.object()[XYANG_BASE].is_string():
-            t.identityref_base = xy.object()[XYANG_BASE].string()
+                    bits_names.append(barr[i].string())
+        if ty_name == "identityref" and XYANG_BASE in xy.object() and xy.object()[XYANG_BASE].is_string():
+            identityref_base = xy.object()[XYANG_BASE].string()
 
-    return t^
+    var cons = _json_schema_yang_constraints(
+        ty_name,
+        enum_values^,
+        has_lr_path,
+        lr_path,
+        lr_require_inst,
+        lr_ast,
+        lr_parsed,
+        fraction_digits,
+        has_dec_range,
+        dec_min,
+        dec_max,
+        bits_names^,
+        identityref_base,
+    )
+    return YangType(name=ty_name, constraints=cons, union_members=union_members^)
+
+
+def _json_schema_yang_constraints(
+    ty_name: String,
+    var enum_values: List[String],
+    has_lr_path: Bool,
+    var lr_path: String,
+    lr_require_inst: Bool,
+    var lr_ast: Expr.ExprPointer,
+    lr_parsed: Bool,
+    fraction_digits: Int,
+    has_dec_range: Bool,
+    dec_min: Float64,
+    dec_max: Float64,
+    var bits_names: List[String],
+    var identityref_base: String,
+) -> YangType.Constraints:
+    if ty_name == "enumeration":
+        return YangTypeEnumeration(enum_values^)
+    if ty_name == YANG_TYPE_LEAFREF:
+        return YangTypeLeafref(
+            has_lr_path,
+            lr_path^,
+            lr_require_inst,
+            lr_ast,
+            lr_parsed,
+        )
+    if ty_name == "decimal64":
+        return YangTypeDecimal64(
+            fraction_digits,
+            has_dec_range,
+            dec_min,
+            dec_max,
+        )
+    if ty_name == "bits":
+        return YangTypeBits(bits_names^)
+    if ty_name == "identityref":
+        return YangTypeIdentityref(identityref_base^)
+    return YangTypePlain(_pad=0)
 
 
 def _is_required(prop_key: String, container_prop: Value) raises -> Bool:

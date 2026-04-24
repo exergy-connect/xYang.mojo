@@ -18,6 +18,13 @@ from xyang.ast import (
     YangLeaf,
     YangLeafList,
     YangType,
+    YangTypePlain,
+    YangTypeIntegerRange,
+    YangTypeDecimal64,
+    YangTypeEnumeration,
+    YangTypeLeafref,
+    YangTypeBits,
+    YangTypeIdentityref,
     YangMust,
     YangWhen,
 )
@@ -60,10 +67,66 @@ from xyang.yang.tokens import (
     YANG_STMT_ORDERED_BY,
     YANG_STMT_UNIQUE,
     YANG_TYPE_ENUMERATION,
+    YANG_TYPE_LEAFREF,
     YANG_TYPE_UNKNOWN,
 )
 
 comptime Arc = ArcPointer
+
+
+def _yang_constraints_for_parsed_type(
+    type_name: String,
+    has_range: Bool,
+    range_min: Int64,
+    range_max: Int64,
+    var enum_values: List[String],
+    has_leafref_path: Bool,
+    var leafref_path: String,
+    leafref_require_instance: Bool,
+    var leafref_xpath_ast: Expr.ExprPointer,
+    leafref_path_parsed: Bool,
+    fraction_digits: Int,
+    has_dec_range: Bool,
+    dec_lo: Float64,
+    dec_hi: Float64,
+    var bits_names: List[String],
+    var identityref_base: String,
+) -> YangType.Constraints:
+    if type_name == YANG_TYPE_ENUMERATION:
+        return YangTypeEnumeration(enum_values^)
+    if type_name == "decimal64":
+        return YangTypeDecimal64(
+            fraction_digits,
+            has_dec_range,
+            dec_lo,
+            dec_hi,
+        )
+    if type_name == YANG_TYPE_LEAFREF:
+        return YangTypeLeafref(
+            has_leafref_path,
+            leafref_path^,
+            leafref_require_instance,
+            leafref_xpath_ast,
+            leafref_path_parsed,
+        )
+    if type_name == "bits":
+        return YangTypeBits(bits_names^)
+    if type_name == "identityref":
+        return YangTypeIdentityref(identityref_base^)
+    if (
+        type_name == "integer"
+        or type_name == "int8"
+        or type_name == "int16"
+        or type_name == "int32"
+        or type_name == "int64"
+        or type_name == "uint8"
+        or type_name == "uint16"
+        or type_name == "uint32"
+        or type_name == "uint64"
+        or type_name == "number"
+    ):
+        return YangTypeIntegerRange(has_range, range_min, range_max)
+    return YangTypePlain(_pad=0)
 comptime CP_NEWLINE = Codepoint.ord("\n")
 comptime CP_SLASH = Codepoint.ord("/")
 comptime CP_STAR = Codepoint.ord("*")
@@ -321,22 +384,8 @@ struct _YangParser(Movable):
 
         var type_stmt = YangType(
             name = YANG_TYPE_UNKNOWN,
-            has_range = False,
-            range_min = 0,
-            range_max = 0,
-            enum_values = List[String](),
-            union_types = List[Arc[YangType]](),
-            has_leafref_path = False,
-            leafref_path = "",
-            leafref_require_instance = True,
-            leafref_xpath_ast = Expr.ExprPointer(),
-            leafref_path_parsed = False,
-            fraction_digits = 0,
-            has_decimal64_range = False,
-            decimal64_range_min = Float64(0.0),
-            decimal64_range_max = Float64(0.0),
-            bits_names = List[String](),
-            identityref_base = "",
+            constraints = YangTypePlain(_pad=0),
+            union_members = List[Arc[YangType]](),
         )
         var mandatory = False
         var has_default = False
@@ -399,22 +448,8 @@ struct _YangParser(Movable):
 
         var type_stmt = YangType(
             name = YANG_TYPE_UNKNOWN,
-            has_range = False,
-            range_min = 0,
-            range_max = 0,
-            enum_values = List[String](),
-            union_types = List[Arc[YangType]](),
-            has_leafref_path = False,
-            leafref_path = "",
-            leafref_require_instance = True,
-            leafref_xpath_ast = Expr.ExprPointer(),
-            leafref_path_parsed = False,
-            fraction_digits = 0,
-            has_decimal64_range = False,
-            decimal64_range_min = Float64(0.0),
-            decimal64_range_max = Float64(0.0),
-            bits_names = List[String](),
-            identityref_base = "",
+            constraints = YangTypePlain(_pad=0),
+            union_members = List[Arc[YangType]](),
         )
         var must = List[Arc[YangMust]]()
         var when = Optional[YangWhen]()
@@ -824,42 +859,55 @@ struct _YangParser(Movable):
             )
             return YangType(
                 name = type_name,
-                has_range = has_range,
-                range_min = range_min,
-                range_max = range_max,
-                enum_values = enum_values^,
-                union_types = union_types^,
-                has_leafref_path = has_leafref_path,
-                leafref_path = leafref_path,
-                leafref_require_instance = leafref_require_instance,
-                leafref_xpath_ast = leafref_xpath_ast,
-                leafref_path_parsed = leafref_path_parsed,
-                fraction_digits = fraction_digits,
-                has_decimal64_range = has_dec_range,
-                decimal64_range_min = dec_lo,
-                decimal64_range_max = dec_hi,
-                bits_names = bits_names^,
-                identityref_base = identityref_base,
+                constraints = _yang_constraints_for_parsed_type(
+                    type_name,
+                    has_range,
+                    range_min,
+                    range_max,
+                    enum_values^,
+                    has_leafref_path,
+                    leafref_path,
+                    leafref_require_instance,
+                    leafref_xpath_ast,
+                    leafref_path_parsed,
+                    fraction_digits,
+                    has_dec_range,
+                    dec_lo,
+                    dec_hi,
+                    bits_names^,
+                    identityref_base,
+                ),
+                union_members = union_types^,
+            )
+
+        if type_name == YANG_STMT_UNION:
+            return YangType(
+                name = type_name,
+                constraints = YangTypePlain(_pad=0),
+                union_members = union_types^,
             )
 
         return YangType(
             name = type_name,
-            has_range = has_range,
-            range_min = range_min,
-            range_max = range_max,
-            enum_values = enum_values^,
-            union_types = union_types^,
-            has_leafref_path = has_leafref_path,
-            leafref_path = leafref_path,
-            leafref_require_instance = leafref_require_instance,
-            leafref_xpath_ast = leafref_xpath_ast,
-            leafref_path_parsed = leafref_path_parsed,
-            fraction_digits = fraction_digits,
-            has_decimal64_range = has_dec_range,
-            decimal64_range_min = dec_lo,
-            decimal64_range_max = dec_hi,
-            bits_names = bits_names^,
-            identityref_base = identityref_base,
+            constraints = _yang_constraints_for_parsed_type(
+                type_name,
+                has_range,
+                range_min,
+                range_max,
+                enum_values^,
+                has_leafref_path,
+                leafref_path,
+                leafref_require_instance,
+                leafref_xpath_ast,
+                leafref_path_parsed,
+                fraction_digits,
+                has_dec_range,
+                dec_lo,
+                dec_hi,
+                bits_names^,
+                identityref_base,
+            ),
+            union_members = List[Arc[YangType]](),
         )
 
     def _parse_must_statement(mut self) raises -> YangMust:

@@ -29,7 +29,7 @@ def test_schema_roundtrip_basic_device() raises:
         ref lf = sys1.leaves[i][]
         if lf.type.name == YANG_TYPE_LEAFREF:
             found_leafref = True
-            assert_true(lf.type.has_leafref_path)
+            assert_true(lf.type.has_leafref_path())
     assert_true(found_leafref)
 
 
@@ -107,9 +107,9 @@ def test_generate_and_roundtrip_enum_and_union() raises:
     assert_true(mode_idx >= 0)
     assert_true(id_or_name_idx >= 0)
     assert_equal(cfg.leaves[mode_idx][].type.name, "enumeration")
-    assert_equal(len(cfg.leaves[mode_idx][].type.enum_values), 2)
+    assert_equal(cfg.leaves[mode_idx][].type.enum_values_len(), 2)
     assert_equal(cfg.leaves[id_or_name_idx][].type.name, "union")
-    assert_equal(len(cfg.leaves[id_or_name_idx][].type.union_types), 2)
+    assert_equal(cfg.leaves[id_or_name_idx][].type.union_members_len(), 2)
 
 
 def main() raises:

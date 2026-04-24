@@ -144,7 +144,7 @@ def _default_text_to_value_for_type(
     if _is_integer_type_name(type_name):
         try:
             var n = Int64(atol(text))
-            if t.has_range and (n < t.range_min or n > t.range_max):
+            if t.has_range() and (n < t.range_min() or n > t.range_max()):
                 return Optional[Value]()
             return Optional(Value(n))
         except:
@@ -152,11 +152,11 @@ def _default_text_to_value_for_type(
     if _is_float_type_name(type_name):
         try:
             var n = atof(text)
-            if t.has_decimal64_range and type_name == "decimal64":
-                if n < t.decimal64_range_min or n > t.decimal64_range_max:
+            if t.has_decimal64_range() and type_name == "decimal64":
+                if n < t.decimal64_range_min() or n > t.decimal64_range_max():
                     return Optional[Value]()
-            elif t.has_range and (
-                n < Float64(t.range_min) or n > Float64(t.range_max)
+            elif t.has_range() and (
+                n < Float64(t.range_min()) or n > Float64(t.range_max())
             ):
                 return Optional[Value]()
             return Optional(Value(n))
@@ -173,9 +173,9 @@ def _default_text_to_value(
     if type_stmt.name == "union":
         if quoted_union_default:
             return Value(default_text)
-        for i in range(len(type_stmt.union_types)):
+        for i in range(type_stmt.union_members_len()):
             var maybe = _default_text_to_value_for_type(
-                default_text, type_stmt.union_types[i][]
+                default_text, type_stmt.union_member_arc(i)[]
             )
             if maybe:
                 return maybe.value().copy()
@@ -888,7 +888,7 @@ struct DocumentValidator:
                     ValidationError(
                         path=child_path,
                         message=msg,
-                        expression=leaf.type.leafref_path,
+                        expression=leaf.type.leafref_path(),
                         severity=Severity("error"),
                     ),
                 )
@@ -1201,7 +1201,7 @@ struct DocumentValidator:
                         ValidationError(
                             path=item_path,
                             message=leafref_errors[j],
-                            expression=leaf_list.type.leafref_path,
+                            expression=leaf_list.type.leafref_path(),
                             severity=Severity("error"),
                         ),
                     )

@@ -1,35 +1,49 @@
 ## Minimal YANG AST model in Mojo for xYang.mojo.
 
 from std.memory import ArcPointer
+from std.utils import Variant
 from emberjson import JsonDeserializable
 from xyang.xpath import Expr
 
 comptime Arc = ArcPointer
 
 
+## --- YANG `type` statement: lexical name + constraint payload (mutually exclusive shapes). ---
+
+
 @fieldwise_init
-struct YangType(Movable, JsonDeserializable):
-    var name: String
+struct YangTypePlain(Movable):
+    var _pad: UInt8
+
+
+@fieldwise_init
+struct YangTypeIntegerRange(Movable):
     var has_range: Bool
     var range_min: Int64
     var range_max: Int64
+
+
+@fieldwise_init
+struct YangTypeDecimal64(Movable):
+    ## 1..18 when set from YANG; 0 when absent.
+    var fraction_digits: Int
+    var has_decimal64_range: Bool
+    var decimal64_range_min: Float64
+    var decimal64_range_max: Float64
+
+
+@fieldwise_init
+struct YangTypeEnumeration(Movable):
     var enum_values: List[String]
-    var union_types: List[Arc[YangType]]
+
+
+@fieldwise_init
+struct YangTypeLeafref(Movable):
     var has_leafref_path: Bool
     var leafref_path: String
     var leafref_require_instance: Bool
     var leafref_xpath_ast: Expr.ExprPointer
     var leafref_path_parsed: Bool
-    ## `decimal64`: 1..18; 0 when not set or not applicable.
-    var fraction_digits: Int
-    ## `decimal64` range in value space (used when `has_decimal64_range` is true).
-    var has_decimal64_range: Bool
-    var decimal64_range_min: Float64
-    var decimal64_range_max: Float64
-    ## `bits`: valid bit names (in declaration order).
-    var bits_names: List[String]
-    ## `identityref`: `base` argument (unprefixed or prefixed string).
-    var identityref_base: String
 
     fn __del__(deinit self):
         if self.leafref_xpath_ast:
@@ -37,33 +51,69 @@ struct YangType(Movable, JsonDeserializable):
             self.leafref_xpath_ast.destroy_pointee()
             self.leafref_xpath_ast.free()
 
+
+@fieldwise_init
+struct YangTypeBits(Movable):
+    var bits_names: List[String]
+
+
+@fieldwise_init
+struct YangTypeIdentityref(Movable):
+    var identityref_base: String
+
+
+@fieldwise_init
+struct YangType(Movable):
+    comptime Constraints = Variant[
+        YangTypePlain,
+        YangTypeIntegerRange,
+        YangTypeDecimal64,
+        YangTypeEnumeration,
+        YangTypeLeafref,
+        YangTypeBits,
+        YangTypeIdentityref,
+    ]
+    var name: String
+    var constraints: Self.Constraints
+    ## Populated only for `name == "union"`; otherwise empty.
+    var union_members: List[Arc[YangType]]
+
+    fn __del__(deinit self):
+        # Ensure leafref XPath storage is freed when this arm is active (`take` runs `YangTypeLeafref.__del__`).
+        if self.constraints.isa[YangTypeLeafref]():
+            _ = self.constraints.take[YangTypeLeafref]()
+
     def __str__(self) -> String:
-        if self.has_leafref_path:
-            return (
-                "YangType("
-                + self.name
-                + ", path="
-                + self.leafref_path
-                + ", require-instance="
-                + ("true" if self.leafref_require_instance else "false")
-                + ")"
-            )
-        if self.has_range:
-            return (
-                "YangType("
-                + self.name
-                + ", range="
-                + String(self.range_min)
-                + ".."
-                + String(self.range_max)
-                + ")"
-            )
-        if self.name == "enumeration":
+        if self.constraints.isa[YangTypeLeafref]():
+            ref lr = self.constraints[YangTypeLeafref]
+            if lr.has_leafref_path:
+                return (
+                    "YangType("
+                    + self.name
+                    + ", path="
+                    + lr.leafref_path
+                    + ", require-instance="
+                    + ("true" if lr.leafref_require_instance else "false")
+                    + ")"
+                )
+        if self.constraints.isa[YangTypeIntegerRange]():
+            ref ir = self.constraints[YangTypeIntegerRange]
+            if ir.has_range:
+                return (
+                    "YangType("
+                    + self.name
+                    + ", range="
+                    + String(ir.range_min)
+                    + ".."
+                    + String(ir.range_max)
+                    + ")"
+                )
+        if self.name == "enumeration" and self.constraints.isa[YangTypeEnumeration]():
             return (
                 "YangType("
                 + self.name
                 + ", enums="
-                + String(len(self.enum_values))
+                + String(len(self.constraints[YangTypeEnumeration].enum_values))
                 + ")"
             )
         if self.name == "union":
@@ -71,10 +121,111 @@ struct YangType(Movable, JsonDeserializable):
                 "YangType("
                 + self.name
                 + ", types="
-                + String(len(self.union_types))
+                + String(len(self.union_members))
                 + ")"
             )
         return "YangType(" + self.name + ")"
+
+    # --- Integer / numeric range (integer types, `integer`, `number` with optional range) ---
+
+    def has_range(read self) -> Bool:
+        if self.constraints.isa[YangTypeIntegerRange]():
+            return self.constraints[YangTypeIntegerRange].has_range
+        return False
+
+    def range_min(read self) -> Int64:
+        if self.constraints.isa[YangTypeIntegerRange]():
+            return self.constraints[YangTypeIntegerRange].range_min
+        return 0
+
+    def range_max(read self) -> Int64:
+        if self.constraints.isa[YangTypeIntegerRange]():
+            return self.constraints[YangTypeIntegerRange].range_max
+        return 0
+
+    # --- decimal64 ---
+
+    def fraction_digits(read self) -> Int:
+        if self.constraints.isa[YangTypeDecimal64]():
+            return self.constraints[YangTypeDecimal64].fraction_digits
+        return 0
+
+    def has_decimal64_range(read self) -> Bool:
+        if self.constraints.isa[YangTypeDecimal64]():
+            return self.constraints[YangTypeDecimal64].has_decimal64_range
+        return False
+
+    def decimal64_range_min(read self) -> Float64:
+        if self.constraints.isa[YangTypeDecimal64]():
+            return self.constraints[YangTypeDecimal64].decimal64_range_min
+        return Float64(0.0)
+
+    def decimal64_range_max(read self) -> Float64:
+        if self.constraints.isa[YangTypeDecimal64]():
+            return self.constraints[YangTypeDecimal64].decimal64_range_max
+        return Float64(0.0)
+
+    # --- enumeration ---
+
+    def enum_values_len(read self) -> Int:
+        if self.constraints.isa[YangTypeEnumeration]():
+            return len(self.constraints[YangTypeEnumeration].enum_values)
+        return 0
+
+    def enum_value_at(read self, i: Int) -> String:
+        return self.constraints[YangTypeEnumeration].enum_values[i]
+
+    # --- union member types ---
+
+    def union_members_len(read self) -> Int:
+        return len(self.union_members)
+
+    def union_member_arc(read self, i: Int) -> Arc[YangType]:
+        return self.union_members[i]
+
+    # --- leafref ---
+
+    def has_leafref_path(read self) -> Bool:
+        if self.constraints.isa[YangTypeLeafref]():
+            return self.constraints[YangTypeLeafref].has_leafref_path
+        return False
+
+    def leafref_path(read self) -> String:
+        if self.constraints.isa[YangTypeLeafref]():
+            return self.constraints[YangTypeLeafref].leafref_path
+        return ""
+
+    def leafref_require_instance(read self) -> Bool:
+        if self.constraints.isa[YangTypeLeafref]():
+            return self.constraints[YangTypeLeafref].leafref_require_instance
+        return True
+
+    def leafref_path_parsed(read self) -> Bool:
+        if self.constraints.isa[YangTypeLeafref]():
+            return self.constraints[YangTypeLeafref].leafref_path_parsed
+        return False
+
+    def leafref_xpath_ast(read self) -> Expr.ExprPointer:
+        if self.constraints.isa[YangTypeLeafref]():
+            return self.constraints[YangTypeLeafref].leafref_xpath_ast
+        return Expr.ExprPointer()
+
+    # --- bits ---
+
+    def bits_names_len(read self) -> Int:
+        if self.constraints.isa[YangTypeBits]():
+            return len(self.constraints[YangTypeBits].bits_names)
+        return 0
+
+    def bits_name_at(read self, i: Int) -> String:
+        return self.constraints[YangTypeBits].bits_names[i]
+
+    # --- identityref ---
+
+    def identityref_base(read self) -> String:
+        if self.constraints.isa[YangTypeIdentityref]():
+            return self.constraints[YangTypeIdentityref].identityref_base
+        return ""
 
 
 @fieldwise_init

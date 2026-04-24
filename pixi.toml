@@ -16,9 +16,10 @@ compile-check = "bash -lc 'M=\"$PWD/.pixi/envs/default/lib/mojo\"; test -f build
 tests-mojopkg = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; test -f build/xyang.mojopkg || { echo \"Run: pixi run package\"; exit 1; }; for f in tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/json/test_generator.mojo tests/xpath/test_pratt_parser.mojo tests/xpath/test_evaluator.mojo tests/yang/test_default_semantics.mojo tests/yang/test_enum_union.mojo tests/yang/test_leaf_list_validation.mojo tests/yang/test_leafref_validation.mojo tests/yang/test_must_expression.mojo tests/yang/test_range_validation.mojo tests/yang/test_when_expression.mojo tests/yang/test_yang_text_parser.mojo; do echo \"== $f\"; mojo -I build -I \"$M\" \"$f\"; done'"
 
 # Rebuilds and runs selected tests from **source** (`-I .`) — slower; use when validating changes that are not in the published `.mojopkg` yet, or to compare with mojopkg.
-tests = "mojo -I . tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/yang/test_must_expression.mojo tests/crash/test.mojo"
+# Mojo 0.26+ rejects multiple entry `.mojo` paths in one invocation; run each file separately.
+tests = "bash -lc 'set -e; for f in tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/yang/test_must_expression.mojo; do echo \"== $f\"; mojo -I . \"$f\"; done'"
 
-crash_test = "mojo -I . tests/crash/test.mojo"
+crash_test = "mojo -I . tests/crash/type_error_first_value.mojo"
 
 yang_tests = "mojo -I . tests/yang/*.mojo"  # To run: pixi run yang_tests
 

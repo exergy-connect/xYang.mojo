@@ -89,8 +89,8 @@ def _leaf_xyang(read leaf: YangLeaf) raises -> Object:
     var xy = Object()
     if leaf.type.name == YANG_TYPE_LEAFREF:
         xy[XYANG_TYPE] = Value(YANG_TYPE_LEAFREF)
-        xy[XYANG_PATH] = Value(leaf.type.leafref_path)
-        xy[XYANG_REQUIRE_INSTANCE] = Value(leaf.type.leafref_require_instance)
+        xy[XYANG_PATH] = Value(leaf.type.leafref_path())
+        xy[XYANG_REQUIRE_INSTANCE] = Value(leaf.type.leafref_require_instance())
     else:
         xy[XYANG_TYPE] = Value("leaf")
     if len(leaf.must_statements) > 0:
@@ -125,8 +125,8 @@ def _type_schema(read t: YangType) raises -> Object:
         o[JSON_SCHEMA_TYPE] = Value("string")
         var lr_xy = Object()
         lr_xy[XYANG_TYPE] = Value(YANG_TYPE_LEAFREF)
-        lr_xy[XYANG_PATH] = Value(t.leafref_path)
-        lr_xy[XYANG_REQUIRE_INSTANCE] = Value(t.leafref_require_instance)
+        lr_xy[XYANG_PATH] = Value(t.leafref_path())
+        lr_xy[XYANG_REQUIRE_INSTANCE] = Value(t.leafref_require_instance())
         o[JSON_SCHEMA_X_YANG] = Value(lr_xy^)
         return o^
     if tn == "boolean":
@@ -143,9 +143,9 @@ def _type_schema(read t: YangType) raises -> Object:
     ):
         var o = Object()
         o[JSON_SCHEMA_TYPE] = Value("integer")
-        if t.has_range:
-            o[JSON_SCHEMA_MINIMUM] = Value(Int64(t.range_min))
-            o[JSON_SCHEMA_MAXIMUM] = Value(Int64(t.range_max))
+        if t.has_range():
+            o[JSON_SCHEMA_MINIMUM] = Value(Int64(t.range_min()))
+            o[JSON_SCHEMA_MAXIMUM] = Value(Int64(t.range_max()))
         elif tn == "uint8":
             o[JSON_SCHEMA_MINIMUM] = Value(Int64(0))
             o[JSON_SCHEMA_MAXIMUM] = Value(Int64(255))
@@ -153,34 +153,34 @@ def _type_schema(read t: YangType) raises -> Object:
     if tn == "enumeration":
         var o = Object()
         o[JSON_SCHEMA_TYPE] = Value("string")
-        if len(t.enum_values) > 0:
+        if t.enum_values_len() > 0:
             var e = Array()
-            for i in range(len(t.enum_values)):
-                e.append(Value(t.enum_values[i]))
+            for i in range(t.enum_values_len()):
+                e.append(Value(t.enum_value_at(i)))
             o[JSON_SCHEMA_ENUM] = Value(e^)
         return o^
     if tn == YANG_STMT_UNION:
         var o = Object()
         var branches = Array()
-        for i in range(len(t.union_types)):
-            branches.append(Value(_type_schema(t.union_types[i][])))
+        for i in range(t.union_members_len()):
+            branches.append(Value(_type_schema(t.union_member_arc(i)[])))
         o[JSON_SCHEMA_ONE_OF] = Value(branches^)
         return o^
     if tn == "decimal64":
         var o = Object()
         o[JSON_SCHEMA_TYPE] = Value("number")
-        if t.fraction_digits > 0:
+        if t.fraction_digits() > 0:
             var step = Float64(1.0)
-            for _i in range(t.fraction_digits):
+            for _i in range(t.fraction_digits()):
                 step = step * Float64(0.1)
             o[JSON_SCHEMA_MULTIPLE_OF] = Value(step)
-        if t.has_decimal64_range:
-            o[JSON_SCHEMA_MINIMUM] = Value(t.decimal64_range_min)
-            o[JSON_SCHEMA_MAXIMUM] = Value(t.decimal64_range_max)
+        if t.has_decimal64_range():
+            o[JSON_SCHEMA_MINIMUM] = Value(t.decimal64_range_min())
+            o[JSON_SCHEMA_MAXIMUM] = Value(t.decimal64_range_max())
         var xy = Object()
         xy[XYANG_TYPE] = Value("decimal64")
-        if t.fraction_digits > 0:
-            xy[XYANG_FRACTION_DIGITS] = Value(Int64(t.fraction_digits))
+        if t.fraction_digits() > 0:
+            xy[XYANG_FRACTION_DIGITS] = Value(Int64(t.fraction_digits()))
         o[JSON_SCHEMA_X_YANG] = Value(xy^)
         return o^
     if tn == "bits":
@@ -188,10 +188,10 @@ def _type_schema(read t: YangType) raises -> Object:
         o[JSON_SCHEMA_TYPE] = Value("string")
         var xy = Object()
         xy[XYANG_TYPE] = Value("bits")
-        if len(t.bits_names) > 0:
+        if t.bits_names_len() > 0:
             var ba = Array()
-            for i in range(len(t.bits_names)):
-                ba.append(Value(t.bits_names[i]))
+            for i in range(t.bits_names_len()):
+                ba.append(Value(t.bits_name_at(i)))
             xy[XYANG_BITS] = Value(ba^)
         o[JSON_SCHEMA_X_YANG] = Value(xy^)
         return o^
@@ -200,8 +200,8 @@ def _type_schema(read t: YangType) raises -> Object:
         o[JSON_SCHEMA_TYPE] = Value("string")
         var xy = Object()
         xy[XYANG_TYPE] = Value("identityref")
-        if len(t.identityref_base) > 0:
-            xy[XYANG_BASE] = Value(t.identityref_base)
+        if len(t.identityref_base()) > 0:
+            xy[XYANG_BASE] = Value(t.identityref_base())
         o[JSON_SCHEMA_X_YANG] = Value(xy^)
         return o^
     var s = Object()
@@ -245,8 +245,8 @@ def _default_json_value_for_type(
     if type_stmt.name == YANG_STMT_UNION:
         if default_argument_was_quoted:
             return Optional(Value(default_text))
-        for i in range(len(type_stmt.union_types)):
-            var dv = _default_json_value(default_text, type_stmt.union_types[i][].name)
+        for i in range(type_stmt.union_members_len()):
+            var dv = _default_json_value(default_text, type_stmt.union_member_arc(i)[].name)
             if dv:
                 return dv^
         return Optional(Value(default_text))
@@ -280,8 +280,8 @@ def _leaf_list_items_schema(read ll: YangLeafList) raises -> Object:
         items[JSON_SCHEMA_TYPE] = Value("string")
         var lr_xy = Object()
         lr_xy[XYANG_TYPE] = Value(YANG_TYPE_LEAFREF)
-        lr_xy[XYANG_PATH] = Value(ll.type.leafref_path)
-        lr_xy[XYANG_REQUIRE_INSTANCE] = Value(ll.type.leafref_require_instance)
+        lr_xy[XYANG_PATH] = Value(ll.type.leafref_path())
+        lr_xy[XYANG_REQUIRE_INSTANCE] = Value(ll.type.leafref_require_instance())
         items[JSON_SCHEMA_X_YANG] = Value(lr_xy^)
         return items^
     return _type_schema(ll.type)

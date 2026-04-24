@@ -87,12 +87,12 @@ def _check_integer_bounds(
         max_v = b.max_v
     # int64 / plain "integer": no table entry — unconstrained until explicit Int64 bounds.
 
-    if type_stmt.has_range:
-        if not has_min or type_stmt.range_min > min_v:
-            min_v = type_stmt.range_min
+    if type_stmt.has_range():
+        if not has_min or type_stmt.range_min() > min_v:
+            min_v = type_stmt.range_min()
             has_min = True
-        if not has_max or type_stmt.range_max < max_v:
-            max_v = type_stmt.range_max
+        if not has_max or type_stmt.range_max() < max_v:
+            max_v = type_stmt.range_max()
             has_max = True
 
     if has_min and n < min_v:
@@ -161,18 +161,18 @@ def _check_decimal64_type(val: Value, type_stmt: YangType) -> List[String]:
         var errs = List[String]()
         errs.append("Expected decimal64 (number), got non-numeric value")
         return errs^
-    if type_stmt.has_decimal64_range:
+    if type_stmt.has_decimal64_range():
         var fv = val.float()
-        if fv < type_stmt.decimal64_range_min or fv > type_stmt.decimal64_range_max:
+        if fv < type_stmt.decimal64_range_min() or fv > type_stmt.decimal64_range_max():
             var errs = List[String]()
             errs.append("decimal64 out of range")
             return errs^
     return List[String]()
 
 
-def _bit_name_is_valid(name: String, read valid: List[String]) -> Bool:
-    for i in range(len(valid)):
-        if valid[i] == name:
+def _bit_name_is_valid_for_type(name: String, read type_stmt: YangType) -> Bool:
+    for i in range(type_stmt.bits_names_len()):
+        if type_stmt.bits_name_at(i) == name:
             return True
     return False
 
@@ -184,7 +184,7 @@ def _check_bits_type(val: Value, type_stmt: YangType) -> List[String]:
         var errs = List[String]()
         errs.append("Expected bits as a string, got non-string value")
         return errs^
-    if len(type_stmt.bits_names) == 0:
+    if type_stmt.bits_names_len() == 0:
         return List[String]()
     var s = val.string().strip()
     if len(s) == 0:
@@ -194,7 +194,7 @@ def _check_bits_type(val: Value, type_stmt: YangType) -> List[String]:
         var p = String(parts[i].strip())
         if len(p) == 0:
             continue
-        if not _bit_name_is_valid(p, type_stmt.bits_names):
+        if not _bit_name_is_valid_for_type(p, type_stmt):
             var errs = List[String]()
             errs.append("Invalid bit name in bits value: " + p)
             return errs^
@@ -214,17 +214,17 @@ def _check_enumeration_type(val: Value, type_stmt: YangType) -> List[String]:
         var errs = List[String]()
         errs.append("Expected enumeration string, got non-string value")
         return errs^
-    if len(type_stmt.enum_values) == 0:
+    if type_stmt.enum_values_len() == 0:
         return List[String]()
     var s = val.string()
-    for i in range(len(type_stmt.enum_values)):
-        if type_stmt.enum_values[i] == s:
+    for i in range(type_stmt.enum_values_len()):
+        if type_stmt.enum_value_at(i) == s:
             return List[String]()
     var allowed = ""
-    for i in range(len(type_stmt.enum_values)):
+    for i in range(type_stmt.enum_values_len()):
         if i > 0:
             allowed += ", "
-        allowed += type_stmt.enum_values[i]
+        allowed += type_stmt.enum_value_at(i)
     var errs = List[String]()
     errs.append(
         "Value '" + s + "' is not one of the allowed enum values: " + allowed,
@@ -345,19 +345,20 @@ def check_leafref_reference(
     root_data: Value,
 ) raises -> List[String]:
     """Python-style leafref require-instance check in type checker."""
-    if type_stmt.name != YANG_TYPE_LEAFREF or not type_stmt.leafref_require_instance:
+    if type_stmt.name != YANG_TYPE_LEAFREF or not type_stmt.leafref_require_instance():
         return List[String]()
-    if not type_stmt.has_leafref_path or len(type_stmt.leafref_path) == 0:
+    if not type_stmt.has_leafref_path() or len(type_stmt.leafref_path()) == 0:
         var errs = List[String]()
         errs.append("Leafref is missing required path metadata")
         return errs^
-    if not type_stmt.leafref_path_parsed or not type_stmt.leafref_xpath_ast:
+    var lr_ast = type_stmt.leafref_xpath_ast()
+    if not type_stmt.leafref_path_parsed() or not lr_ast:
         var errs = List[String]()
         errs.append("Leafref path expression could not be parsed")
         return errs^
     var target_paths = _eval_leafref_target_paths(
-        type_stmt.leafref_xpath_ast,
-        type_stmt.leafref_path,
+        lr_ast,
+        type_stmt.leafref_path(),
         node_path,
     )
     for i in range(len(target_paths)):
@@ -367,7 +368,7 @@ def check_leafref_reference(
                 return List[String]()
     var errs = List[String]()
     errs.append(
-        "Leafref value does not resolve to any target for path '" + type_stmt.leafref_path + "'"
+        "Leafref value does not resolve to any target for path '" + type_stmt.leafref_path() + "'"
     )
     return errs^
 
@@ -421,20 +422,20 @@ def check_leaf_value(
     if name == "identityref":
         return _check_identityref_type(val)
     if name == "union":
-        for i in range(len(type_stmt.union_types)):
+        for i in range(type_stmt.union_members_len()):
             var errs = check_leaf_value(
                 val,
-                type_stmt.union_types[i][],
+                type_stmt.union_member_arc(i)[],
                 path,
                 integer_bounds,
             )
             if len(errs) == 0:
                 return List[String]()
         var names = ""
-        for i in range(len(type_stmt.union_types)):
+        for i in range(type_stmt.union_members_len()):
             if i > 0:
                 names += ", "
-            names += type_stmt.union_types[i][].name
+            names += type_stmt.union_member_arc(i)[].name
         var errs = List[String]()
         errs.append(
             "Value does not match any union member type (" + names + ")",

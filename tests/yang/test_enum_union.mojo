@@ -51,14 +51,14 @@ def test_parse_enum_and_union_type_info() raises:
     ref id_or_name = cfg.leaves[id_or_name_idx][]
 
     assert_equal(mode.type.name, "enumeration")
-    assert_equal(len(mode.type.enum_values), 2)
-    assert_equal(mode.type.enum_values[0], "auto")
-    assert_equal(mode.type.enum_values[1], "manual")
+    assert_equal(mode.type.enum_values_len(), 2)
+    assert_equal(mode.type.enum_value_at(0), "auto")
+    assert_equal(mode.type.enum_value_at(1), "manual")
 
     assert_equal(id_or_name.type.name, "union")
-    assert_equal(len(id_or_name.type.union_types), 2)
-    assert_equal(id_or_name.type.union_types[0][].name, "uint16")
-    assert_equal(id_or_name.type.union_types[1][].name, "string")
+    assert_equal(id_or_name.type.union_members_len(), 2)
+    assert_equal(id_or_name.type.union_member_arc(0)[].name, "uint16")
+    assert_equal(id_or_name.type.union_member_arc(1)[].name, "string")
 
 
 def test_validator_enforces_enum_and_union() raises:

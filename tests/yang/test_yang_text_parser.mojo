@@ -61,11 +61,11 @@ def test_parse_basic_yang_file() raises:
     assert_equal(system.leaves[hostname_idx][].type.name, "string")
     assert_equal(system.leaves[enabled_idx][].type.name, "boolean")
     assert_equal(system.leaves[mgmt_if_idx][].type.name, YANG_TYPE_LEAFREF)
-    assert_true(system.leaves[mgmt_if_idx][].type.has_leafref_path)
-    assert_equal(system.leaves[mgmt_if_idx][].type.leafref_path, "/system/interface/name")
+    assert_true(system.leaves[mgmt_if_idx][].type.has_leafref_path())
+    assert_equal(system.leaves[mgmt_if_idx][].type.leafref_path(), "/system/interface/name")
     assert_equal(system.leaves[mgmt_if_index_idx][].type.name, YANG_TYPE_LEAFREF)
-    assert_true(system.leaves[mgmt_if_index_idx][].type.has_leafref_path)
-    assert_equal(system.leaves[mgmt_if_index_idx][].type.leafref_path, "/system/interface/if-index")
+    assert_true(system.leaves[mgmt_if_index_idx][].type.has_leafref_path())
+    assert_equal(system.leaves[mgmt_if_index_idx][].type.leafref_path(), "/system/interface/if-index")
 
     assert_true(len(system.lists) == 1)
     ref interface_list = system.lists[0][]
@@ -75,9 +75,9 @@ def test_parse_basic_yang_file() raises:
     var mtu_idx = _find_leaf_index_in_list("interface", "mtu", path)
     assert_true(mtu_idx >= 0)
     assert_equal(interface_list.leaves[mtu_idx][].type.name, "uint16")
-    assert_true(interface_list.leaves[mtu_idx][].type.has_range)
-    assert_equal(interface_list.leaves[mtu_idx][].type.range_min, 576)
-    assert_equal(interface_list.leaves[mtu_idx][].type.range_max, 9216)
+    assert_true(interface_list.leaves[mtu_idx][].type.has_range())
+    assert_equal(interface_list.leaves[mtu_idx][].type.range_min(), 576)
+    assert_equal(interface_list.leaves[mtu_idx][].type.range_max(), 9216)
 
     var descr_idx = _find_leaf_index_in_list("interface", "description", path)
     var hold_time_idx = _find_leaf_index_in_list("interface", "hold-time", path)
@@ -85,9 +85,9 @@ def test_parse_basic_yang_file() raises:
     assert_true(hold_time_idx >= 0)
     assert_equal(interface_list.leaves[descr_idx][].type.name, "string")
     assert_equal(interface_list.leaves[hold_time_idx][].type.name, "uint16")
-    assert_true(interface_list.leaves[hold_time_idx][].type.has_range)
-    assert_equal(interface_list.leaves[hold_time_idx][].type.range_min, 0)
-    assert_equal(interface_list.leaves[hold_time_idx][].type.range_max, 300)
+    assert_true(interface_list.leaves[hold_time_idx][].type.has_range())
+    assert_equal(interface_list.leaves[hold_time_idx][].type.range_min(), 0)
+    assert_equal(interface_list.leaves[hold_time_idx][].type.range_max(), 300)
 
 
 def main() raises:
