@@ -35,7 +35,7 @@ from xyang.yang.tokens import (
     YANG_STMT_CHOICE,
     YANG_STMT_USES,
 )
-from xyang.yang.parser.types import ParsedAugment
+from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.clone_utils import (
     ident_local_name_impl,

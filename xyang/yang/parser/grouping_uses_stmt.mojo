@@ -94,16 +94,26 @@ def parse_grouping_statement_impl[ParserT: ParserContract](mut parser: ParserT) 
         parser._expect("}")
     parser._skip_if(";")
 
+    var children = List[ParsedGrouping.ChildStatement]()
+    for i in range(len(leaves)):
+        children.append(ParsedGrouping.ChildStatement(leaves[i].copy()))
+    for i in range(len(leaf_lists)):
+        children.append(ParsedGrouping.ChildStatement(leaf_lists[i].copy()))
+    for i in range(len(anydatas)):
+        children.append(ParsedGrouping.ChildStatement(anydatas[i].copy()))
+    for i in range(len(anyxmls)):
+        children.append(ParsedGrouping.ChildStatement(anyxmls[i].copy()))
+    for i in range(len(containers)):
+        children.append(ParsedGrouping.ChildStatement(containers[i].copy()))
+    for i in range(len(lists)):
+        children.append(ParsedGrouping.ChildStatement(lists[i].copy()))
+    for i in range(len(choices)):
+        children.append(ParsedGrouping.ChildStatement(choices[i].copy()))
+
     parser._store_grouping(
         ParsedGrouping(
             name,
-            leaves^,
-            leaf_lists^,
-            anydatas^,
-            anyxmls^,
-            containers^,
-            lists^,
-            choices^,
+            children^,
         ),
     )
 

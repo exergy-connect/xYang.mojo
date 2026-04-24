@@ -13,7 +13,7 @@ from xyang.ast import (
     YangWhen,
 )
 from xyang.yang.parser.types import ParsedGrouping
-from xyang.yang.parser.types import ParsedAugment
+from xyang.yang.parser.parsed_augment import ParsedAugment
 
 comptime Arc = ArcPointer
 
