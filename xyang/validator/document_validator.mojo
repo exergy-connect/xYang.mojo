@@ -128,17 +128,11 @@ def _is_float_type_name(type_name: String) -> Bool:
     return type_name == "decimal64" or type_name == "number"
 
 
-def _default_text_to_value_by_type_name(
-    default_text: String,
-    type_name: String,
-    range_min: Int64 = 0,
-    range_max: Int64 = 0,
-    has_range: Bool = False,
-    has_decimal64_range: Bool = False,
-    dec_min: Float64 = 0.0,
-    dec_max: Float64 = 0.0,
+def _default_text_to_value_for_type(
+    default_text: String, read t: YangType
 ) -> Optional[Value]:
     var text = String(default_text.strip())
+    var type_name = t.name
     if type_name == "boolean":
         if text == "true":
             return Optional(Value(True))
@@ -150,7 +144,7 @@ def _default_text_to_value_by_type_name(
     if _is_integer_type_name(type_name):
         try:
             var n = Int64(atol(text))
-            if has_range and (n < range_min or n > range_max):
+            if t.has_range and (n < t.range_min or n > t.range_max):
                 return Optional[Value]()
             return Optional(Value(n))
         except:
@@ -158,10 +152,12 @@ def _default_text_to_value_by_type_name(
     if _is_float_type_name(type_name):
         try:
             var n = atof(text)
-            if has_decimal64_range and type_name == "decimal64":
-                if n < dec_min or n > dec_max:
+            if t.has_decimal64_range and type_name == "decimal64":
+                if n < t.decimal64_range_min or n > t.decimal64_range_max:
                     return Optional[Value]()
-            elif has_range and (n < Float64(range_min) or n > Float64(range_max)):
+            elif t.has_range and (
+                n < Float64(t.range_min) or n > Float64(t.range_max)
+            ):
                 return Optional[Value]()
             return Optional(Value(n))
         except:
@@ -178,30 +174,13 @@ def _default_text_to_value(
         if quoted_union_default:
             return Value(default_text)
         for i in range(len(type_stmt.union_types)):
-            var m = type_stmt.union_types[i][]
-            var maybe = _default_text_to_value_by_type_name(
-                default_text,
-                m.name,
-                m.range_min,
-                m.range_max,
-                m.has_range,
-                m.has_decimal64_range,
-                m.decimal64_range_min,
-                m.decimal64_range_max,
+            var maybe = _default_text_to_value_for_type(
+                default_text, type_stmt.union_types[i][]
             )
             if maybe:
                 return maybe.value().copy()
         return Value(default_text)
-    var maybe = _default_text_to_value_by_type_name(
-        default_text,
-        type_stmt.name,
-        type_stmt.range_min,
-        type_stmt.range_max,
-        type_stmt.has_range,
-        type_stmt.has_decimal64_range,
-        type_stmt.decimal64_range_min,
-        type_stmt.decimal64_range_max,
-    )
+    var maybe = _default_text_to_value_for_type(default_text, type_stmt)
     if maybe:
         return maybe.value().copy()
     return Value(default_text)
