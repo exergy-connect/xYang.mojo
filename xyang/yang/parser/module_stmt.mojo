@@ -1,6 +1,6 @@
 from std.memory import ArcPointer
 from xyang.ast import YangModule, YangContainer
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_STMT_MODULE,
     YANG_STMT_NAMESPACE,
     YANG_STMT_PREFIX,

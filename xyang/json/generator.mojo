@@ -59,7 +59,7 @@ from xyang.json.schema_keys import (
     XYANG_WHEN_CONDITION,
     XYANG_YANG_VERSION,
 )
-from xyang.yang.tokens import YANG_TYPE_LEAFREF, YANG_STMT_LEAF_LIST, YANG_STMT_UNION
+from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF, YANG_STMT_LEAF_LIST, YANG_STMT_UNION
 
 comptime Arc = ArcPointer
 

@@ -3,7 +3,7 @@
 
 from emberjson import Value
 from xyang.ast import YangType
-from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from std.memory import ArcPointer
 from xyang.xpath import (
     XPathNode,

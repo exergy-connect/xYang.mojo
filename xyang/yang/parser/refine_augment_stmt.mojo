@@ -11,7 +11,7 @@ from xyang.ast import (
     YangMust,
     YangWhen,
 )
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_STMT_DESCRIPTION,
     YANG_STMT_MANDATORY,
     YANG_STMT_DEFAULT,

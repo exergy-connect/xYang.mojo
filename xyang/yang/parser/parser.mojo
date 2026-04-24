@@ -96,15 +96,15 @@ comptime Arc = ArcPointer
 
 struct _YangParser(Movable, ParserContract):
     var tokens: List[YangToken]
+    var source: String
     var index: Int
-    var grouping_names: List[String]
     var groupings: Dict[String, Arc[ParsedGrouping]]
     var pending_module_augments: List[Arc[ParsedAugment]]
 
-    def __init__(out self, var tokens: List[YangToken]):
-        self.tokens = tokens^
+    def __init__(out self, source: String):
+        self.tokens = tokenize_yang_impl(source)
+        self.source = source
         self.index = 0
-        self.grouping_names = List[String]()
         self.groupings = Dict[String, Arc[ParsedGrouping]]()
         self.pending_module_augments = List[Arc[ParsedAugment]]()
 
@@ -152,7 +152,6 @@ struct _YangParser(Movable, ParserContract):
         var grouping_name = grouping.name
         if self.groupings.get(grouping_name):
             self._error("Duplicate grouping '" + grouping_name + "'")
-        self.grouping_names.append(grouping_name)
         self.groupings[grouping_name] = Arc[ParsedGrouping](grouping^)
 
     def _parse_uses_statement(
@@ -207,12 +206,6 @@ struct _YangParser(Movable, ParserContract):
                 lists.append(clone_list_arc_impl(child[Arc[YangList]]))
             elif child.isa[Arc[YangChoice]]():
                 choices.append(clone_choice_arc_impl(child[Arc[YangChoice]]))
-
-    def _find_grouping_index(ref self, grouping_name: String) -> Int:
-        for i in range(len(self.grouping_names)):
-            if self.grouping_names[i] == grouping_name:
-                return i
-        return -1
 
     def _parse_if_feature_statement(mut self) raises:
         parse_if_feature_statement_impl(self)
@@ -672,13 +665,13 @@ struct _YangParser(Movable, ParserContract):
         self.index += 1
 
     def _consume_if(mut self, value: String) -> Bool:
-        if self._has_more() and self.tokens[self.index].value == value:
+        if self._has_more() and self._peek() == value:
             self.index += 1
             return True
         return False
 
     def _skip_if(mut self, value: String):
-        if self._has_more() and self.tokens[self.index].value == value:
+        if self._has_more() and self._peek() == value:
             self.index += 1
 
     def _consume(mut self) raises:
@@ -691,18 +684,19 @@ struct _YangParser(Movable, ParserContract):
         if not self._has_more():
             self._error("Unexpected end of input")
             return ""
-        var tok_value = self.tokens[self.index].value.copy()
+        ref tok = self.tokens[self.index]
+        var out = _token_text(self.source, tok, strip_quotes = tok.type == YangToken.STRING)
         self.index += 1
-        return tok_value
+        return out
 
     def _peek(ref self) -> String:
-        return self.tokens[self.index].value
+        return _token_text(self.source, self.tokens[self.index])
 
     def _peek_n(ref self, offset: Int) -> String:
         var idx = self.index + offset
         if idx < 0 or idx >= len(self.tokens):
             return ""
-        return self.tokens[idx].value
+        return _token_text(self.source, self.tokens[idx])
 
     def _has_more(ref self) -> Bool:
         return self.index < len(self.tokens)
@@ -714,8 +708,21 @@ struct _YangParser(Movable, ParserContract):
                 "YANG parse error at line "
                 + String(tok.line)
                 + ", col "
-                + String(tok.col)
+                + String(_col_for_token(self.source, tok))
                 + ": "
                 + message,
             )
         raise Error("YANG parse error at end of input: " + message)
+
+
+def _token_text(source: String, read tok: YangToken, strip_quotes: Bool = False) -> String:
+    return tok.text(source, strip_quotes = strip_quotes)
+
+
+def _col_for_token(source: String, tok: YangToken) -> Int:
+    var i = tok.start
+    while i > 0:
+        if source[byte=i - 1 : i] == "\n":
+            break
+        i -= 1
+    return tok.start - i

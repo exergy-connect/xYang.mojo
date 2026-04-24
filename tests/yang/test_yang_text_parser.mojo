@@ -1,5 +1,5 @@
 from std.testing import assert_equal, assert_true, TestSuite
-from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from xyang.yang import parse_yang_file
 
 

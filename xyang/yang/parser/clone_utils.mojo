@@ -20,7 +20,7 @@ from xyang.ast import (
     YangWhen,
 )
 from xyang.xpath import parse_xpath, Expr
-from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 
 comptime Arc = ArcPointer
 

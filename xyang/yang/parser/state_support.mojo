@@ -9,7 +9,7 @@ from xyang.ast import (
     YangTypeIdentityref,
 )
 from xyang.xpath import Expr
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_TYPE_ENUMERATION,
     YANG_TYPE_LEAFREF,
 )

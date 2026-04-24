@@ -9,16 +9,9 @@ from xyang.ast import (
     YangAnydata,
     YangAnyxml,
 )
+from xyang.yang.parser.yang_token import YangToken
 
 comptime Arc = ArcPointer
-
-
-@fieldwise_init
-struct YangToken(Copyable):
-    var value: String
-    var quoted: Bool
-    var line: Int
-    var col: Int
 
 
 @fieldwise_init

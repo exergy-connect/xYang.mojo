@@ -1,6 +1,6 @@
 from std.collections import Dict
 from xyang.ast import YangChoice
-from xyang.yang.tokens import YANG_BOOL_TRUE, YANG_BOOL_FALSE
+from xyang.yang.parser.yang_token import YANG_BOOL_TRUE, YANG_BOOL_FALSE
 from xyang.yang.parser.parser_contract import ParserContract
 
 

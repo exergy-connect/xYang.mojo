@@ -6,7 +6,7 @@ from xyang.ast import (
     YangWhen,
 )
 from xyang.xpath import parse_xpath, Expr
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_STMT_DESCRIPTION,
     YANG_STMT_ERROR_MESSAGE,
     YANG_STMT_MUST,

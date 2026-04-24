@@ -8,7 +8,7 @@ from xyang.ast import (
     YangAnydata,
     YangAnyxml,
 )
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_STMT_DESCRIPTION,
     YANG_STMT_GROUPING,
     YANG_STMT_LEAF,

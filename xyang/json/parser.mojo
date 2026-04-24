@@ -23,7 +23,7 @@ from xyang.ast import (
     YangMust,
     YangWhen,
 )
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_TYPE_LEAFREF,
     YANG_STMT_ENUM,
     YANG_STMT_LEAF_LIST,

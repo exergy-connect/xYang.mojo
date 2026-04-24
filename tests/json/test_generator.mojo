@@ -4,7 +4,7 @@ from std.testing import assert_equal, assert_true, TestSuite
 from xyang.yang import parse_yang_file, parse_yang_string
 from xyang.json.generator import generate_json_schema, schema_to_yang_json
 from xyang.json.parser import parse_json_schema
-from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 
 
 def test_schema_roundtrip_basic_device() raises:

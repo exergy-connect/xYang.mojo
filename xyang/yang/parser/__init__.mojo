@@ -1,18 +1,9 @@
-## Temporary non-crashing parser stub surface.
-
-from std.collections import List
 from xyang.ast import YangModule
 from xyang.yang.parser.parser import _YangParser
-from xyang.yang.parser.tokenizer import tokenize_yang_impl
-from xyang.yang.parser.types import YangToken
-
-def tokenize_yang(source: String) -> List[YangToken]:
-    return tokenize_yang_impl(source)
 
 
 def parse_yang_string(source: String) raises -> YangModule:
-    var tokens = tokenize_yang(source)
-    var parser = _YangParser(tokens^)
+    var parser = _YangParser(source)
     return parser.parse_module()
 
 

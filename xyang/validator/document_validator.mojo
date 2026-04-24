@@ -20,7 +20,7 @@ from xyang.ast import (
     YangType,
     YangWhen,
 )
-from xyang.yang.tokens import YANG_TYPE_LEAFREF
+from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from xyang.validator.validation_error import ValidationError, Severity
 from xyang.validator.path_builder import PathBuilder
 from xyang.validator.type_checker import (

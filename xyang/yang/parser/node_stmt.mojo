@@ -13,7 +13,7 @@ from xyang.ast import (
     YangMust,
     YangWhen,
 )
-from xyang.yang.tokens import (
+from xyang.yang.parser.yang_token import (
     YANG_STMT_CASE,
     YANG_STMT_CHOICE,
     YANG_STMT_CONTAINER,
