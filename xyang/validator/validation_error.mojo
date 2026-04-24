@@ -15,7 +15,7 @@ struct ValidationError(Copyable, Movable):
     path: XPath-like location, e.g. /data-model/entities[name='foo']/name
     message: human-readable description
     expression: failing XPath or constraint expression, if any (empty = none)
-    severity: error or warning
+    severity: error or warning.
     """
     var path: String
     var message: String
