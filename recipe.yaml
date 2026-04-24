@@ -1,0 +1,26 @@
+context:
+  name: "xyang"
+  version: "0.1.0"
+
+package:
+  name: "${{ name | lower }}"
+  version: "${{ version }}"
+
+source:
+  path: .
+
+build:
+  number: 0
+  script:
+    - mkdir -p $PREFIX/lib/mojo
+    - export MODULAR_MOJO_IMPORT_PATH="$PREFIX/lib/mojo"
+    - mojo package -I . xyang -o $PREFIX/lib/mojo/xyang.mojopkg
+
+requirements:
+  build:
+    - mojo 0.26.2.0.*
+    - mblack ==26.2.0
+    - emberjson
+  run:
+    - mojo 0.26.2.0.*
+    - emberjson
