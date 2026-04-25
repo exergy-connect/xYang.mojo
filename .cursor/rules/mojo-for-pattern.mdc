@@ -1,0 +1,44 @@
+---
+description: Mojo for-loop pattern (prefer for x in collection over range(len(...)))
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo `for … in` iteration
+
+When you only need each element of a sequence, prefer a **direct `for` loop over the collection** (or its iterator) instead of indexing with `range(len(...))`.
+
+## Rules
+
+1. **Prefer** `for item in items:` (and `for ref item in items:` when you need a reference) when the body only uses `items[i]` as `items[i]` — bind the element once in the loop header.
+2. **Avoid** `for i in range(len(items)): ... items[i] ...` when no other part of the loop needs `i`.
+3. **Keep** `for i in range(len(...))` when the index is required on its own: e.g. mutating by position, slicing from `i`, aligning with another index-based structure, or stepping with a non-unit stride.
+
+## Example
+
+Avoid:
+
+```mojo
+for i in range(len(default_arr)):
+    var text = _default_scalar_to_string(default_arr[i])
+    if len(text) > 0:
+        default_values.append(text)
+```
+
+Prefer:
+
+```mojo
+for ref scalar in default_arr:
+    var text = _default_scalar_to_string(scalar)
+    if text:
+        default_values.append(text)
+```
+
+Use `for scalar in default_arr:` instead of `for ref scalar in ...` when the element type is cheap to copy and the helper takes ownership or a copy — match how similar loops are written elsewhere in the module.
+
+## Related patterns already in the codebase
+
+- Dict-like objects: `for ref pair in obj.items():`
+- Nested structs / lists of children: `for c in container.containers:`
+
+Apply the same idea to `List` and other iterable values: iterate the values, not the indices, unless the index matters.

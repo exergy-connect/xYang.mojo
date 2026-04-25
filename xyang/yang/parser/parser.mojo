@@ -8,96 +8,15 @@
 
 from std.collections import Dict
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangModule,
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangChoiceCase,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-    YangType,
-    YangMust,
-    YangWhen,
-    YangGrouping,
-    YangTypedefStmt,
-    YangIdentityStmt,
-    YangExtensionStmt,
-    YangModuleImport,
-    YangUnknownStatement,
-    YangUsesStmt,
-    YangRefineStmt,
-    YangAugmentStmt,
-    YangModuleStatement,
-)
+import xyang.ast as ast
 from xyang.yang.parser.tokenizer import tokenize_yang_impl
 from xyang.yang.parser.module_stmt import parse_module_impl
-from xyang.yang.parser.grouping_uses_stmt import (
-    parse_grouping_statement_impl,
-    parse_uses_statement_impl,
-    parse_if_feature_statement_impl,
-)
-from xyang.yang.parser.refine_augment_stmt import (
-    parse_refine_statement_impl,
-    parse_relative_augment_statement_impl,
-    parse_module_augment_statement_impl,
-    apply_pending_module_augments_impl,
-    parse_augment_statement_body_impl,
-    apply_augment_to_path_impl,
-    apply_augment_segments_impl,
-    refine_set_description_at_path_impl,
-    refine_set_mandatory_at_path_impl,
-    refine_set_default_at_path_impl,
-    refine_add_must_at_path_impl,
-    refine_set_when_at_path_impl,
-    refine_set_type_at_path_impl,
-    refine_set_min_elements_at_path_impl,
-    refine_set_max_elements_at_path_impl,
-    refine_set_ordered_by_at_path_impl,
-    refine_set_key_at_path_impl,
-    refine_add_unique_at_path_impl,
-)
-from xyang.yang.parser.node_stmt import (
-    parse_container_statement_impl,
-    parse_list_statement_impl,
-    parse_leaf_statement_impl,
-    parse_leaf_list_statement_impl,
-    peek_prefixed_extension_impl,
-    skip_prefixed_extension_statement_impl,
-    parse_anydata_statement_impl,
-    parse_anyxml_statement_impl,
-    parse_choice_statement_impl,
-    parse_case_statement_impl,
-)
-from xyang.yang.parser.type_constraint_stmt import (
-    parse_type_statement_impl,
-    parse_must_statement_impl,
-    parse_when_statement_impl,
-    parse_typedef_statement_impl,
-)
-from xyang.yang.parser.clone_utils import (
-    split_schema_path_impl,
-    ident_local_name_impl,
-    clone_must_impl,
-    clone_when_impl,
-    clone_yang_type_impl,
-    clone_leaf_arc_impl,
-    clone_leaf_list_arc_impl,
-    clone_choice_arc_impl,
-    clone_anydata_arc_impl,
-    clone_anyxml_arc_impl,
-    clone_container_arc_impl,
-    clone_list_arc_impl,
-)
-from xyang.yang.parser.semantics_utils import (
-    parse_non_negative_int_impl,
-    parse_ordered_by_argument_impl,
-    unique_components_from_argument_impl,
-    validate_choice_unique_node_names_impl,
-    parse_boolean_value_impl,
-)
+import xyang.yang.parser.grouping_uses_stmt as gu_stmt
+import xyang.yang.parser.refine_augment_stmt as ra_stmt
+import xyang.yang.parser.node_stmt as node_stmt
+import xyang.yang.parser.type_constraint_stmt as tc_stmt
+import xyang.yang.parser.clone_utils as clone_utils
+import xyang.yang.parser.semantics_utils as sem_utils
 from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.types import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
@@ -109,13 +28,13 @@ struct _YangParser(Movable, ParserContract):
     var tokens: List[YangToken]
     var source: String
     var index: Int
-    var groupings: Dict[String, Arc[YangGrouping]]
-    var typedefs: Dict[String, Arc[YangType]]
-    var typedef_statements: Dict[String, Arc[YangTypedefStmt]]
-    var identities: Dict[String, Arc[YangIdentityStmt]]
-    var extensions: Dict[String, Arc[YangExtensionStmt]]
-    var import_prefixes: Dict[String, Arc[YangModuleImport]]
-    var module_statements: List[YangModuleStatement]
+    var groupings: Dict[String, Arc[ast.YangGrouping]]
+    var typedefs: Dict[String, Arc[ast.YangType]]
+    var typedef_statements: Dict[String, Arc[ast.YangTypedefStmt]]
+    var identities: Dict[String, Arc[ast.YangIdentityStmt]]
+    var extensions: Dict[String, Arc[ast.YangExtensionStmt]]
+    var import_prefixes: Dict[String, Arc[ast.YangModuleImport]]
+    var module_statements: List[ast.YangModuleStatement]
     var feature_if_features: Dict[String, List[String]]
     var pending_module_augments: List[Arc[ParsedAugment]]
 
@@ -123,20 +42,20 @@ struct _YangParser(Movable, ParserContract):
         self.tokens = tokenize_yang_impl(source)
         self.source = source
         self.index = 0
-        self.groupings = Dict[String, Arc[YangGrouping]]()
-        self.typedefs = Dict[String, Arc[YangType]]()
-        self.typedef_statements = Dict[String, Arc[YangTypedefStmt]]()
-        self.identities = Dict[String, Arc[YangIdentityStmt]]()
-        self.extensions = Dict[String, Arc[YangExtensionStmt]]()
-        self.import_prefixes = Dict[String, Arc[YangModuleImport]]()
-        self.module_statements = List[YangModuleStatement]()
+        self.groupings = Dict[String, Arc[ast.YangGrouping]]()
+        self.typedefs = Dict[String, Arc[ast.YangType]]()
+        self.typedef_statements = Dict[String, Arc[ast.YangTypedefStmt]]()
+        self.identities = Dict[String, Arc[ast.YangIdentityStmt]]()
+        self.extensions = Dict[String, Arc[ast.YangExtensionStmt]]()
+        self.import_prefixes = Dict[String, Arc[ast.YangModuleImport]]()
+        self.module_statements = List[ast.YangModuleStatement]()
         self.feature_if_features = Dict[String, List[String]]()
         self.pending_module_augments = List[Arc[ParsedAugment]]()
 
     def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
         self.pending_module_augments.append(Arc[ParsedAugment](aug^))
 
-    def parse_module(mut self) raises -> YangModule:
+    def parse_module(mut self) raises -> ast.YangModule:
         return parse_module_impl(self)
 
     def _prime_groupings_for_current_module_body(mut self) raises:
@@ -186,84 +105,84 @@ struct _YangParser(Movable, ParserContract):
         # Restore parser position so the normal module parse can begin at the same place.
         self.index = module_body_start
 
-    def _parse_container_statement(mut self) raises -> YangContainer:
-        return parse_container_statement_impl(self)
+    def _parse_container_statement(mut self) raises -> ast.YangContainer:
+        return node_stmt.parse_container_statement_impl(self)
 
-    def _parse_list_statement(mut self) raises -> YangList:
-        return parse_list_statement_impl(self)
+    def _parse_list_statement(mut self) raises -> ast.YangList:
+        return node_stmt.parse_list_statement_impl(self)
 
-    def _parse_leaf_statement(mut self) raises -> YangLeaf:
-        return parse_leaf_statement_impl(self)
+    def _parse_leaf_statement(mut self) raises -> ast.YangLeaf:
+        return node_stmt.parse_leaf_statement_impl(self)
 
-    def _parse_leaf_list_statement(mut self) raises -> YangLeafList:
-        return parse_leaf_list_statement_impl(self)
+    def _parse_leaf_list_statement(mut self) raises -> ast.YangLeafList:
+        return node_stmt.parse_leaf_list_statement_impl(self)
 
     def _peek_prefixed_extension(ref self) -> Bool:
         ## True when the next statement looks like `prefix:extension-name ...` (RFC 7950 extension).
-        return peek_prefixed_extension_impl(self)
+        return node_stmt.peek_prefixed_extension_impl(self)
 
     def _skip_prefixed_extension_statement(mut self) raises:
         var prefix = self._peek_value()
         var name = self._peek_value_n(2)
         var keyword = prefix + ":" + name
         self._record_module_statement(
-            YangModuleStatement(
-                Arc[YangUnknownStatement](
-                    YangUnknownStatement(keyword = keyword, argument = "", has_argument = False),
+            ast.YangModuleStatement(
+                Arc[ast.YangUnknownStatement](
+                    ast.YangUnknownStatement(keyword = keyword, argument = "", has_argument = False),
                 ),
             ),
         )
-        skip_prefixed_extension_statement_impl(self)
+        node_stmt.skip_prefixed_extension_statement_impl(self)
 
-    def _parse_anydata_statement(mut self) raises -> YangAnydata:
-        return parse_anydata_statement_impl(self)
+    def _parse_anydata_statement(mut self) raises -> ast.YangAnydata:
+        return node_stmt.parse_anydata_statement_impl(self)
 
-    def _parse_anyxml_statement(mut self) raises -> YangAnyxml:
-        return parse_anyxml_statement_impl(self)
+    def _parse_anyxml_statement(mut self) raises -> ast.YangAnyxml:
+        return node_stmt.parse_anyxml_statement_impl(self)
 
-    def _parse_choice_statement(mut self) raises -> YangChoice:
-        return parse_choice_statement_impl(self)
+    def _parse_choice_statement(mut self) raises -> ast.YangChoice:
+        return node_stmt.parse_choice_statement_impl(self)
 
-    def _parse_case_statement(mut self) raises -> YangChoiceCase:
-        return parse_case_statement_impl(self)
+    def _parse_case_statement(mut self) raises -> ast.YangChoiceCase:
+        return node_stmt.parse_case_statement_impl(self)
 
     def _parse_grouping_statement(mut self) raises:
-        parse_grouping_statement_impl(self)
+        gu_stmt.parse_grouping_statement_impl(self)
 
-    def _store_grouping(mut self, var grouping: YangGrouping) raises:
+    def _store_grouping(mut self, var grouping: ast.YangGrouping) raises:
         var grouping_name = grouping.name
         if self.groupings.get(grouping_name):
             self._error("Duplicate grouping '" + grouping_name + "'")
-        self.groupings[grouping_name] = Arc[YangGrouping](grouping^)
+        self.groupings[grouping_name] = Arc[ast.YangGrouping](grouping^)
 
-    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[YangGrouping]]:
+    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[ast.YangGrouping]]:
         return self.groupings.copy()
 
     def _parse_typedef_statement(mut self) raises:
-        parse_typedef_statement_impl(self)
+        tc_stmt.parse_typedef_statement_impl(self)
 
-    def _store_typedef(mut self, name: String, read type_stmt: YangType) raises:
+    def _store_typedef(mut self, name: String, read type_stmt: ast.YangType) raises:
         if self.typedefs.get(name):
             self._error("Duplicate typedef '" + name + "'")
-        self.typedefs[name] = Arc[YangType](clone_yang_type_impl(type_stmt))
-        self.typedef_statements[name] = Arc[YangTypedefStmt](
-            YangTypedefStmt(
+        self.typedefs[name] = Arc[ast.YangType](clone_utils.clone_yang_type_impl(type_stmt))
+        self.typedef_statements[name] = Arc[ast.YangTypedefStmt](
+            ast.YangTypedefStmt(
                 name = name,
-                type_stmt = clone_yang_type_impl(type_stmt),
+                type_stmt = clone_utils.clone_yang_type_impl(type_stmt),
                 description = "",
             ),
         )
 
-    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[YangType]]:
+    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[ast.YangType]]:
         return self.typedefs.get(name)
 
-    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[YangTypedefStmt]]:
+    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[ast.YangTypedefStmt]]:
         return self.typedef_statements.copy()
 
-    def _record_module_statement(mut self, read stmt: YangModuleStatement):
+    def _record_module_statement(mut self, read stmt: ast.YangModuleStatement):
         self.module_statements.append(stmt)
 
-    def _module_statements_snapshot(ref self) -> List[YangModuleStatement]:
+    def _module_statements_snapshot(ref self) -> List[ast.YangModuleStatement]:
         return self.module_statements.copy()
 
     def _record_feature_if_feature(mut self, feature_name: String, if_feature: String):
@@ -280,39 +199,39 @@ struct _YangParser(Movable, ParserContract):
     def _feature_if_features_snapshot(ref self) -> Dict[String, List[String]]:
         return self.feature_if_features.copy()
 
-    def _identities_snapshot(ref self) -> Dict[String, Arc[YangIdentityStmt]]:
+    def _identities_snapshot(ref self) -> Dict[String, Arc[ast.YangIdentityStmt]]:
         return self.identities.copy()
 
-    def _extensions_snapshot(ref self) -> Dict[String, Arc[YangExtensionStmt]]:
+    def _extensions_snapshot(ref self) -> Dict[String, Arc[ast.YangExtensionStmt]]:
         return self.extensions.copy()
 
-    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[YangModuleImport]]:
+    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[ast.YangModuleImport]]:
         return self.import_prefixes.copy()
 
     def _parse_uses_statement(
         mut self,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         var grouping_name = self._peek_value_n(1)
         self._record_module_statement(
-            YangModuleStatement(
-                Arc[YangUsesStmt](
-                    YangUsesStmt(
+            ast.YangModuleStatement(
+                Arc[ast.YangUsesStmt](
+                    ast.YangUsesStmt(
                         grouping_name = grouping_name,
                         if_features = List[String](),
                         has_when = False,
-                        when = Optional[YangWhen](),
+                        when = Optional[ast.YangWhen](),
                     ),
                 ),
             ),
         )
-        parse_uses_statement_impl(
+        gu_stmt.parse_uses_statement_impl(
             self,
             leaves,
             leaf_lists,
@@ -326,13 +245,13 @@ struct _YangParser(Movable, ParserContract):
     def _append_grouping_nodes_by_name(
         ref self,
         grouping_name: String,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         var grouping_opt = self.groupings.get(grouping_name)
         if not grouping_opt:
@@ -340,41 +259,41 @@ struct _YangParser(Movable, ParserContract):
         ref grouping = grouping_opt.value()[]
         for i in range(len(grouping.children)):
             var child = grouping.children[i]
-            if child.isa[Arc[YangLeaf]]():
-                leaves.append(clone_leaf_arc_impl(child[Arc[YangLeaf]]))
-            elif child.isa[Arc[YangLeafList]]():
-                leaf_lists.append(clone_leaf_list_arc_impl(child[Arc[YangLeafList]]))
-            elif child.isa[Arc[YangAnydata]]():
-                anydatas.append(clone_anydata_arc_impl(child[Arc[YangAnydata]]))
-            elif child.isa[Arc[YangAnyxml]]():
-                anyxmls.append(clone_anyxml_arc_impl(child[Arc[YangAnyxml]]))
-            elif child.isa[Arc[YangContainer]]():
-                containers.append(clone_container_arc_impl(child[Arc[YangContainer]]))
-            elif child.isa[Arc[YangList]]():
-                lists.append(clone_list_arc_impl(child[Arc[YangList]]))
-            elif child.isa[Arc[YangChoice]]():
-                choices.append(clone_choice_arc_impl(child[Arc[YangChoice]]))
+            if child.isa[Arc[ast.YangLeaf]]():
+                leaves.append(clone_utils.clone_leaf_arc_impl(child[Arc[ast.YangLeaf]]))
+            elif child.isa[Arc[ast.YangLeafList]]():
+                leaf_lists.append(clone_utils.clone_leaf_list_arc_impl(child[Arc[ast.YangLeafList]]))
+            elif child.isa[Arc[ast.YangAnydata]]():
+                anydatas.append(clone_utils.clone_anydata_arc_impl(child[Arc[ast.YangAnydata]]))
+            elif child.isa[Arc[ast.YangAnyxml]]():
+                anyxmls.append(clone_utils.clone_anyxml_arc_impl(child[Arc[ast.YangAnyxml]]))
+            elif child.isa[Arc[ast.YangContainer]]():
+                containers.append(clone_utils.clone_container_arc_impl(child[Arc[ast.YangContainer]]))
+            elif child.isa[Arc[ast.YangList]]():
+                lists.append(clone_utils.clone_list_arc_impl(child[Arc[ast.YangList]]))
+            elif child.isa[Arc[ast.YangChoice]]():
+                choices.append(clone_utils.clone_choice_arc_impl(child[Arc[ast.YangChoice]]))
 
     def _parse_if_feature_statement(mut self) raises:
         var if_feature = self._peek_value_n(1)
         self._record_feature_if_feature("__module__", if_feature)
-        parse_if_feature_statement_impl(self)
+        gu_stmt.parse_if_feature_statement_impl(self)
 
     def _parse_refine_statement(
         mut self,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         var target_path = self._peek_value_n(1)
         self._record_module_statement(
-            YangModuleStatement(
-                Arc[YangRefineStmt](
-                    YangRefineStmt(
+            ast.YangModuleStatement(
+                Arc[ast.YangRefineStmt](
+                    ast.YangRefineStmt(
                         target_path = target_path,
                         has_mandatory = False,
                         mandatory = False,
@@ -386,7 +305,7 @@ struct _YangParser(Movable, ParserContract):
                 ),
             ),
         )
-        parse_refine_statement_impl(
+        ra_stmt.parse_refine_statement_impl(
             self,
             leaves,
             leaf_lists,
@@ -399,28 +318,28 @@ struct _YangParser(Movable, ParserContract):
 
     def _parse_relative_augment_statement(
         mut self,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         var augment_path = self._peek_value_n(1)
         self._record_module_statement(
-            YangModuleStatement(
-                Arc[YangAugmentStmt](
-                    YangAugmentStmt(
+            ast.YangModuleStatement(
+                Arc[ast.YangAugmentStmt](
+                    ast.YangAugmentStmt(
                         augment_path = augment_path,
                         if_features = List[String](),
                         has_when = False,
-                        when = Optional[YangWhen](),
+                        when = Optional[ast.YangWhen](),
                     ),
                 ),
             ),
         )
-        parse_relative_augment_statement_impl(
+        ra_stmt.parse_relative_augment_statement_impl(
             self,
             leaves,
             leaf_lists,
@@ -433,28 +352,28 @@ struct _YangParser(Movable, ParserContract):
 
     def _parse_module_augment_statement(
         mut self,
-        mut top_containers: List[Arc[YangContainer]],
+        mut top_containers: List[Arc[ast.YangContainer]],
     ) raises:
         var augment_path = self._peek_value_n(1)
         self._record_module_statement(
-            YangModuleStatement(
-                Arc[YangAugmentStmt](
-                    YangAugmentStmt(
+            ast.YangModuleStatement(
+                Arc[ast.YangAugmentStmt](
+                    ast.YangAugmentStmt(
                         augment_path = augment_path,
                         if_features = List[String](),
                         has_when = False,
-                        when = Optional[YangWhen](),
+                        when = Optional[ast.YangWhen](),
                     ),
                 ),
             ),
         )
-        parse_module_augment_statement_impl(self, top_containers)
+        ra_stmt.parse_module_augment_statement_impl(self, top_containers)
 
     def _apply_pending_module_augments(
         mut self,
-        mut top_containers: List[Arc[YangContainer]],
+        mut top_containers: List[Arc[ast.YangContainer]],
     ) raises:
-        var failed_path = apply_pending_module_augments_impl(
+        var failed_path = ra_stmt.apply_pending_module_augments_impl(
             self.pending_module_augments,
             top_containers,
         )
@@ -462,21 +381,21 @@ struct _YangParser(Movable, ParserContract):
             self._error("Unknown augment target path '" + failed_path + "'")
 
     def _parse_augment_statement_body(mut self) raises -> ParsedAugment:
-        return parse_augment_statement_body_impl(self)
+        return ra_stmt.parse_augment_statement_body_impl(self)
 
     def _apply_augment_to_path(
         ref self,
         path: String,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
         read aug: ParsedAugment,
     ) -> Bool:
-        return apply_augment_to_path_impl(
+        return ra_stmt.apply_augment_to_path_impl(
             path,
             leaves,
             leaf_lists,
@@ -492,16 +411,16 @@ struct _YangParser(Movable, ParserContract):
         ref self,
         read segments: List[String],
         seg_idx: Int,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
         read aug: ParsedAugment,
     ) -> Bool:
-        return apply_augment_segments_impl(
+        return ra_stmt.apply_augment_segments_impl(
             segments,
             seg_idx,
             leaves,
@@ -519,13 +438,13 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         description: String,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) -> Bool:
-        return refine_set_description_at_path_impl(
+        return ra_stmt.refine_set_description_at_path_impl(
             segments,
             seg_idx,
             description,
@@ -541,13 +460,13 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         mandatory: Bool,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) -> Bool:
-        return refine_set_mandatory_at_path_impl(
+        return ra_stmt.refine_set_mandatory_at_path_impl(
             segments,
             seg_idx,
             mandatory,
@@ -563,13 +482,13 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         default_value: String,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) -> Bool:
-        return refine_set_default_at_path_impl(
+        return ra_stmt.refine_set_default_at_path_impl(
             segments,
             seg_idx,
             default_value,
@@ -584,14 +503,14 @@ struct _YangParser(Movable, ParserContract):
         ref self,
         read segments: List[String],
         seg_idx: Int,
-        read must_stmt: YangMust,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        read must_stmt: ast.YangMust,
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) -> Bool:
-        return refine_add_must_at_path_impl(
+        return ra_stmt.refine_add_must_at_path_impl(
             segments,
             seg_idx,
             must_stmt,
@@ -606,14 +525,14 @@ struct _YangParser(Movable, ParserContract):
         ref self,
         read segments: List[String],
         seg_idx: Int,
-        read when_stmt: YangWhen,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        read when_stmt: ast.YangWhen,
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) -> Bool:
-        return refine_set_when_at_path_impl(
+        return ra_stmt.refine_set_when_at_path_impl(
             segments,
             seg_idx,
             when_stmt,
@@ -628,14 +547,14 @@ struct _YangParser(Movable, ParserContract):
         ref self,
         read segments: List[String],
         seg_idx: Int,
-        read type_stmt: YangType,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        read type_stmt: ast.YangType,
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) -> Bool:
-        return refine_set_type_at_path_impl(
+        return ra_stmt.refine_set_type_at_path_impl(
             segments,
             seg_idx,
             type_stmt,
@@ -651,12 +570,12 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         value: Int,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return refine_set_min_elements_at_path_impl(
+        return ra_stmt.refine_set_min_elements_at_path_impl(
             segments,
             seg_idx,
             value,
@@ -671,12 +590,12 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         value: Int,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return refine_set_max_elements_at_path_impl(
+        return ra_stmt.refine_set_max_elements_at_path_impl(
             segments,
             seg_idx,
             value,
@@ -691,12 +610,12 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         value: String,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return refine_set_ordered_by_at_path_impl(
+        return ra_stmt.refine_set_ordered_by_at_path_impl(
             segments,
             seg_idx,
             value,
@@ -711,80 +630,80 @@ struct _YangParser(Movable, ParserContract):
         read segments: List[String],
         seg_idx: Int,
         key: String,
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return refine_set_key_at_path_impl(segments, seg_idx, key, containers, lists)
+        return ra_stmt.refine_set_key_at_path_impl(segments, seg_idx, key, containers, lists)
 
     def _refine_add_unique_at_path(
         ref self,
         read segments: List[String],
         seg_idx: Int,
         read unique_spec: List[String],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return refine_add_unique_at_path_impl(segments, seg_idx, unique_spec, containers, lists)
+        return ra_stmt.refine_add_unique_at_path_impl(segments, seg_idx, unique_spec, containers, lists)
 
     def _split_schema_path(ref self, path: String) -> List[String]:
-        return split_schema_path_impl(path)
+        return clone_utils.split_schema_path_impl(path)
 
     def _ident_local_name(ref self, ident: String) -> String:
-        return ident_local_name_impl(ident)
+        return clone_utils.ident_local_name_impl(ident)
 
-    def _clone_must(ref self, read src: YangMust) -> YangMust:
-        return clone_must_impl(src)
+    def _clone_must(ref self, read src: ast.YangMust) -> ast.YangMust:
+        return clone_utils.clone_must_impl(src)
 
-    def _clone_when(ref self, read src: YangWhen) -> YangWhen:
-        return clone_when_impl(src)
+    def _clone_when(ref self, read src: ast.YangWhen) -> ast.YangWhen:
+        return clone_utils.clone_when_impl(src)
 
-    def _clone_yang_type(ref self, read src: YangType) -> YangType:
-        return clone_yang_type_impl(src)
+    def _clone_yang_type(ref self, read src: ast.YangType) -> ast.YangType:
+        return clone_utils.clone_yang_type_impl(src)
 
-    def _clone_leaf_arc(ref self, read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
-        return clone_leaf_arc_impl(src)
+    def _clone_leaf_arc(ref self, read src: Arc[ast.YangLeaf]) -> Arc[ast.YangLeaf]:
+        return clone_utils.clone_leaf_arc_impl(src)
 
-    def _clone_leaf_list_arc(ref self, read src: Arc[YangLeafList]) -> Arc[YangLeafList]:
-        return clone_leaf_list_arc_impl(src)
+    def _clone_leaf_list_arc(ref self, read src: Arc[ast.YangLeafList]) -> Arc[ast.YangLeafList]:
+        return clone_utils.clone_leaf_list_arc_impl(src)
 
-    def _clone_choice_arc(ref self, read src: Arc[YangChoice]) -> Arc[YangChoice]:
-        return clone_choice_arc_impl(src)
+    def _clone_choice_arc(ref self, read src: Arc[ast.YangChoice]) -> Arc[ast.YangChoice]:
+        return clone_utils.clone_choice_arc_impl(src)
 
-    def _clone_anydata_arc(ref self, read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
-        return clone_anydata_arc_impl(src)
+    def _clone_anydata_arc(ref self, read src: Arc[ast.YangAnydata]) -> Arc[ast.YangAnydata]:
+        return clone_utils.clone_anydata_arc_impl(src)
 
-    def _clone_anyxml_arc(ref self, read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
-        return clone_anyxml_arc_impl(src)
+    def _clone_anyxml_arc(ref self, read src: Arc[ast.YangAnyxml]) -> Arc[ast.YangAnyxml]:
+        return clone_utils.clone_anyxml_arc_impl(src)
 
-    def _clone_container_arc(ref self, read src: Arc[YangContainer]) -> Arc[YangContainer]:
-        return clone_container_arc_impl(src)
+    def _clone_container_arc(ref self, read src: Arc[ast.YangContainer]) -> Arc[ast.YangContainer]:
+        return clone_utils.clone_container_arc_impl(src)
 
-    def _clone_list_arc(ref self, read src: Arc[YangList]) -> Arc[YangList]:
-        return clone_list_arc_impl(src)
+    def _clone_list_arc(ref self, read src: Arc[ast.YangList]) -> Arc[ast.YangList]:
+        return clone_utils.clone_list_arc_impl(src)
 
-    def _parse_type_statement(mut self) raises -> YangType:
-        return parse_type_statement_impl(self)
+    def _parse_type_statement(mut self) raises -> ast.YangType:
+        return tc_stmt.parse_type_statement_impl(self)
 
-    def _parse_must_statement(mut self) raises -> YangMust:
-        return parse_must_statement_impl(self)
+    def _parse_must_statement(mut self) raises -> ast.YangMust:
+        return tc_stmt.parse_must_statement_impl(self)
 
-    def _parse_when_statement(mut self) raises -> YangWhen:
-        return parse_when_statement_impl(self)
+    def _parse_when_statement(mut self) raises -> ast.YangWhen:
+        return tc_stmt.parse_when_statement_impl(self)
 
     def _parse_non_negative_int(mut self, label: String) raises -> Int:
-        return parse_non_negative_int_impl(self, label)
+        return sem_utils.parse_non_negative_int_impl(self, label)
 
     def _parse_ordered_by_argument(mut self) raises -> String:
-        return parse_ordered_by_argument_impl(self)
+        return sem_utils.parse_ordered_by_argument_impl(self)
 
     def _unique_components_from_argument(mut self, arg: String) raises -> List[String]:
-        return unique_components_from_argument_impl(arg)
+        return sem_utils.unique_components_from_argument_impl(arg)
 
-    def _validate_choice_unique_node_names(mut self, read choice: YangChoice) raises:
-        validate_choice_unique_node_names_impl(self, choice)
+    def _validate_choice_unique_node_names(mut self, read choice: ast.YangChoice) raises:
+        sem_utils.validate_choice_unique_node_names_impl(self, choice)
 
     def _parse_boolean_value(mut self) raises -> Bool:
-        return parse_boolean_value_impl(self)
+        return sem_utils.parse_boolean_value_impl(self)
 
     def _consume_argument_value(mut self) raises -> String:
         if not self._has_more():
@@ -1012,3 +931,4 @@ def _message_after_colon(message: String) -> String:
     if len(parts) == 0:
         return message
     return String(parts[len(parts) - 1])
+

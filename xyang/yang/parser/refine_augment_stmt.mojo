@@ -1,35 +1,33 @@
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-    YangType,
-    YangMust,
-    YangWhen,
-)
+import xyang.ast as ast
 from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.parser_contract import ParserContract
-from xyang.yang.parser.clone_utils import (
-    ident_local_name_impl,
-    split_schema_path_impl,
-    clone_must_impl,
-    clone_when_impl,
-    clone_yang_type_impl,
-    clone_leaf_arc_impl,
-    clone_leaf_list_arc_impl,
-    clone_choice_arc_impl,
-    clone_anydata_arc_impl,
-    clone_anyxml_arc_impl,
-    clone_container_arc_impl,
-    clone_list_arc_impl,
-)
+import xyang.yang.parser.clone_utils as clone_utils
 
 comptime Arc = ArcPointer
+comptime YangContainer = ast.YangContainer
+comptime YangList = ast.YangList
+comptime YangChoice = ast.YangChoice
+comptime YangLeaf = ast.YangLeaf
+comptime YangLeafList = ast.YangLeafList
+comptime YangAnydata = ast.YangAnydata
+comptime YangAnyxml = ast.YangAnyxml
+comptime YangType = ast.YangType
+comptime YangMust = ast.YangMust
+comptime YangWhen = ast.YangWhen
+comptime ident_local_name_impl = clone_utils.ident_local_name_impl
+comptime split_schema_path_impl = clone_utils.split_schema_path_impl
+comptime clone_must_impl = clone_utils.clone_must_impl
+comptime clone_when_impl = clone_utils.clone_when_impl
+comptime clone_yang_type_impl = clone_utils.clone_yang_type_impl
+comptime clone_leaf_arc_impl = clone_utils.clone_leaf_arc_impl
+comptime clone_leaf_list_arc_impl = clone_utils.clone_leaf_list_arc_impl
+comptime clone_choice_arc_impl = clone_utils.clone_choice_arc_impl
+comptime clone_anydata_arc_impl = clone_utils.clone_anydata_arc_impl
+comptime clone_anyxml_arc_impl = clone_utils.clone_anyxml_arc_impl
+comptime clone_container_arc_impl = clone_utils.clone_container_arc_impl
+comptime clone_list_arc_impl = clone_utils.clone_list_arc_impl
 
 
 def parse_refine_statement_impl[ParserT: ParserContract](

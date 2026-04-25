@@ -1,18 +1,5 @@
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangChoiceCase,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-    YangType,
-    YangTypePlain,
-    YangMust,
-    YangWhen,
-)
+import xyang.ast as ast
 from xyang.yang.parser.yang_token import (
     YangToken,
     YANG_TYPE_UNKNOWN,
@@ -20,6 +7,18 @@ from xyang.yang.parser.yang_token import (
 from xyang.yang.parser.parser_contract import ParserContract
 
 comptime Arc = ArcPointer
+comptime YangContainer = ast.YangContainer
+comptime YangList = ast.YangList
+comptime YangChoice = ast.YangChoice
+comptime YangChoiceCase = ast.YangChoiceCase
+comptime YangLeaf = ast.YangLeaf
+comptime YangLeafList = ast.YangLeafList
+comptime YangAnydata = ast.YangAnydata
+comptime YangAnyxml = ast.YangAnyxml
+comptime YangType = ast.YangType
+comptime YangTypePlain = ast.YangTypePlain
+comptime YangMust = ast.YangMust
+comptime YangWhen = ast.YangWhen
 
 
 def parse_container_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangContainer:

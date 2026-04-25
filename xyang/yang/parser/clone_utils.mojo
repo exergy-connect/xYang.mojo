@@ -1,28 +1,27 @@
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangChoiceCase,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-    YangType,
-    YangTypePlain,
-    YangTypeIntegerRange,
-    YangTypeDecimal64,
-    YangTypeEnumeration,
-    YangTypeLeafref,
-    YangTypeBits,
-    YangTypeIdentityref,
-    YangMust,
-    YangWhen,
-)
+import xyang.ast as ast
 from xyang.xpath import parse_xpath, Expr
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 
 comptime Arc = ArcPointer
+comptime YangContainer = ast.YangContainer
+comptime YangList = ast.YangList
+comptime YangChoice = ast.YangChoice
+comptime YangChoiceCase = ast.YangChoiceCase
+comptime YangLeaf = ast.YangLeaf
+comptime YangLeafList = ast.YangLeafList
+comptime YangAnydata = ast.YangAnydata
+comptime YangAnyxml = ast.YangAnyxml
+comptime YangType = ast.YangType
+comptime YangTypePlain = ast.YangTypePlain
+comptime YangTypeIntegerRange = ast.YangTypeIntegerRange
+comptime YangTypeDecimal64 = ast.YangTypeDecimal64
+comptime YangTypeEnumeration = ast.YangTypeEnumeration
+comptime YangTypeLeafref = ast.YangTypeLeafref
+comptime YangTypeBits = ast.YangTypeBits
+comptime YangTypeIdentityref = ast.YangTypeIdentityref
+comptime YangMust = ast.YangMust
+comptime YangWhen = ast.YangWhen
 
 
 def ident_local_name_impl(ident: String) -> String:

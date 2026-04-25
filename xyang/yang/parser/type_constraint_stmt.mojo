@@ -6,21 +6,20 @@ from xyang.ast import (
     YangWhen,
 )
 from xyang.xpath import parse_xpath, Expr
-from xyang.yang.parser.yang_token import (
-    YangToken,
-    YANG_STMT_ENUM,
-    YANG_STMT_UNION,
-    YANG_TYPE_BITS,
-    YANG_TYPE_DECIMAL64,
-    YANG_TYPE_ENUMERATION,
-    YANG_TYPE_IDENTITYREF,
-    YANG_TYPE_LEAFREF,
-)
+import xyang.yang.parser.yang_token as yang_token
 from xyang.yang.parser.state_support import _yang_constraints_for_parsed_type
 from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.clone_utils import clone_yang_type_impl
 
 comptime Arc = ArcPointer
+comptime YangToken = yang_token.YangToken
+comptime YANG_STMT_ENUM = yang_token.YANG_STMT_ENUM
+comptime YANG_STMT_UNION = yang_token.YANG_STMT_UNION
+comptime YANG_TYPE_BITS = yang_token.YANG_TYPE_BITS
+comptime YANG_TYPE_DECIMAL64 = yang_token.YANG_TYPE_DECIMAL64
+comptime YANG_TYPE_ENUMERATION = yang_token.YANG_TYPE_ENUMERATION
+comptime YANG_TYPE_IDENTITYREF = yang_token.YANG_TYPE_IDENTITYREF
+comptime YANG_TYPE_LEAFREF = yang_token.YANG_TYPE_LEAFREF
 
 
 def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangType:

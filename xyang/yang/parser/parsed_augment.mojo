@@ -1,15 +1,14 @@
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-)
+import xyang.ast as ast
 
 comptime Arc = ArcPointer
+comptime YangContainer = ast.YangContainer
+comptime YangList = ast.YangList
+comptime YangChoice = ast.YangChoice
+comptime YangLeaf = ast.YangLeaf
+comptime YangLeafList = ast.YangLeafList
+comptime YangAnydata = ast.YangAnydata
+comptime YangAnyxml = ast.YangAnyxml
 
 
 @fieldwise_init

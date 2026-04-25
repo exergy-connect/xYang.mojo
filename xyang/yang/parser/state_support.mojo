@@ -1,18 +1,18 @@
-from xyang.ast import (
-    YangType,
-    YangTypePlain,
-    YangTypeIntegerRange,
-    YangTypeDecimal64,
-    YangTypeEnumeration,
-    YangTypeLeafref,
-    YangTypeBits,
-    YangTypeIdentityref,
-)
+import xyang.ast as ast
 from xyang.xpath import Expr
 from xyang.yang.parser.yang_token import (
     YANG_TYPE_ENUMERATION,
     YANG_TYPE_LEAFREF,
 )
+
+comptime YangType = ast.YangType
+comptime YangTypePlain = ast.YangTypePlain
+comptime YangTypeIntegerRange = ast.YangTypeIntegerRange
+comptime YangTypeDecimal64 = ast.YangTypeDecimal64
+comptime YangTypeEnumeration = ast.YangTypeEnumeration
+comptime YangTypeLeafref = ast.YangTypeLeafref
+comptime YangTypeBits = ast.YangTypeBits
+comptime YangTypeIdentityref = ast.YangTypeIdentityref
 
 
 def _yang_constraints_for_parsed_type(

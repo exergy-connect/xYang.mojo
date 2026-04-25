@@ -1,28 +1,27 @@
 from std.collections import Dict
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangChoiceCase,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-    YangType,
-    YangMust,
-    YangWhen,
-    YangGrouping,
-    YangTypedefStmt,
-    YangIdentityStmt,
-    YangExtensionStmt,
-    YangModuleImport,
-    YangModuleStatement,
-)
+import xyang.ast as ast
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.yang_token import YangToken
 
 comptime Arc = ArcPointer
+comptime YangContainer = ast.YangContainer
+comptime YangList = ast.YangList
+comptime YangChoice = ast.YangChoice
+comptime YangChoiceCase = ast.YangChoiceCase
+comptime YangLeaf = ast.YangLeaf
+comptime YangLeafList = ast.YangLeafList
+comptime YangAnydata = ast.YangAnydata
+comptime YangAnyxml = ast.YangAnyxml
+comptime YangType = ast.YangType
+comptime YangMust = ast.YangMust
+comptime YangWhen = ast.YangWhen
+comptime YangGrouping = ast.YangGrouping
+comptime YangTypedefStmt = ast.YangTypedefStmt
+comptime YangIdentityStmt = ast.YangIdentityStmt
+comptime YangExtensionStmt = ast.YangExtensionStmt
+comptime YangModuleImport = ast.YangModuleImport
+comptime YangModuleStatement = ast.YangModuleStatement
 
 
 trait ParserContract:

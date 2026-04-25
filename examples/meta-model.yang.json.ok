@@ -396,7 +396,7 @@
                       "default": "false"
                     },
                     "validation": {
-                      "$ref": "#/$defs/field-validation-mode",
+                      "type": "string",
                       "description": "Per-field validation: enforce constraints or filter invalid values from consolidated output.",
                       "x-yang": {
                         "type": "leaf"
@@ -611,7 +611,7 @@
                             "type": "object",
                             "properties": {
                               "field": {
-                                "$ref": "#/$defs/field-name",
+                                "type": "string",
                                 "description": "Referenced field name.",
                                 "x-yang": {
                                   "type": "leaf",
@@ -771,7 +771,7 @@
                       "default": "false"
                     },
                     "validation": {
-                      "$ref": "#/$defs/field-validation-mode",
+                      "type": "string",
                       "description": "Per-field validation: enforce constraints or filter invalid values from consolidated output.",
                       "x-yang": {
                         "type": "leaf"
@@ -979,7 +979,7 @@
                             "type": "object",
                             "properties": {
                               "field": {
-                                "$ref": "#/$defs/field-name",
+                                "type": "string",
                                 "description": "Referenced field name.",
                                 "x-yang": {
                                   "type": "leaf",
@@ -1141,95 +1141,5 @@
       ]
     }
   },
-  "additionalProperties": false,
-  "$defs": {
-    "primitive-type-name": {
-      "type": "string",
-      "enum": [
-        "string",
-        "integer",
-        "number",
-        "boolean",
-        "array",
-        "datetime",
-        "date",
-        "year",
-        "duration_in_days",
-        "qualified_string",
-        "qualified_integer",
-        "qualified_number"
-      ],
-      "description": ""
-    },
-    "date": {
-      "type": "string",
-      "description": ""
-    },
-    "date-and-time": {
-      "type": "string",
-      "description": ""
-    },
-    "entity-name": {
-      "type": "string",
-      "description": ""
-    },
-    "version-string": {
-      "type": "string",
-      "description": ""
-    },
-    "rate-of-change": {
-      "type": "string",
-      "enum": [
-        "hourly",
-        "daily",
-        "weekly",
-        "monthly",
-        "quarterly",
-        "yearly",
-        "rarely",
-        "never"
-      ],
-      "description": ""
-    },
-    "validation-mode": {
-      "type": "string",
-      "enum": [
-        "strict",
-        "warn",
-        "skip"
-      ],
-      "description": ""
-    },
-    "storage-type": {
-      "type": "string",
-      "enum": [
-        "INDEXED_KV",
-        "GITHUB_PR"
-      ],
-      "description": ""
-    },
-    "change-history-policy": {
-      "oneOf": [
-        {
-          "type": "integer"
-        },
-        {
-          "type": "string"
-        }
-      ],
-      "description": ""
-    },
-    "field-name": {
-      "type": "string",
-      "description": ""
-    },
-    "field-validation-mode": {
-      "type": "string",
-      "enum": [
-        "enforce",
-        "filter"
-      ],
-      "description": ""
-    }
-  }
+  "additionalProperties": false
 }

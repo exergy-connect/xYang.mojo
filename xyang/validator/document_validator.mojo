@@ -6,20 +6,7 @@
 from std.collections import Dict
 from std.memory import ArcPointer
 from emberjson import Value, Object, Array
-from xyang.ast import (
-    YangModule,
-    YangContainer,
-    YangList,
-    YangChoice,
-    YangChoiceCase,
-    YangLeaf,
-    YangLeafList,
-    YangAnydata,
-    YangAnyxml,
-    YangMust,
-    YangType,
-    YangWhen,
-)
+import xyang.ast as ast
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from xyang.validator.validation_error import ValidationError, Severity
 from xyang.validator.path_builder import PathBuilder
@@ -37,6 +24,18 @@ from xyang.xpath import (
 )
 
 comptime Arc = ArcPointer
+comptime YangModule = ast.YangModule
+comptime YangContainer = ast.YangContainer
+comptime YangList = ast.YangList
+comptime YangChoice = ast.YangChoice
+comptime YangChoiceCase = ast.YangChoiceCase
+comptime YangLeaf = ast.YangLeaf
+comptime YangLeafList = ast.YangLeafList
+comptime YangAnydata = ast.YangAnydata
+comptime YangAnyxml = ast.YangAnyxml
+comptime YangMust = ast.YangMust
+comptime YangType = ast.YangType
+comptime YangWhen = ast.YangWhen
 
 def _entry_key_string(entry: Value, key_names: List[String]) raises -> String:
     """Format list entry key for path, e.g. name='foo' or name='a', entity='b'."""

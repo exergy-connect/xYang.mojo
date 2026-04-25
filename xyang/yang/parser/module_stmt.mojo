@@ -1,16 +1,15 @@
 from std.memory import ArcPointer
-from xyang.ast import (
-    YangModule,
-    YangContainer,
-    YangRevisionStmt,
-    YangFeatureStmt,
-    YangModuleStatement,
-    YangUnknownStatement,
-)
+import xyang.ast as ast
 from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parser_contract import ParserContract
 
 comptime Arc = ArcPointer
+comptime YangModule = ast.YangModule
+comptime YangContainer = ast.YangContainer
+comptime YangRevisionStmt = ast.YangRevisionStmt
+comptime YangFeatureStmt = ast.YangFeatureStmt
+comptime YangModuleStatement = ast.YangModuleStatement
+comptime YangUnknownStatement = ast.YangUnknownStatement
 
 
 def parse_module_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangModule:
