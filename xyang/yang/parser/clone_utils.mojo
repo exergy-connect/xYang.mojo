@@ -197,6 +197,7 @@ def clone_leaf_arc_impl(read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
     return Arc[YangLeaf](
         YangLeaf(
             name = src[].name,
+            description = src[].description,
             type = clone_yang_type_impl(src[].type),
             mandatory = src[].mandatory,
             has_default = src[].has_default,
@@ -219,6 +220,7 @@ def clone_leaf_list_arc_impl(read src: Arc[YangLeafList]) -> Arc[YangLeafList]:
     return Arc[YangLeafList](
         YangLeafList(
             name = src[].name,
+            description = src[].description,
             type = clone_yang_type_impl(src[].type),
             default_values = src[].default_values.copy(),
             must_statements = musts^,

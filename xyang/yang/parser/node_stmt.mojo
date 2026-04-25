@@ -239,6 +239,7 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
     var mandatory = False
     var has_default = False
     var default_value = ""
+    var description = ""
     var must = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
 
@@ -266,7 +267,7 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 when = Optional(w^)
             elif stmt == YangToken.DESCRIPTION:
                 parser._consume()
-                _ = parser._consume_argument_value()
+                description = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
@@ -275,6 +276,7 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
 
     return YangLeaf(
         name = name,
+        description = description,
         type = type_stmt^,
         mandatory = mandatory,
         has_default = has_default,
@@ -295,6 +297,7 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
     )
     var must = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
+    var description = ""
     var default_values = List[String]()
     var min_el = -1
     var max_el = -1
@@ -329,7 +332,7 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
                 when = Optional(w^)
             elif stmt == YangToken.DESCRIPTION:
                 parser._consume()
-                _ = parser._consume_argument_value()
+                description = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
@@ -338,6 +341,7 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
 
     return YangLeafList(
         name = name,
+        description = description,
         type = type_stmt^,
         default_values = default_values^,
         must_statements = must^,

@@ -18,6 +18,7 @@ from xyang.yang.parser.yang_token import (
 )
 from xyang.yang.parser.state_support import _yang_constraints_for_parsed_type
 from xyang.yang.parser.parser_contract import ParserContract
+from xyang.yang.parser.clone_utils import clone_yang_type_impl
 
 comptime Arc = ArcPointer
 
@@ -144,6 +145,10 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
             union_members = union_types^,
         )
 
+    var typedef_opt = parser._resolve_typedef_type(type_name)
+    if typedef_opt:
+        return clone_yang_type_impl(typedef_opt.value()[])
+
     return YangType(
         name = type_name,
         constraints = _yang_constraints_for_parsed_type(
@@ -166,6 +171,34 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
         ),
         union_members = List[Arc[YangType]](),
     )
+
+
+def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises:
+    parser._expect(YangToken.TYPEDEF)
+    var name = parser._consume_name()
+    var has_type = False
+    var type_stmt = YangType(
+        name = "string",
+        constraints = YangTypePlain(_pad=0),
+        union_members = List[Arc[YangType]](),
+    )
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
+            var stmt = parser._peek()
+            if stmt == YangToken.TYPE:
+                type_stmt = parser._parse_type_statement()
+                has_type = True
+            elif stmt == YangToken.DESCRIPTION:
+                parser._consume()
+                _ = parser._consume_argument_value()
+                parser._skip_if(YangToken.SEMICOLON)
+            else:
+                parser._skip_statement()
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
+    if not has_type:
+        parser._error("typedef '" + name + "' requires a type statement")
+    parser._store_typedef(name, type_stmt)
 
 
 def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangMust:

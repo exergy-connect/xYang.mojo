@@ -271,28 +271,7 @@ def _type_schema(read t: YangType) raises -> Object:
 def _default_json_value(default_text: String, type_name: String) raises -> Optional[Value]:
     if len(default_text) == 0:
         return Optional[Value]()
-    if type_name == "boolean":
-        if default_text == "true":
-            return Optional(Value(True))
-        if default_text == "false":
-            return Optional(Value(False))
-        return Optional[Value]()
-    if (
-        type_name == "int8"
-        or type_name == "int16"
-        or type_name == "int32"
-        or type_name == "int64"
-        or type_name.startswith("uint")
-    ):
-        try:
-            return Optional(Value(Int64(atol(default_text))))
-        except:
-            return Optional[Value]()
-    if type_name == "decimal64":
-        try:
-            return Optional(Value(Float64(atof(default_text))))
-        except:
-            return Optional[Value]()
+    _ = type_name
     return Optional(Value(default_text))
 
 
@@ -316,7 +295,7 @@ def _leaf_property(read leaf: YangLeaf) raises -> Object:
         out[JSON_SCHEMA_TYPE] = Value("string")
     else:
         out = _type_schema(leaf.type)
-    out[JSON_SCHEMA_DESCRIPTION] = Value("")
+    out[JSON_SCHEMA_DESCRIPTION] = Value(leaf.description)
     out[JSON_SCHEMA_X_YANG] = Value(_leaf_xyang(leaf))
     if leaf.has_default:
         var dv = _default_json_value_for_type(leaf.default_value, leaf.type)
@@ -343,7 +322,7 @@ def _leaf_list_property(read ll: YangLeafList) raises -> Object:
     var out = Object()
     out[JSON_SCHEMA_TYPE] = Value("array")
     out[JSON_SCHEMA_ITEMS] = Value(_leaf_list_items_schema(ll))
-    out[JSON_SCHEMA_DESCRIPTION] = Value("")
+    out[JSON_SCHEMA_DESCRIPTION] = Value(ll.description)
     out[JSON_SCHEMA_X_YANG] = Value(_leaf_list_xyang(ll))
     if ll.min_elements >= 0:
         out[JSON_SCHEMA_MIN_ITEMS] = Value(ll.min_elements)

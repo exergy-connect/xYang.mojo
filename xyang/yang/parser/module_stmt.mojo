@@ -62,6 +62,8 @@ def parse_module_impl[ParserT: ParserContract](mut parser: ParserT) raises -> Ya
                 var msg = String(e)
                 if not _is_duplicate_grouping_error(msg):
                     raise e^
+        elif stmt == YangToken.TYPEDEF:
+            parser._parse_typedef_statement()
         elif stmt == YangToken.AUGMENT:
             parser._parse_module_augment_statement(top_containers)
         else:

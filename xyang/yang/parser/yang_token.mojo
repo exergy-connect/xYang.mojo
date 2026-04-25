@@ -66,6 +66,7 @@ comptime YANG_STMT_MIN_ELEMENTS = "min-elements"
 comptime YANG_STMT_MAX_ELEMENTS = "max-elements"
 comptime YANG_STMT_ORDERED_BY = "ordered-by"
 comptime YANG_STMT_UNIQUE = "unique"
+comptime YANG_STMT_TYPEDEF = "typedef"
 
 
 @fieldwise_init
@@ -153,6 +154,7 @@ struct YangToken(Copyable):
     comptime MAX_ELEMENTS: Self.Type = 69
     comptime ORDERED_BY: Self.Type = 70
     comptime UNIQUE: Self.Type = 71
+    comptime TYPEDEF: Self.Type = 72
 
     var type: Self.Type
     var start: Int
@@ -236,5 +238,6 @@ def make_keyword_type_map() -> Dict[String, YangToken.Type]:
     d[YANG_STMT_MAX_ELEMENTS] = YangToken.MAX_ELEMENTS
     d[YANG_STMT_ORDERED_BY] = YangToken.ORDERED_BY
     d[YANG_STMT_UNIQUE] = YangToken.UNIQUE
+    d[YANG_STMT_TYPEDEF] = YangToken.TYPEDEF
 
     return d^

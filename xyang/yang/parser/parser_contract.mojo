@@ -77,6 +77,15 @@ trait ParserContract:
     def _store_grouping(mut self, var grouping: YangGrouping) raises:
         ...
 
+    def _parse_typedef_statement(mut self) raises:
+        ...
+
+    def _store_typedef(mut self, name: String, read type_stmt: YangType) raises:
+        ...
+
+    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[YangType]]:
+        ...
+
     def _parse_module_augment_statement(
         mut self,
         mut top_containers: List[Arc[YangContainer]],

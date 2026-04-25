@@ -66,6 +66,7 @@ from xyang.yang.parser.type_constraint_stmt import (
     parse_type_statement_impl,
     parse_must_statement_impl,
     parse_when_statement_impl,
+    parse_typedef_statement_impl,
 )
 from xyang.yang.parser.clone_utils import (
     split_schema_path_impl,
@@ -100,6 +101,7 @@ struct _YangParser(Movable, ParserContract):
     var source: String
     var index: Int
     var groupings: Dict[String, Arc[YangGrouping]]
+    var typedefs: Dict[String, Arc[YangType]]
     var pending_module_augments: List[Arc[ParsedAugment]]
 
     def __init__(out self, source: String):
@@ -107,6 +109,7 @@ struct _YangParser(Movable, ParserContract):
         self.source = source
         self.index = 0
         self.groupings = Dict[String, Arc[YangGrouping]]()
+        self.typedefs = Dict[String, Arc[YangType]]()
         self.pending_module_augments = List[Arc[ParsedAugment]]()
 
     def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
@@ -201,6 +204,17 @@ struct _YangParser(Movable, ParserContract):
         if self.groupings.get(grouping_name):
             self._error("Duplicate grouping '" + grouping_name + "'")
         self.groupings[grouping_name] = Arc[YangGrouping](grouping^)
+
+    def _parse_typedef_statement(mut self) raises:
+        parse_typedef_statement_impl(self)
+
+    def _store_typedef(mut self, name: String, read type_stmt: YangType) raises:
+        if self.typedefs.get(name):
+            self._error("Duplicate typedef '" + name + "'")
+        self.typedefs[name] = Arc[YangType](clone_yang_type_impl(type_stmt))
+
+    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[YangType]]:
+        return self.typedefs.get(name)
 
     def _parse_uses_statement(
         mut self,
@@ -813,6 +827,8 @@ def _token_type_name(t: YangToken.Type) -> String:
         return "'module'"
     if t == YangToken.GROUPING:
         return "'grouping'"
+    if t == YangToken.TYPEDEF:
+        return "'typedef'"
     if t == YangToken.USES:
         return "'uses'"
     if t == YangToken.AUGMENT:

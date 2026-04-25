@@ -356,6 +356,9 @@ def _default_scalar_to_string(v: Value) -> String:
 def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLeaf:
     """Parse a leaf definition from a JSON Schema property."""
     var type_stmt = _parse_type_from_schema_property(prop)
+    var desc = ""
+    if "description" in prop.object() and prop.object()["description"].is_string():
+        desc = prop.object()["description"].string()
     var must_list = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
     var has_default = False
@@ -370,6 +373,7 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
         has_default = len(default_value) > 0
     return YangLeaf(
         name = name,
+        description = desc,
         type = type_stmt^,
         mandatory = mandatory,
         has_default = has_default,
@@ -381,6 +385,9 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> YangLe
 
 def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
     var type_stmt = _parse_type_from_schema_property(prop)
+    var desc = ""
+    if "description" in prop.object() and prop.object()["description"].is_string():
+        desc = prop.object()["description"].string()
     var must_list = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()
     var default_values = List[String]()
@@ -412,6 +419,7 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> YangLeafList:
                 default_values.append(text)
     return YangLeafList(
         name = name,
+        description = desc,
         type = type_stmt^,
         default_values = default_values^,
         must_statements = must_list^,

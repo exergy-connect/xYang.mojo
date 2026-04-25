@@ -283,6 +283,7 @@ trait YangHasWhen:
 @fieldwise_init
 struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
     var name: String
+    var description: String
     var type: YangType
     var mandatory: Bool
     var has_default: Bool
@@ -324,6 +325,7 @@ struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen)
 @fieldwise_init
 struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
     var name: String
+    var description: String
     var type: YangType
     var default_values: List[String]
     var must_statements: List[Arc[YangMust]]
