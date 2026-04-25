@@ -41,8 +41,8 @@ def _leaf_xyang(read leaf: ast.YangLeaf) raises -> Object:
         xy[schema_keys.XYANG_REQUIRE_INSTANCE] = Value(leaf.type.leafref_require_instance())
     else:
         xy[schema_keys.XYANG_TYPE] = Value("leaf")
-    if len(leaf.must_statements) > 0:
-        var arr = _must_array_from_arc_list(leaf.must_statements)
+    if len(leaf.must.must_statements) > 0:
+        var arr = _must_array_from_arc_list(leaf.must.must_statements)
         xy[schema_keys.XYANG_MUST] = Value(arr^)
     if leaf.has_when():
         ref w = leaf.when.value()
@@ -68,8 +68,8 @@ def _open_json_instance_type_array() raises -> Array:
 def _anydata_xyang(read a: ast.YangAnydata) raises -> Object:
     var xy = Object()
     xy[schema_keys.XYANG_TYPE] = Value("anydata")
-    if len(a.must_statements) > 0:
-        var arr = _must_array_from_arc_list(a.must_statements)
+    if len(a.must.must_statements) > 0:
+        var arr = _must_array_from_arc_list(a.must.must_statements)
         xy[schema_keys.XYANG_MUST] = Value(arr^)
     if a.has_when():
         ref w = a.when.value()
@@ -82,8 +82,8 @@ def _anydata_xyang(read a: ast.YangAnydata) raises -> Object:
 def _anyxml_xyang(read x: ast.YangAnyxml) raises -> Object:
     var xy = Object()
     xy[schema_keys.XYANG_TYPE] = Value("anyxml")
-    if len(x.must_statements) > 0:
-        var arr = _must_array_from_arc_list(x.must_statements)
+    if len(x.must.must_statements) > 0:
+        var arr = _must_array_from_arc_list(x.must.must_statements)
         xy[schema_keys.XYANG_MUST] = Value(arr^)
     if x.has_when():
         ref w = x.when.value()
@@ -112,8 +112,8 @@ def _anyxml_property(read x: ast.YangAnyxml) raises -> Object:
 def _leaf_list_xyang(read ll: ast.YangLeafList) raises -> Object:
     var xy = Object()
     xy[schema_keys.XYANG_TYPE] = Value(yang_token.YANG_STMT_LEAF_LIST)
-    if len(ll.must_statements) > 0:
-        var arr = _must_array_from_arc_list(ll.must_statements)
+    if len(ll.must.must_statements) > 0:
+        var arr = _must_array_from_arc_list(ll.must.must_statements)
         xy[schema_keys.XYANG_MUST] = Value(arr^)
     if ll.has_when():
         ref w = ll.when.value()
@@ -466,8 +466,8 @@ def _container_property(
 
     var xy = Object()
     xy[schema_keys.XYANG_TYPE] = Value("container")
-    if len(c.must_statements) > 0:
-        var must_arr = _must_array_from_arc_list(c.must_statements)
+    if len(c.must.must_statements) > 0:
+        var must_arr = _must_array_from_arc_list(c.must.must_statements)
         xy[schema_keys.XYANG_MUST] = Value(must_arr^)
     var out = Object()
     out[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_OBJECT)
@@ -544,8 +544,8 @@ def _list_property(
     var xy = Object()
     xy[schema_keys.XYANG_TYPE] = Value("list")
     xy[schema_keys.XYANG_KEY] = Value(lst.key)
-    if len(lst.must_statements) > 0:
-        var must_arr = _must_array_from_arc_list(lst.must_statements)
+    if len(lst.must.must_statements) > 0:
+        var must_arr = _must_array_from_arc_list(lst.must.must_statements)
         xy[schema_keys.XYANG_MUST] = Value(must_arr^)
     if len(lst.ordered_by) > 0:
         xy[schema_keys.XYANG_ORDERED_BY] = Value(lst.ordered_by)

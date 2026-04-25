@@ -21,6 +21,7 @@ comptime YangTypeLeafref = ast.YangTypeLeafref
 comptime YangTypeBits = ast.YangTypeBits
 comptime YangTypeIdentityref = ast.YangTypeIdentityref
 comptime YangMust = ast.YangMust
+comptime YangMustStatements = ast.YangMustStatements
 comptime YangWhen = ast.YangWhen
 
 
@@ -175,8 +176,8 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
 
 def clone_leaf_arc_impl(read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
     var musts = List[Arc[YangMust]]()
-    for i in range(len(src[].must_statements)):
-        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
+    for i in range(len(src[].must.must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
 
     var when = Optional[YangWhen]()
     if Bool(src[].when):
@@ -190,7 +191,7 @@ def clone_leaf_arc_impl(read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
             mandatory = src[].mandatory,
             has_default = src[].has_default,
             default_value = src[].default_value,
-            must_statements = musts^,
+            must = YangMustStatements(must_statements = musts^),
             when = when^,
         ),
     )
@@ -198,8 +199,8 @@ def clone_leaf_arc_impl(read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
 
 def clone_leaf_list_arc_impl(read src: Arc[YangLeafList]) -> Arc[YangLeafList]:
     var musts = List[Arc[YangMust]]()
-    for i in range(len(src[].must_statements)):
-        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
+    for i in range(len(src[].must.must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
 
     var when = Optional[YangWhen]()
     if Bool(src[].when):
@@ -211,7 +212,7 @@ def clone_leaf_list_arc_impl(read src: Arc[YangLeafList]) -> Arc[YangLeafList]:
             description = src[].description,
             type = clone_yang_type_impl(src[].type),
             default_values = src[].default_values.copy(),
-            must_statements = musts^,
+            must = YangMustStatements(must_statements = musts^),
             when = when^,
             min_elements = src[].min_elements,
             max_elements = src[].max_elements,
@@ -252,8 +253,8 @@ def clone_choice_arc_impl(read src: Arc[YangChoice]) -> Arc[YangChoice]:
 
 def clone_anydata_arc_impl(read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
     var musts = List[Arc[YangMust]]()
-    for i in range(len(src[].must_statements)):
-        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
+    for i in range(len(src[].must.must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
     var when = Optional[YangWhen]()
     if src[].has_when():
         when = Optional(clone_when_impl(src[].when.value()))
@@ -262,7 +263,7 @@ def clone_anydata_arc_impl(read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
             name = src[].name,
             description = src[].description,
             mandatory = src[].mandatory,
-            must_statements = musts^,
+            must = YangMustStatements(must_statements = musts^),
             when = when^,
         ),
     )
@@ -270,8 +271,8 @@ def clone_anydata_arc_impl(read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
 
 def clone_anyxml_arc_impl(read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
     var musts = List[Arc[YangMust]]()
-    for i in range(len(src[].must_statements)):
-        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
+    for i in range(len(src[].must.must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
     var when = Optional[YangWhen]()
     if src[].has_when():
         when = Optional(clone_when_impl(src[].when.value()))
@@ -280,7 +281,7 @@ def clone_anyxml_arc_impl(read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
             name = src[].name,
             description = src[].description,
             mandatory = src[].mandatory,
-            must_statements = musts^,
+            must = YangMustStatements(must_statements = musts^),
             when = when^,
         ),
     )
@@ -296,8 +297,8 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
 
-    for i in range(len(src[].must_statements)):
-        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
+    for i in range(len(src[].must.must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
     for i in range(len(src[].leaves)):
         leaves.append(clone_leaf_arc_impl(src[].leaves[i]))
     for i in range(len(src[].leaf_lists)):
@@ -317,7 +318,7 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
         YangContainer(
             name = src[].name,
             description = src[].description,
-            must_statements = musts^,
+            must = YangMustStatements(must_statements = musts^),
             leaves = leaves^,
             leaf_lists = leaf_lists^,
             anydatas = anydatas^,
@@ -334,8 +335,8 @@ def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
     var ch = List[YangList.ChildStatement]()
     var unique_specs = List[List[String]]()
 
-    for i in range(len(src[].must_statements)):
-        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
+    for i in range(len(src[].must.must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
     for i in range(len(src[].children)):
         var stmt = src[].children[i]
         if stmt.isa[Arc[YangLeaf]]():
@@ -384,7 +385,7 @@ def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
             name = src[].name,
             key = src[].key,
             description = src[].description,
-            must_statements = musts^,
+            must = YangMustStatements(must_statements = musts^),
             children = ch^,
             min_elements = src[].min_elements,
             max_elements = src[].max_elements,

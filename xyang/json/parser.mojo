@@ -340,7 +340,7 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> ast.Ya
         mandatory = mandatory,
         has_default = has_default,
         default_value = default_value,
-        must_statements = must_list^,
+        must = ast.YangMustStatements(must_statements = must_list^),
         when = when^,
     )
 
@@ -383,7 +383,7 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> ast.YangLeafList:
         description = desc,
         type = type_stmt^,
         default_values = default_values^,
-        must_statements = must_list^,
+        must = ast.YangMustStatements(must_statements = must_list^),
         when = when^,
         min_elements = min_e,
         max_elements = max_e,
@@ -405,7 +405,7 @@ def parse_yang_anydata(name: String, prop: Value, mandatory: Bool) raises -> ast
         name = name,
         description = desc^,
         mandatory = mandatory,
-        must_statements = must_list^,
+        must = ast.YangMustStatements(must_statements = must_list^),
         when = when^,
     )
 
@@ -424,7 +424,7 @@ def parse_yang_anyxml(name: String, prop: Value, mandatory: Bool) raises -> ast.
         name = name,
         description = desc^,
         mandatory = mandatory,
-        must_statements = must_list^,
+        must = ast.YangMustStatements(must_statements = must_list^),
         when = when^,
     )
 
@@ -599,7 +599,7 @@ def parse_yang_list(name: String, prop: Value) raises -> ast.YangList:
         name = name,
         key = key,
         description = description,
-        must_statements = must_list^,
+        must = ast.YangMustStatements(must_statements = must_list^),
         children = ast.pack_yang_list_child_buckets(
             ast.YangListChildBuckets(
                 leaves = leaves^,
@@ -638,7 +638,7 @@ def parse_yang_container(name: String, prop: Value) raises -> ast.YangContainer:
     return ast.YangContainer(
         name = name,
         description = description,
-        must_statements = must_list^,
+        must = ast.YangMustStatements(must_statements = must_list^),
         leaves = leaves^,
         leaf_lists = leaf_lists^,
         anydatas = anydatas^,

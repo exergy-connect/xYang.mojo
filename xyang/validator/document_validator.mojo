@@ -743,7 +743,7 @@ struct DocumentValidator:
             self._trace("Container data is not object at path=" + path.current())
             return
         ref obj = data.object()
-        self._evaluate_must_on_object_node(path.current(), obj, container.must_statements)
+        self._evaluate_must_on_object_node(path.current(), obj, container.must.must_statements)
         var allowed = _container_allowed_instance_keys(obj, container)
         for ref pair in obj.items():
             var key = pair.key
@@ -782,7 +782,7 @@ struct DocumentValidator:
                 obj,
                 ad.name,
                 ad.mandatory,
-                ad.must_statements,
+                ad.must.must_statements,
                 ad.when,
                 path,
                 root_data,
@@ -798,7 +798,7 @@ struct DocumentValidator:
                 obj,
                 ax.name,
                 ax.mandatory,
-                ax.must_statements,
+                ax.must.must_statements,
                 ax.when,
                 path,
                 root_data,
@@ -968,8 +968,8 @@ struct DocumentValidator:
                 )
             if len(leafref_errors) > 0:
                 return
-        for i in range(len(leaf.must_statements)):
-            ref must_ref = leaf.must_statements[i][]
+        for i in range(len(leaf.must.must_statements)):
+            ref must_ref = leaf.must.must_statements[i][]
             self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
             if not must_ref.parsed or not must_ref.xpath_ast:
                 if len(must_ref.expression) > 0:
@@ -1370,7 +1370,7 @@ struct DocumentValidator:
                     obj,
                     ad.name,
                     ad.mandatory,
-                    ad.must_statements,
+                    ad.must.must_statements,
                     ad.when,
                     path,
                     root_data,
@@ -1385,7 +1385,7 @@ struct DocumentValidator:
                     obj,
                     ax.name,
                     ax.mandatory,
-                    ax.must_statements,
+                    ax.must.must_statements,
                     ax.when,
                     path,
                     root_data,
@@ -1565,8 +1565,8 @@ struct DocumentValidator:
                             severity=Severity("error"),
                         ),
                     )
-            for j in range(len(leaf_list.must_statements)):
-                ref must_ref = leaf_list.must_statements[j][]
+            for j in range(len(leaf_list.must.must_statements)):
+                ref must_ref = leaf_list.must.must_statements[j][]
                 if not must_ref.parsed or not must_ref.xpath_ast:
                     if len(must_ref.expression) > 0:
                         self._errors.append(
@@ -1694,7 +1694,7 @@ struct DocumentValidator:
         root_data: Value,
         enforce_mandatory_choice: Bool,
     ) raises:
-        self._evaluate_must_on_object_node(path.current(), obj, list_node.must_statements)
+        self._evaluate_must_on_object_node(path.current(), obj, list_node.must.must_statements)
         var allowed = _list_allowed_instance_keys(obj, list_node)
         for ref pair in obj.items():
             var key = pair.key
@@ -1733,7 +1733,7 @@ struct DocumentValidator:
                 obj,
                 ad.name,
                 ad.mandatory,
-                ad.must_statements,
+                ad.must.must_statements,
                 ad.when,
                 path,
                 root_data,
@@ -1749,7 +1749,7 @@ struct DocumentValidator:
                 obj,
                 ax.name,
                 ax.mandatory,
-                ax.must_statements,
+                ax.must.must_statements,
                 ax.when,
                 path,
                 root_data,

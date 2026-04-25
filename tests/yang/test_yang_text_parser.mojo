@@ -312,12 +312,12 @@ module must-on-structural-nodes {
 """,
     )
     ref root = module.top_level_containers[0][]
-    assert_equal(len(root.must_statements), 1)
-    assert_equal(root.must_statements[0][].expression, "string-length(name) > 0")
+    assert_equal(len(root.must.must_statements), 1)
+    assert_equal(root.must.must_statements[0][].expression, "string-length(name) > 0")
     assert_equal(len(root.lists), 1)
     ref item = root.lists[0][]
-    assert_equal(len(item.must_statements), 1)
-    assert_equal(item.must_statements[0][].expression, "string-length(id) > 0")
+    assert_equal(len(item.must.must_statements), 1)
+    assert_equal(item.must.must_statements[0][].expression, "string-length(id) > 0")
 
 
 def main() raises:

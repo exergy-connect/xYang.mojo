@@ -168,7 +168,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             choices,
         ):
             parser._error("Unknown refine target path '" + refine.target_path + "'")
-        refine.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+        refine.must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
     elif tt == YangToken.DESCRIPTION:
         parser._consume()
         var desc = parser._consume_argument_value()
@@ -342,7 +342,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
             default_values = List[String](),
             description = Optional[String](),
             if_features = List[String](),
-            must_statements = List[Arc[YangMust]](),
+            must = ast.YangMustStatements(must_statements = List[Arc[YangMust]]()),
             when = Optional[YangWhen](),
         )
 
@@ -355,7 +355,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
         default_values = List[String](),
         description = Optional[String](),
         if_features = List[String](),
-        must_statements = List[Arc[YangMust]](),
+        must = ast.YangMustStatements(must_statements = List[Arc[YangMust]]()),
         when = Optional[YangWhen](),
     )
 
@@ -854,19 +854,19 @@ def refine_add_must_at_path_impl(
         var applied = False
         for i in range(len(leaves)):
             if ident_local_name_impl(leaves[i][].name) == seg:
-                leaves[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+                leaves[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(leaf_lists)):
             if ident_local_name_impl(leaf_lists[i][].name) == seg:
-                leaf_lists[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+                leaf_lists[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(containers)):
             if ident_local_name_impl(containers[i][].name) == seg:
-                containers[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+                containers[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(lists)):
             if ident_local_name_impl(lists[i][].name) == seg:
-                lists[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+                lists[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(choices)):
             if ident_local_name_impl(choices[i][].name) == seg:

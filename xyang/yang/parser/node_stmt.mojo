@@ -18,6 +18,7 @@ comptime YangAnyxml = ast.YangAnyxml
 comptime YangType = ast.YangType
 comptime YangTypePlain = ast.YangTypePlain
 comptime YangMust = ast.YangMust
+comptime YangMustStatements = ast.YangMustStatements
 comptime YangWhen = ast.YangWhen
 
 
@@ -96,7 +97,7 @@ def parse_container_statement_impl[ParserT: ParserContract](mut parser: ParserT)
     return YangContainer(
         name = name,
         description = desc,
-        must_statements = must^,
+        must = YangMustStatements(must_statements = must^),
         leaves = leaves^,
         leaf_lists = leaf_lists^,
         anydatas = anydatas^,
@@ -211,7 +212,7 @@ def parse_list_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
         name = name,
         key = key,
         description = desc,
-        must_statements = must^,
+        must = YangMustStatements(must_statements = must^),
         children = ast.pack_yang_list_child_buckets(
             ast.YangListChildBuckets(
                 leaves = leaves^,
@@ -284,7 +285,7 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
         mandatory = mandatory,
         has_default = has_default,
         default_value = default_value,
-        must_statements = must^,
+        must = YangMustStatements(must_statements = must^),
         when = when^,
     )
 
@@ -347,7 +348,7 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
         description = description,
         type = type_stmt^,
         default_values = default_values^,
-        must_statements = must^,
+        must = YangMustStatements(must_statements = must^),
         when = when^,
         min_elements = min_el,
         max_elements = max_el,
@@ -409,7 +410,7 @@ def parse_anydata_statement_impl[ParserT: ParserContract](mut parser: ParserT) r
         name = node_name,
         description = description^,
         mandatory = mandatory,
-        must_statements = must^,
+        must = YangMustStatements(must_statements = must^),
         when = when^,
     )
 
@@ -452,7 +453,7 @@ def parse_anyxml_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
         name = node_name,
         description = description^,
         mandatory = mandatory,
-        must_statements = must^,
+        must = YangMustStatements(must_statements = must^),
         when = when^,
     )
 

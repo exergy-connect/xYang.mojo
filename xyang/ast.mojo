@@ -235,13 +235,16 @@ struct YangWhen(Movable):
             self.xpath_ast.free()
 
 
-trait YangHasMustStatements:
-    ## Shared access to a (possibly empty) list of `must` constraints.
+@fieldwise_init
+struct YangMustStatements(Movable, JsonDeserializable):
+    ## Owns the (possibly empty) list of `must` constraints for a schema node.
+    var must_statements: List[Arc[YangMust]]
+
     def must_count(self) -> Int:
-        ...
+        return len(self.must_statements)
 
     def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        ...
+        self.must_statements = stmts^
 
 
 trait YangHasWhen:
@@ -254,21 +257,15 @@ trait YangHasWhen:
 
 
 @fieldwise_init
-struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+struct YangLeaf(Movable, JsonDeserializable, YangHasWhen):
     var name: String
     var description: String
     var type: YangType
     var mandatory: Bool
     var has_default: Bool
     var default_value: String
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var when: Optional[YangWhen]
-
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
 
     def has_when(self) -> Bool:
         return Bool(self.when)
@@ -288,7 +285,7 @@ struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen)
             + ", has_default="
             + ("true" if self.has_default else "false")
             + ", must="
-            + String(len(self.must_statements))
+            + String(len(self.must.must_statements))
             + ", has_when="
             + ("true" if self.has_when() else "false")
             + ")"
@@ -296,24 +293,18 @@ struct YangLeaf(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen)
 
 
 @fieldwise_init
-struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+struct YangLeafList(Movable, JsonDeserializable, YangHasWhen):
     var name: String
     var description: String
     var type: YangType
     var default_values: List[String]
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var when: Optional[YangWhen]
     ## RFC 7950: unset when `min_elements` / `max_elements` are `-1`.
     var min_elements: Int
     var max_elements: Int
     ## RFC 7950 §7.7.1: `user` or `system`; empty if not specified in the model source.
     var ordered_by: String
-
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
 
     def has_when(self) -> Bool:
         return Bool(self.when)
@@ -330,7 +321,7 @@ struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasW
             + ", defaults="
             + String(len(self.default_values))
             + ", must="
-            + String(len(self.must_statements))
+            + String(len(self.must.must_statements))
             + ", has_when="
             + ("true" if self.has_when() else "false")
             + ")"
@@ -338,19 +329,13 @@ struct YangLeafList(Movable, JsonDeserializable, YangHasMustStatements, YangHasW
 
 
 @fieldwise_init
-struct YangAnydata(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+struct YangAnydata(Movable, JsonDeserializable, YangHasWhen):
     ## RFC 7950 §7.12 — instance is any JSON-compatible value (not further constrained here).
     var name: String
     var description: String
     var mandatory: Bool
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var when: Optional[YangWhen]
-
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
 
     def has_when(self) -> Bool:
         return Bool(self.when)
@@ -360,19 +345,13 @@ struct YangAnydata(Movable, JsonDeserializable, YangHasMustStatements, YangHasWh
 
 
 @fieldwise_init
-struct YangAnyxml(Movable, JsonDeserializable, YangHasMustStatements, YangHasWhen):
+struct YangAnyxml(Movable, JsonDeserializable, YangHasWhen):
     ## RFC 7950 §7.11 — same JSON treatment as anydata for encoding and validation.
     var name: String
     var description: String
     var mandatory: Bool
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var when: Optional[YangWhen]
-
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
 
     def has_when(self) -> Bool:
         return Bool(self.when)
@@ -426,10 +405,10 @@ struct YangChoice(Movable, JsonDeserializable, YangHasWhen):
 
 
 @fieldwise_init
-struct YangContainer(Movable, JsonDeserializable, YangHasMustStatements):
+struct YangContainer(Movable, JsonDeserializable):
     var name: String
     var description: String
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
     var anydatas: List[Arc[YangAnydata]]
@@ -437,12 +416,6 @@ struct YangContainer(Movable, JsonDeserializable, YangHasMustStatements):
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
-
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
 
     def __str__(self) -> String:
         var nleaf = len(self.leaves)
@@ -456,7 +429,7 @@ struct YangContainer(Movable, JsonDeserializable, YangHasMustStatements):
             "YangContainer("
             + self.name
             + ", must="
-            + String(len(self.must_statements))
+            + String(len(self.must.must_statements))
             + ", leaves="
             + String(nleaf)
             + ", leaf-lists="
@@ -476,7 +449,7 @@ struct YangContainer(Movable, JsonDeserializable, YangHasMustStatements):
 
 
 @fieldwise_init
-struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
+struct YangList(Movable, JsonDeserializable):
     ## Same arms as `YangGrouping.ChildStatement` / module body data nodes: Arc at variant arm.
     comptime ChildStatement = Variant[
         Arc[YangLeaf],
@@ -490,7 +463,7 @@ struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
     var name: String
     var key: String
     var description: String
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var children: List[Self.ChildStatement]
     ## RFC 7950: unset when `min_elements` / `max_elements` are `-1`.
     var min_elements: Int
@@ -499,12 +472,6 @@ struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
     ## Each inner list is one `unique` statement: descendant leaf names (same list entry).
     var unique_specs: List[List[String]]
 
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
-
     def __str__(self) -> String:
         return (
             "YangList("
@@ -512,7 +479,7 @@ struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
             + ", key="
             + self.key
             + ", must="
-            + String(len(self.must_statements))
+            + String(len(self.must.must_statements))
             + ", children="
             + String(len(self.children))
             + ")"
@@ -646,7 +613,7 @@ struct YangUsesStmt(Movable):
 
 
 @fieldwise_init
-struct YangRefineStmt(Movable, YangHasMustStatements, YangHasWhen):
+struct YangRefineStmt(Movable, YangHasWhen):
     # The target descendant-schema-nodeid
     var target_path: String
 
@@ -667,14 +634,8 @@ struct YangRefineStmt(Movable, YangHasMustStatements, YangHasWhen):
     # var reference: Optional[String]
     var if_features: List[String]
     ## `must` substatements under this refine (parse tree); schema targets also receive clones via refine.
-    var must_statements: List[Arc[YangMust]]
+    var must: YangMustStatements
     var when: Optional[YangWhen]
-
-    def must_count(self) -> Int:
-        return len(self.must_statements)
-
-    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
-        self.must_statements = stmts^
 
     def has_when(self) -> Bool:
         return Bool(self.when)

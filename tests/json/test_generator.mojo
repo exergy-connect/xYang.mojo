@@ -155,12 +155,12 @@ def test_roundtrip_container_and_list_must() raises:
     var json_text = schema_to_yang_json(module)
     var roundtrip = parse_json_schema(json_text)
     ref parsed_root = roundtrip.top_level_containers[0][]
-    assert_equal(len(parsed_root.must_statements), 1)
-    assert_equal(parsed_root.must_statements[0][].expression, "string-length(name) > 0")
+    assert_equal(len(parsed_root.must.must_statements), 1)
+    assert_equal(parsed_root.must.must_statements[0][].expression, "string-length(name) > 0")
     assert_equal(len(parsed_root.lists), 1)
-    assert_equal(len(parsed_root.lists[0][].must_statements), 1)
+    assert_equal(len(parsed_root.lists[0][].must.must_statements), 1)
     assert_equal(
-        parsed_root.lists[0][].must_statements[0][].expression,
+        parsed_root.lists[0][].must.must_statements[0][].expression,
         "string-length(id) > 0",
     )
 
