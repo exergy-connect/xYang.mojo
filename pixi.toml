@@ -15,6 +15,13 @@ cmd = "mojo package xyang -o build/xyang.mojopkg"
 inputs = ["xyang/**/*.mojo"]
 outputs = ["build/xyang.mojopkg"]
 
+# Build an `xyang` CLI binary linked against `build/xyang.mojopkg`.
+[tasks.build-xyang-bin]
+depends-on = ["build-lib"]
+cmd = "bash -lc 'M=\"$PWD/.pixi/envs/default/lib/mojo\"; mojo build -I build -I \"$M\" -o build/xyang main.mojo'"
+inputs = ["main.mojo", "build/xyang.mojopkg"]
+outputs = ["build/xyang"]
+
 [tasks.tests_yang]
 depends-on = ["build-lib"]
 cmd = "mojo -I build tests/yang/*.mojo"
@@ -39,7 +46,13 @@ yang_tests = "mojo -I . tests/yang/*.mojo"  # To run: pixi run yang_tests
 
 basic-yang-example = "mojo -I . examples/basic_yang/main.mojo"
 
+
 # CLI (same commands as Python `xyang`: parse, validate, convert). Example: `pixi run xyang -- parse file.yang`
-xyang = "mojo -I . main.mojo"
-convert = "mojo -I . main.mojo convert examples/meta-model.yang -o examples/meta-model.yang.json"
+[tasks.xyang]
+depends-on = ["build-xyang-bin"]
+cmd = "build/xyang"
+
+[tasks.convert]
+depends-on = ["build-xyang-bin"]
+cmd = "build/xyang convert examples/meta-model.yang -o examples/meta-model.yang.json"
 

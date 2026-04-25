@@ -609,6 +609,44 @@ def _build_defs(read module: ast.YangModule) raises -> Object:
     return defs^
 
 
+def _module_statement_property(
+    read stmt: ast.YangModuleStatement,
+    read typedefs: Dict[String, Arc[ast.YangTypedefStmt]],
+    read leaves: List[Arc[ast.YangLeaf]],
+    read leaf_lists: List[Arc[ast.YangLeafList]],
+    read anydatas: List[Arc[ast.YangAnydata]],
+    read anyxmls: List[Arc[ast.YangAnyxml]],
+    read containers: List[Arc[ast.YangContainer]],
+    read lists: List[Arc[ast.YangList]],
+) raises -> Optional[Object]:
+    if stmt.isa[Arc[ast.YangLeaf]]():
+        return Optional[Object](_leaf_property(stmt[Arc[ast.YangLeaf]][], typedefs))
+    if stmt.isa[Arc[ast.YangLeafList]]():
+        return Optional[Object](_leaf_list_property(stmt[Arc[ast.YangLeafList]][], typedefs))
+    if stmt.isa[Arc[ast.YangAnydata]]():
+        return Optional[Object](_anydata_property(stmt[Arc[ast.YangAnydata]][]))
+    if stmt.isa[Arc[ast.YangAnyxml]]():
+        return Optional[Object](_anyxml_property(stmt[Arc[ast.YangAnyxml]][]))
+    if stmt.isa[Arc[ast.YangContainer]]():
+        return Optional[Object](_container_property(stmt[Arc[ast.YangContainer]][], typedefs))
+    if stmt.isa[Arc[ast.YangList]]():
+        return Optional[Object](_list_property(stmt[Arc[ast.YangList]][], typedefs))
+    if stmt.isa[Arc[ast.YangChoice]]():
+        return Optional[Object](
+            _choice_property(
+                stmt[Arc[ast.YangChoice]][],
+                typedefs,
+                leaves,
+                leaf_lists,
+                anydatas,
+                anyxmls,
+                containers,
+                lists,
+            )
+        )
+    return Optional[Object]()
+
+
 def generate_json_schema(read module: ast.YangModule) raises -> Value:
     var root_xy = Object()
     root_xy[schema_keys.XYANG_MODULE] = Value(module.name)
@@ -618,10 +656,59 @@ def generate_json_schema(read module: ast.YangModule) raises -> Value:
     root_xy[schema_keys.XYANG_ORGANIZATION] = Value(module.organization)
     root_xy[schema_keys.XYANG_CONTACT] = Value(module.contact)
 
+    var module_leaves = List[Arc[ast.YangLeaf]]()
+    var module_leaf_lists = List[Arc[ast.YangLeafList]]()
+    var module_anydatas = List[Arc[ast.YangAnydata]]()
+    var module_anyxmls = List[Arc[ast.YangAnyxml]]()
+    var module_containers = List[Arc[ast.YangContainer]]()
+    var module_lists = List[Arc[ast.YangList]]()
+
+    for i in range(len(module.statements)):
+        var stmt = module.statements[i]
+        if stmt.isa[Arc[ast.YangLeaf]]():
+            module_leaves.append(stmt[Arc[ast.YangLeaf]])
+        elif stmt.isa[Arc[ast.YangLeafList]]():
+            module_leaf_lists.append(stmt[Arc[ast.YangLeafList]])
+        elif stmt.isa[Arc[ast.YangAnydata]]():
+            module_anydatas.append(stmt[Arc[ast.YangAnydata]])
+        elif stmt.isa[Arc[ast.YangAnyxml]]():
+            module_anyxmls.append(stmt[Arc[ast.YangAnyxml]])
+        elif stmt.isa[Arc[ast.YangContainer]]():
+            module_containers.append(stmt[Arc[ast.YangContainer]])
+        elif stmt.isa[Arc[ast.YangList]]():
+            module_lists.append(stmt[Arc[ast.YangList]])
+
     var props = Object()
-    for i in range(len(module.top_level_containers)):
-        ref c = module.top_level_containers[i][]
-        props[c.name] = Value(_container_property(c, module.typedefs))
+    for i in range(len(module.statements)):
+        var stmt = module.statements[i]
+        var prop = _module_statement_property(
+            stmt,
+            module.typedefs,
+            module_leaves,
+            module_leaf_lists,
+            module_anydatas,
+            module_anyxmls,
+            module_containers,
+            module_lists,
+        )
+        if prop:
+            var name = ""
+            if stmt.isa[Arc[ast.YangLeaf]]():
+                name = stmt[Arc[ast.YangLeaf]][].name
+            elif stmt.isa[Arc[ast.YangLeafList]]():
+                name = stmt[Arc[ast.YangLeafList]][].name
+            elif stmt.isa[Arc[ast.YangAnydata]]():
+                name = stmt[Arc[ast.YangAnydata]][].name
+            elif stmt.isa[Arc[ast.YangAnyxml]]():
+                name = stmt[Arc[ast.YangAnyxml]][].name
+            elif stmt.isa[Arc[ast.YangContainer]]():
+                name = stmt[Arc[ast.YangContainer]][].name
+            elif stmt.isa[Arc[ast.YangList]]():
+                name = stmt[Arc[ast.YangList]][].name
+            elif stmt.isa[Arc[ast.YangChoice]]():
+                name = stmt[Arc[ast.YangChoice]][].name
+            if len(name) > 0:
+                props[name] = Value(prop.take())
 
     var root = Object()
     root[schema_keys.JSON_SCHEMA_SCHEMA] = Value(schema_keys.JSON_SCHEMA_DRAFT_2020_12)
