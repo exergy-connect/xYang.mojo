@@ -7,20 +7,13 @@ from xyang.ast import (
 )
 from xyang.xpath import parse_xpath, Expr
 from xyang.yang.parser.yang_token import (
-    YANG_STMT_DESCRIPTION,
-    YANG_STMT_ERROR_MESSAGE,
-    YANG_STMT_MUST,
-    YANG_STMT_WHEN,
-    YANG_STMT_TYPE,
-    YANG_STMT_RANGE,
-    YANG_STMT_FRACTION_DIGITS,
-    YANG_STMT_PATH,
-    YANG_STMT_REQUIRE_INSTANCE,
+    YangToken,
     YANG_STMT_ENUM,
     YANG_STMT_UNION,
-    YANG_STMT_BIT,
-    YANG_STMT_BASE,
+    YANG_TYPE_BITS,
+    YANG_TYPE_DECIMAL64,
     YANG_TYPE_ENUMERATION,
+    YANG_TYPE_IDENTITYREF,
     YANG_TYPE_LEAFREF,
 )
 from xyang.yang.parser.state_support import _yang_constraints_for_parsed_type
@@ -30,7 +23,7 @@ comptime Arc = ArcPointer
 
 
 def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangType:
-    parser._expect(YANG_STMT_TYPE)
+    parser._expect(YangToken.TYPE)
     var type_name = parser._consume_name()
     var has_range = False
     var range_min = Int64(0)
@@ -49,10 +42,10 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
     var bits_names = List[String]()
     var identityref_base = ""
 
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_RANGE:
+            if stmt == YangToken.RANGE:
                 parser._consume()
                 var range_expr = parser._consume_argument_value()
                 var parts = range_expr.split("..")
@@ -72,8 +65,8 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                         has_range = True
                     except:
                         has_range = False
-                parser._skip_if(";")
-            elif stmt == YANG_STMT_PATH:
+                parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.PATH:
                 parser._consume()
                 leafref_path = parser._consume_argument_value()
                 has_leafref_path = True
@@ -83,19 +76,19 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 except:
                     leafref_xpath_ast = Expr.ExprPointer()
                     leafref_path_parsed = False
-                parser._skip_if(";")
-            elif stmt == YANG_STMT_REQUIRE_INSTANCE:
+                parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.REQUIRE_INSTANCE:
                 parser._consume()
                 leafref_require_instance = parser._parse_boolean_value()
-                parser._skip_if(";")
-            elif stmt == YANG_STMT_ENUM:
+                parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.ENUM:
                 parser._consume()
                 enum_values.append(parser._consume_name())
                 parser._skip_statement_tail()
-            elif stmt == YANG_STMT_TYPE and type_name == YANG_STMT_UNION:
+            elif stmt == YangToken.TYPE and type_name == YANG_STMT_UNION:
                 var union_type = parser._parse_type_statement()
                 union_types.append(Arc[YangType](union_type^))
-            elif stmt == YANG_STMT_FRACTION_DIGITS and type_name == "decimal64":
+            elif stmt == YangToken.FRACTION_DIGITS and type_name == YANG_TYPE_DECIMAL64:
                 parser._consume()
                 try:
                     var fd = atol(parser._consume_name().strip())
@@ -103,19 +96,19 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                         fraction_digits = Int(fd)
                 except:
                     pass
-                parser._skip_if(";")
-            elif stmt == YANG_STMT_BIT and type_name == "bits":
+                parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.BIT and type_name == YANG_TYPE_BITS:
                 parser._consume()
                 bits_names.append(parser._consume_name())
                 parser._skip_statement_tail()
-            elif stmt == YANG_STMT_BASE and type_name == "identityref":
+            elif stmt == YangToken.BASE and type_name == YANG_TYPE_IDENTITYREF:
                 parser._consume()
                 identityref_base = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
     if type_name == YANG_TYPE_ENUMERATION and len(enum_values) == 0:
         parser._error(
@@ -176,26 +169,26 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
 
 
 def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangMust:
-    parser._expect(YANG_STMT_MUST)
+    parser._expect(YangToken.MUST)
     var expression = parser._consume_argument_value()
     var error_message = ""
     var description = ""
 
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_ERROR_MESSAGE:
+            if stmt == YangToken.ERROR_MESSAGE:
                 parser._consume()
                 error_message = parser._consume_argument_value()
-                parser._skip_if(";")
-            elif stmt == YANG_STMT_DESCRIPTION:
+                parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.DESCRIPTION:
                 parser._consume()
                 description = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
     var xpath_ast = Expr.ExprPointer()
     try:
@@ -218,21 +211,21 @@ def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
 
 
 def parse_when_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangWhen:
-    parser._expect(YANG_STMT_WHEN)
+    parser._expect(YangToken.WHEN)
     var expression = parser._consume_argument_value()
     var description = ""
 
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_DESCRIPTION:
+            if stmt == YangToken.DESCRIPTION:
                 parser._consume()
                 description = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
     var xpath_ast = Expr.ExprPointer()
     try:

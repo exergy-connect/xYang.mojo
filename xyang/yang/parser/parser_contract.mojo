@@ -14,30 +14,40 @@ from xyang.ast import (
 )
 from xyang.yang.parser.types import ParsedGrouping
 from xyang.yang.parser.parsed_augment import ParsedAugment
+from xyang.yang.parser.yang_token import YangToken
 
 comptime Arc = ArcPointer
 
 
 trait ParserContract:
-    def _expect(mut self, value: String) raises:
+    def _prime_groupings_for_current_module_body(mut self) raises:
+        ...
+
+    def _expect(mut self, value: YangToken.Type) raises:
         ...
 
     def _consume_name(mut self) raises -> String:
         ...
 
-    def _consume_if(mut self, value: String) -> Bool:
+    def _consume_if(mut self, value: YangToken.Type) -> Bool:
         ...
 
-    def _skip_if(mut self, value: String):
+    def _skip_if(mut self, value: YangToken.Type):
         ...
 
     def _has_more(ref self) -> Bool:
         ...
 
-    def _peek(ref self) -> String:
+    def _peek(ref self) -> YangToken.Type:
         ...
 
-    def _peek_n(ref self, offset: Int) -> String:
+    def _peek_n(ref self, offset: Int) -> YangToken.Type:
+        ...
+
+    def _peek_value(ref self) -> String:
+        ...
+
+    def _peek_value_n(ref self, offset: Int) -> String:
         ...
 
     def _consume(mut self) raises:

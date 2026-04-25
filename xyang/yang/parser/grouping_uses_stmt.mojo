@@ -8,21 +8,7 @@ from xyang.ast import (
     YangAnydata,
     YangAnyxml,
 )
-from xyang.yang.parser.yang_token import (
-    YANG_STMT_DESCRIPTION,
-    YANG_STMT_GROUPING,
-    YANG_STMT_LEAF,
-    YANG_STMT_LEAF_LIST,
-    YANG_STMT_ANYDATA,
-    YANG_STMT_ANYXML,
-    YANG_STMT_CONTAINER,
-    YANG_STMT_LIST,
-    YANG_STMT_CHOICE,
-    YANG_STMT_USES,
-    YANG_STMT_AUGMENT,
-    YANG_STMT_IF_FEATURE,
-    YANG_STMT_REFINE,
-)
+from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.types import ParsedGrouping
 from xyang.yang.parser.parser_contract import ParserContract
 
@@ -30,7 +16,7 @@ comptime Arc = ArcPointer
 
 
 def parse_grouping_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises:
-    parser._expect(YANG_STMT_GROUPING)
+    parser._expect(YangToken.GROUPING)
     var name = parser._consume_name()
 
     var leaves = List[Arc[YangLeaf]]()
@@ -41,31 +27,31 @@ def parse_grouping_statement_impl[ParserT: ParserContract](mut parser: ParserT) 
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
 
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_LEAF:
+            if stmt == YangToken.LEAF:
                 var leaf = parser._parse_leaf_statement()
                 leaves.append(Arc[YangLeaf](leaf^))
-            elif stmt == YANG_STMT_LEAF_LIST:
+            elif stmt == YangToken.LEAF_LIST:
                 var leaf_list = parser._parse_leaf_list_statement()
                 leaf_lists.append(Arc[YangLeafList](leaf_list^))
-            elif stmt == YANG_STMT_ANYDATA:
+            elif stmt == YangToken.ANYDATA:
                 var ad = parser._parse_anydata_statement()
                 anydatas.append(Arc[YangAnydata](ad^))
-            elif stmt == YANG_STMT_ANYXML:
+            elif stmt == YangToken.ANYXML:
                 var ax = parser._parse_anyxml_statement()
                 anyxmls.append(Arc[YangAnyxml](ax^))
-            elif stmt == YANG_STMT_CONTAINER:
+            elif stmt == YangToken.CONTAINER:
                 var child_container = parser._parse_container_statement()
                 containers.append(Arc[YangContainer](child_container^))
-            elif stmt == YANG_STMT_LIST:
+            elif stmt == YangToken.LIST:
                 var child_list = parser._parse_list_statement()
                 lists.append(Arc[YangList](child_list^))
-            elif stmt == YANG_STMT_CHOICE:
+            elif stmt == YangToken.CHOICE:
                 var choice = parser._parse_choice_statement()
                 choices.append(Arc[YangChoice](choice^))
-            elif stmt == YANG_STMT_USES:
+            elif stmt == YangToken.USES:
                 parser._parse_uses_statement(
                     leaves,
                     leaf_lists,
@@ -75,7 +61,7 @@ def parse_grouping_statement_impl[ParserT: ParserContract](mut parser: ParserT) 
                     lists,
                     choices,
                 )
-            elif stmt == YANG_STMT_AUGMENT:
+            elif stmt == YangToken.AUGMENT:
                 parser._parse_relative_augment_statement(
                     leaves,
                     leaf_lists,
@@ -85,14 +71,14 @@ def parse_grouping_statement_impl[ParserT: ParserContract](mut parser: ParserT) 
                     lists,
                     choices,
                 )
-            elif stmt == YANG_STMT_DESCRIPTION:
+            elif stmt == YangToken.DESCRIPTION:
                 parser._consume()
                 _ = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
     var children = List[ParsedGrouping.ChildStatement]()
     for i in range(len(leaves)):
@@ -128,7 +114,7 @@ def parse_uses_statement_impl[ParserT: ParserContract](
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
 ) raises:
-    parser._expect(YANG_STMT_USES)
+    parser._expect(YangToken.USES)
     var grouping_name = parser._consume_name()
     parser._append_grouping_nodes_by_name(
         grouping_name,
@@ -140,12 +126,12 @@ def parse_uses_statement_impl[ParserT: ParserContract](
         lists,
         choices,
     )
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_IF_FEATURE:
+            if stmt == YangToken.IF_FEATURE:
                 parser._parse_if_feature_statement()
-            elif stmt == YANG_STMT_REFINE:
+            elif stmt == YangToken.REFINE:
                 parser._parse_refine_statement(
                     leaves,
                     leaf_lists,
@@ -155,7 +141,7 @@ def parse_uses_statement_impl[ParserT: ParserContract](
                     lists,
                     choices,
                 )
-            elif stmt == YANG_STMT_AUGMENT:
+            elif stmt == YangToken.AUGMENT:
                 parser._parse_relative_augment_statement(
                     leaves,
                     leaf_lists,
@@ -167,11 +153,11 @@ def parse_uses_statement_impl[ParserT: ParserContract](
                 )
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
 
 def parse_if_feature_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises:
-    parser._expect(YANG_STMT_IF_FEATURE)
+    parser._expect(YangToken.IF_FEATURE)
     _ = parser._consume_argument_value()
-    parser._skip_if(";")
+    parser._skip_if(YangToken.SEMICOLON)

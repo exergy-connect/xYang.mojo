@@ -11,30 +11,7 @@ from xyang.ast import (
     YangMust,
     YangWhen,
 )
-from xyang.yang.parser.yang_token import (
-    YANG_STMT_DESCRIPTION,
-    YANG_STMT_MANDATORY,
-    YANG_STMT_DEFAULT,
-    YANG_STMT_MUST,
-    YANG_STMT_WHEN,
-    YANG_STMT_TYPE,
-    YANG_STMT_MIN_ELEMENTS,
-    YANG_STMT_MAX_ELEMENTS,
-    YANG_STMT_ORDERED_BY,
-    YANG_STMT_KEY,
-    YANG_STMT_UNIQUE,
-    YANG_STMT_IF_FEATURE,
-    YANG_STMT_REFINE,
-    YANG_STMT_AUGMENT,
-    YANG_STMT_LEAF,
-    YANG_STMT_LEAF_LIST,
-    YANG_STMT_ANYDATA,
-    YANG_STMT_ANYXML,
-    YANG_STMT_CONTAINER,
-    YANG_STMT_LIST,
-    YANG_STMT_CHOICE,
-    YANG_STMT_USES,
-)
+from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.clone_utils import (
@@ -67,7 +44,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
 ) raises:
     _ = anydatas
     _ = anyxmls
-    parser._expect(YANG_STMT_REFINE)
+    parser._expect(YangToken.REFINE)
     var refine_path = parser._consume_argument_value()
     var segments = split_schema_path_impl(refine_path)
     if len(segments) == 0:
@@ -75,13 +52,13 @@ def parse_refine_statement_impl[ParserT: ParserContract](
         parser._skip_statement_tail()
         return
 
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_DESCRIPTION:
+            if stmt == YangToken.DESCRIPTION:
                 parser._consume()
                 var desc = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_description_at_path_impl(
                     segments,
                     0,
@@ -93,10 +70,10 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     choices,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_MANDATORY:
+            elif stmt == YangToken.MANDATORY:
                 parser._consume()
                 var mandatory = parser._parse_boolean_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_mandatory_at_path_impl(
                     segments,
                     0,
@@ -108,10 +85,10 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     choices,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_DEFAULT:
+            elif stmt == YangToken.DEFAULT:
                 parser._consume()
                 var default_value = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_default_at_path_impl(
                     segments,
                     0,
@@ -123,7 +100,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     choices,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_MUST:
+            elif stmt == YangToken.MUST:
                 var must_stmt = parser._parse_must_statement()
                 if not refine_add_must_at_path_impl(
                     segments,
@@ -136,7 +113,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     choices,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_WHEN:
+            elif stmt == YangToken.WHEN:
                 var when_stmt = parser._parse_when_statement()
                 if not refine_set_when_at_path_impl(
                     segments,
@@ -149,7 +126,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     choices,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_TYPE:
+            elif stmt == YangToken.TYPE:
                 var type_stmt = parser._parse_type_statement()
                 if not refine_set_type_at_path_impl(
                     segments,
@@ -162,10 +139,10 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     choices,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_MIN_ELEMENTS:
+            elif stmt == YangToken.MIN_ELEMENTS:
                 parser._consume()
                 var min_el = parser._parse_non_negative_int("min-elements")
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_min_elements_at_path_impl(
                     segments,
                     0,
@@ -176,10 +153,10 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     lists,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_MAX_ELEMENTS:
+            elif stmt == YangToken.MAX_ELEMENTS:
                 parser._consume()
                 var max_el = parser._parse_non_negative_int("max-elements")
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_max_elements_at_path_impl(
                     segments,
                     0,
@@ -190,10 +167,10 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     lists,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_ORDERED_BY:
+            elif stmt == YangToken.ORDERED_BY:
                 parser._consume()
                 var ordered_by = parser._parse_ordered_by_argument()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_ordered_by_at_path_impl(
                     segments,
                     0,
@@ -204,10 +181,10 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     lists,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_KEY:
+            elif stmt == YangToken.KEY:
                 parser._consume()
                 var key = parser._consume_argument_value()
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_set_key_at_path_impl(
                     segments,
                     0,
@@ -216,11 +193,11 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     lists,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_UNIQUE:
+            elif stmt == YangToken.UNIQUE:
                 parser._consume()
                 var uarg = parser._consume_argument_value()
                 var ucomp = parser._unique_components_from_argument(uarg)
-                parser._skip_if(";")
+                parser._skip_if(YangToken.SEMICOLON)
                 if not refine_add_unique_at_path_impl(
                     segments,
                     0,
@@ -229,12 +206,12 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                     lists,
                 ):
                     parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YANG_STMT_IF_FEATURE:
+            elif stmt == YangToken.IF_FEATURE:
                 parser._parse_if_feature_statement()
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
 
 def parse_relative_augment_statement_impl[ParserT: ParserContract](
@@ -322,7 +299,7 @@ def apply_pending_module_augments_impl(
 
 
 def parse_augment_statement_body_impl[ParserT: ParserContract](mut parser: ParserT) raises -> ParsedAugment:
-    parser._expect(YANG_STMT_AUGMENT)
+    parser._expect(YangToken.AUGMENT)
     var target_path = parser._consume_argument_value()
 
     var leaves = List[Arc[YangLeaf]]()
@@ -333,31 +310,31 @@ def parse_augment_statement_body_impl[ParserT: ParserContract](mut parser: Parse
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
 
-    if parser._consume_if("{"):
-        while parser._has_more() and parser._peek() != "}":
+    if parser._consume_if(YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YANG_STMT_LEAF:
+            if stmt == YangToken.LEAF:
                 var leaf = parser._parse_leaf_statement()
                 leaves.append(Arc[YangLeaf](leaf^))
-            elif stmt == YANG_STMT_LEAF_LIST:
+            elif stmt == YangToken.LEAF_LIST:
                 var leaf_list = parser._parse_leaf_list_statement()
                 leaf_lists.append(Arc[YangLeafList](leaf_list^))
-            elif stmt == YANG_STMT_ANYDATA:
+            elif stmt == YangToken.ANYDATA:
                 var ad = parser._parse_anydata_statement()
                 anydatas.append(Arc[YangAnydata](ad^))
-            elif stmt == YANG_STMT_ANYXML:
+            elif stmt == YangToken.ANYXML:
                 var ax = parser._parse_anyxml_statement()
                 anyxmls.append(Arc[YangAnyxml](ax^))
-            elif stmt == YANG_STMT_CONTAINER:
+            elif stmt == YangToken.CONTAINER:
                 var child_container = parser._parse_container_statement()
                 containers.append(Arc[YangContainer](child_container^))
-            elif stmt == YANG_STMT_LIST:
+            elif stmt == YangToken.LIST:
                 var child_list = parser._parse_list_statement()
                 lists.append(Arc[YangList](child_list^))
-            elif stmt == YANG_STMT_CHOICE:
+            elif stmt == YangToken.CHOICE:
                 var choice = parser._parse_choice_statement()
                 choices.append(Arc[YangChoice](choice^))
-            elif stmt == YANG_STMT_USES:
+            elif stmt == YangToken.USES:
                 parser._parse_uses_statement(
                     leaves,
                     leaf_lists,
@@ -367,9 +344,9 @@ def parse_augment_statement_body_impl[ParserT: ParserContract](mut parser: Parse
                     lists,
                     choices,
                 )
-            elif stmt == YANG_STMT_IF_FEATURE:
+            elif stmt == YangToken.IF_FEATURE:
                 parser._parse_if_feature_statement()
-            elif stmt == YANG_STMT_AUGMENT:
+            elif stmt == YangToken.AUGMENT:
                 parser._parse_relative_augment_statement(
                     leaves,
                     leaf_lists,
@@ -381,8 +358,8 @@ def parse_augment_statement_body_impl[ParserT: ParserContract](mut parser: Parse
                 )
             else:
                 parser._skip_statement()
-        parser._expect("}")
-    parser._skip_if(";")
+        parser._expect(YangToken.RBRACE)
+    parser._skip_if(YangToken.SEMICOLON)
 
     return ParsedAugment(
         target_path,
@@ -522,6 +499,14 @@ def refine_set_description_at_path_impl(
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
+        for i in range(len(leaves)):
+            if ident_local_name_impl(leaves[i][].name) == seg:
+                # Leaf description is not modeled in the current AST; treat as recognized no-op.
+                applied = True
+        for i in range(len(leaf_lists)):
+            if ident_local_name_impl(leaf_lists[i][].name) == seg:
+                # Leaf-list description is not modeled in the current AST; treat as recognized no-op.
+                applied = True
         for i in range(len(containers)):
             if ident_local_name_impl(containers[i][].name) == seg:
                 containers[i][].description = description
@@ -530,6 +515,13 @@ def refine_set_description_at_path_impl(
             if ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].description = description
                 applied = True
+        for i in range(len(choices)):
+            if ident_local_name_impl(choices[i][].name) == seg:
+                # Choice/case descriptions are not modeled in the current AST; treat as recognized no-op.
+                applied = True
+            for j in range(len(choices[i][].cases)):
+                if ident_local_name_impl(choices[i][].cases[j][].name) == seg:
+                    applied = True
         return applied
 
     var applied = False

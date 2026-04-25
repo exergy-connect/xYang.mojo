@@ -113,5 +113,90 @@ module quote-test {
     assert_equal(mixed.default_value, "\"'")
 
 
+def test_parse_utf8_description_text() raises:
+    var module = parse_yang_string(
+        """
+module utf8-text {
+  namespace "urn:example:utf8-text";
+  prefix ut;
+  description "Unicode punctuation — and ± should parse.";
+}
+""",
+    )
+    assert_equal(
+        module.get_description(),
+        "Unicode punctuation — and ± should parse.",
+    )
+
+
+def test_parse_forward_grouping_uses_resolution() raises:
+    var module = parse_yang_string(
+        """
+module forward-grouping {
+  namespace "urn:example:forward-grouping";
+  prefix fg;
+
+  grouping field-a {
+    uses field-b;
+    leaf a {
+      type string;
+    }
+  }
+
+  grouping field-b {
+    leaf b {
+      type string;
+    }
+  }
+
+  container root {
+    uses field-a;
+  }
+}
+""",
+    )
+
+    ref root = module.top_level_containers[0][]
+    var saw_a = False
+    var saw_b = False
+    for i in range(len(root.leaves)):
+        if root.leaves[i][].name == "a":
+            saw_a = True
+        if root.leaves[i][].name == "b":
+            saw_b = True
+    assert_true(saw_a)
+    assert_true(saw_b)
+
+
+def test_refine_leaf_description_in_uses() raises:
+    var module = parse_yang_string(
+        """
+module refine-leaf-description {
+  namespace "urn:example:refine-leaf-description";
+  prefix rd;
+
+  grouping entity-reference {
+    leaf entity {
+      type string;
+      mandatory true;
+    }
+  }
+
+  container root {
+    uses entity-reference {
+      refine entity {
+        mandatory false;
+      }
+    }
+  }
+}
+""",
+    )
+
+    ref root = module.top_level_containers[0][]
+    assert_equal(root.leaves[0][].name, "entity")
+    assert_true(not root.leaves[0][].mandatory)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

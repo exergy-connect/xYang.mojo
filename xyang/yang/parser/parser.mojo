@@ -114,6 +114,53 @@ struct _YangParser(Movable, ParserContract):
     def parse_module(mut self) raises -> YangModule:
         return parse_module_impl(self)
 
+    def _prime_groupings_for_current_module_body(mut self) raises:
+        var module_body_start = self.index
+        var unresolved_stmt_index = -1
+        var unresolved_message = ""
+
+        while True:
+            var added_in_pass = 0
+            var unresolved_in_pass = 0
+            self.index = module_body_start
+
+            while self._has_more() and self._peek() != YangToken.RBRACE:
+                if self._peek() == YangToken.GROUPING:
+                    var grouping_name = self._peek_value_n(1)
+                    if len(grouping_name) > 0 and self.groupings.get(grouping_name):
+                        self._skip_statement()
+                        continue
+                    var stmt_start = self.index
+                    var before = len(self.groupings)
+                    try:
+                        self._parse_grouping_statement()
+                        if len(self.groupings) > before:
+                            added_in_pass += 1
+                    except e:
+                        var msg = String(e)
+                        if _is_unknown_grouping_uses_error(msg):
+                            unresolved_in_pass += 1
+                            unresolved_stmt_index = stmt_start
+                            unresolved_message = msg
+                            # Defer this grouping to a later pass and keep scanning.
+                            self.index = stmt_start
+                            self._skip_statement()
+                        else:
+                            raise e^
+                else:
+                    self._skip_statement()
+
+            if unresolved_in_pass == 0:
+                break
+            if added_in_pass == 0:
+                if unresolved_stmt_index >= 0:
+                    self.index = unresolved_stmt_index
+                    self._error(_message_after_colon(unresolved_message))
+                self._error("Unknown grouping in uses statement")
+
+        # Restore parser position so the normal module parse can begin at the same place.
+        self.index = module_body_start
+
     def _parse_container_statement(mut self) raises -> YangContainer:
         return parse_container_statement_impl(self)
 
@@ -602,41 +649,46 @@ struct _YangParser(Movable, ParserContract):
         var value = self._consume_value()
 
         # YANG string concatenation: "a" + "b"
-        while self._consume_if("+"):
+        while self._consume_if(YangToken.PLUS):
             value += self._consume_value()
 
         return value
 
     def _consume_name(mut self) raises -> String:
+        var first_type = self._peek()
         var first = self._consume_value()
-        if first == "{" or first == "}" or first == ";":
+        if (
+            first_type == YangToken.LBRACE
+            or first_type == YangToken.RBRACE
+            or first_type == YangToken.SEMICOLON
+        ):
             self._error("Expected statement argument, got '" + first + "'")
             return ""
 
         var name = first
-        while self._consume_if(":"):
+        while self._consume_if(YangToken.COLON):
             name += ":"
             name += self._consume_value()
         return name
 
     def _skip_statement_tail(mut self) raises:
-        if self._consume_if(";"):
+        if self._consume_if(YangToken.SEMICOLON):
             return
-        if self._consume_if("{"):
+        if self._consume_if(YangToken.LBRACE):
             self._skip_block_body()
-            self._skip_if(";")
+            self._skip_if(YangToken.SEMICOLON)
             return
         while self._has_more():
             var v = self._peek()
-            if v == ";":
+            if v == YangToken.SEMICOLON:
                 self._consume()
                 return
-            if v == "{":
+            if v == YangToken.LBRACE:
                 self._consume()
                 self._skip_block_body()
-                self._skip_if(";")
+                self._skip_if(YangToken.SEMICOLON)
                 return
-            if v == "}":
+            if v == YangToken.RBRACE:
                 return
             self._consume()
 
@@ -648,29 +700,32 @@ struct _YangParser(Movable, ParserContract):
         # Entry point assumes the opening '{' was already consumed.
         var depth = 1
         while self._has_more() and depth > 0:
-            var value = self._consume_value()
-            if value == "{":
+            var t = self._peek()
+            self._consume()
+            if t == YangToken.LBRACE:
                 depth += 1
-            elif value == "}":
+            elif t == YangToken.RBRACE:
                 depth -= 1
 
-    def _expect(mut self, value: String) raises:
+    def _expect(mut self, value: YangToken.Type) raises:
         if not self._has_more():
-            self._error("Expected '" + value + "', found end of input")
+            self._error("Expected " + _token_type_name(value) + ", found end of input")
             return
         var got = self._peek()
         if got != value:
-            self._error("Expected '" + value + "', got '" + got + "'")
+            self._error(
+                "Expected " + _token_type_name(value) + ", got " + _token_type_name(got),
+            )
             return
         self.index += 1
 
-    def _consume_if(mut self, value: String) -> Bool:
+    def _consume_if(mut self, value: YangToken.Type) -> Bool:
         if self._has_more() and self._peek() == value:
             self.index += 1
             return True
         return False
 
-    def _skip_if(mut self, value: String):
+    def _skip_if(mut self, value: YangToken.Type):
         if self._has_more() and self._peek() == value:
             self.index += 1
 
@@ -689,10 +744,19 @@ struct _YangParser(Movable, ParserContract):
         self.index += 1
         return out
 
-    def _peek(ref self) -> String:
+    def _peek(ref self) -> YangToken.Type:
+        return self.tokens[self.index].type
+
+    def _peek_n(ref self, offset: Int) -> YangToken.Type:
+        var idx = self.index + offset
+        if idx < 0 or idx >= len(self.tokens):
+            return YangToken.UNKNOWN
+        return self.tokens[idx].type
+
+    def _peek_value(ref self) -> String:
         return _token_text(self.source, self.tokens[self.index])
 
-    def _peek_n(ref self, offset: Int) -> String:
+    def _peek_value_n(ref self, offset: Int) -> String:
         var idx = self.index + offset
         if idx < 0 or idx >= len(self.tokens):
             return ""
@@ -719,6 +783,48 @@ def _token_text(source: String, read tok: YangToken, strip_quotes: Bool = False)
     return tok.text(source, strip_quotes = strip_quotes)
 
 
+def _token_type_name(t: YangToken.Type) -> String:
+    if t == YangToken.LBRACE:
+        return "'{'"
+    if t == YangToken.RBRACE:
+        return "'}'"
+    if t == YangToken.SEMICOLON:
+        return "';'"
+    if t == YangToken.COLON:
+        return "':'"
+    if t == YangToken.PLUS:
+        return "'+'"
+    if t == YangToken.MODULE:
+        return "'module'"
+    if t == YangToken.GROUPING:
+        return "'grouping'"
+    if t == YangToken.USES:
+        return "'uses'"
+    if t == YangToken.AUGMENT:
+        return "'augment'"
+    if t == YangToken.CONTAINER:
+        return "'container'"
+    if t == YangToken.LIST:
+        return "'list'"
+    if t == YangToken.LEAF:
+        return "'leaf'"
+    if t == YangToken.LEAF_LIST:
+        return "'leaf-list'"
+    if t == YangToken.CHOICE:
+        return "'choice'"
+    if t == YangToken.CASE:
+        return "'case'"
+    if t == YangToken.TYPE:
+        return "'type'"
+    if t == YangToken.STRING:
+        return "string"
+    if t == YangToken.IDENTIFIER:
+        return "identifier"
+    if t == YangToken.INTEGER:
+        return "integer"
+    return "token#" + String(t)
+
+
 def _col_for_token(source: String, tok: YangToken) -> Int:
     var i = tok.start
     while i > 0:
@@ -726,3 +832,22 @@ def _col_for_token(source: String, tok: YangToken) -> Int:
             break
         i -= 1
     return tok.start - i
+
+
+def _is_unknown_grouping_uses_error(message: String) -> Bool:
+    return _contains_substr(message, "Unknown grouping '") and _contains_substr(
+        message,
+        " in uses statement",
+    )
+
+
+def _contains_substr(haystack: String, needle: String) -> Bool:
+    return len(haystack.split(needle)) > 1
+
+
+def _message_after_colon(message: String) -> String:
+    var sep = ": "
+    var parts = message.split(sep)
+    if len(parts) == 0:
+        return message
+    return String(parts[len(parts) - 1])
