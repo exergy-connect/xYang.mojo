@@ -20,8 +20,8 @@ def _must_entry(read m: ast.YangMust) raises -> Object:
 
 def _must_array_from_arc_list(read stmts: List[Arc[ast.YangMust]]) raises -> Array:
     var arr = Array()
-    for i in range(len(stmts)):
-        arr.append(Value(_must_entry(stmts[i][])))
+    for ref m in stmts:
+        arr.append(Value(_must_entry(m[])))
     return arr^
 
 
@@ -301,8 +301,8 @@ def _leaf_list_property(
         out[schema_keys.JSON_SCHEMA_MAX_ITEMS] = Value(ll.max_elements)
     if len(ll.default_values) > 0:
         var darr = Array()
-        for i in range(len(ll.default_values)):
-            var dv = _default_json_value_for_type(ll.default_values[i], ll.type)
+        for dtext in ll.default_values:
+            var dv = _default_json_value_for_type(dtext, ll.type)
             if dv:
                 darr.append(dv.value().copy())
         if len(darr) > 0:
@@ -329,24 +329,24 @@ def _find_named_property(
     read containers: List[Arc[ast.YangContainer]],
     read lists: List[Arc[ast.YangList]],
 ) raises -> Object:
-    for i in range(len(leaves)):
-        if leaves[i][].name == name:
-            return _leaf_property(leaves[i][], typedefs)
-    for i in range(len(leaf_lists)):
-        if leaf_lists[i][].name == name:
-            return _leaf_list_property(leaf_lists[i][], typedefs)
-    for i in range(len(anydatas)):
-        if anydatas[i][].name == name:
-            return _anydata_property(anydatas[i][])
-    for i in range(len(anyxmls)):
-        if anyxmls[i][].name == name:
-            return _anyxml_property(anyxmls[i][])
-    for i in range(len(containers)):
-        if containers[i][].name == name:
-            return _container_property(containers[i][], typedefs)
-    for i in range(len(lists)):
-        if lists[i][].name == name:
-            return _list_property(lists[i][], typedefs)
+    for ref lf in leaves:
+        if lf[].name == name:
+            return _leaf_property(lf[], typedefs)
+    for ref llist in leaf_lists:
+        if llist[].name == name:
+            return _leaf_list_property(llist[], typedefs)
+    for ref ad in anydatas:
+        if ad[].name == name:
+            return _anydata_property(ad[])
+    for ref ax in anyxmls:
+        if ax[].name == name:
+            return _anyxml_property(ax[])
+    for ref co in containers:
+        if co[].name == name:
+            return _container_property(co[], typedefs)
+    for ref li in lists:
+        if li[].name == name:
+            return _list_property(li[], typedefs)
     return _stub_leaf_property()
 
 
@@ -386,8 +386,7 @@ def _choice_property(
         ref case_node = choice.cases[i][]
         var props = Object()
         var req = Array()
-        for j in range(len(case_node.node_names)):
-            var nm = case_node.node_names[j]
+        for nm in case_node.node_names:
             props[nm] = Value(
                 _find_named_property(
                     nm,
@@ -426,32 +425,32 @@ def _container_property(
     var props = Object()
     var req = Array()
 
-    for i in range(len(c.leaves)):
-        ref lf = c.leaves[i][]
+    for ref lf_arc in c.leaves:
+        ref lf = lf_arc[]
         props[lf.name] = Value(_leaf_property(lf, typedefs))
         if lf.mandatory:
             req.append(Value(lf.name))
-    for i in range(len(c.leaf_lists)):
-        ref ll = c.leaf_lists[i][]
+    for ref ll_arc in c.leaf_lists:
+        ref ll = ll_arc[]
         props[ll.name] = Value(_leaf_list_property(ll, typedefs))
-    for i in range(len(c.anydatas)):
-        ref ad = c.anydatas[i][]
+    for ref ad_arc in c.anydatas:
+        ref ad = ad_arc[]
         props[ad.name] = Value(_anydata_property(ad))
         if ad.mandatory:
             req.append(Value(ad.name))
-    for i in range(len(c.anyxmls)):
-        ref ax = c.anyxmls[i][]
+    for ref ax_arc in c.anyxmls:
+        ref ax = ax_arc[]
         props[ax.name] = Value(_anyxml_property(ax))
         if ax.mandatory:
             req.append(Value(ax.name))
-    for i in range(len(c.containers)):
-        ref ch = c.containers[i][]
+    for ref ch_arc in c.containers:
+        ref ch = ch_arc[]
         props[ch.name] = Value(_container_property(ch, typedefs))
-    for i in range(len(c.lists)):
-        ref lst = c.lists[i][]
+    for ref lst_arc in c.lists:
+        ref lst = lst_arc[]
         props[lst.name] = Value(_list_property(lst, typedefs))
-    for i in range(len(c.choices)):
-        ref ch = c.choices[i][]
+    for ref ch_arc2 in c.choices:
+        ref ch = ch_arc2[]
         props[ch.name] = Value(
             _choice_property(
                 ch,
@@ -488,32 +487,32 @@ def _list_items_schema(
 ) raises -> Object:
     var props = Object()
     var req = Array()
-    for i in range(len(lst.leaves)):
-        ref lf = lst.leaves[i][]
+    for ref lf_arc in lst.leaves:
+        ref lf = lf_arc[]
         props[lf.name] = Value(_leaf_property(lf, typedefs))
         if lf.mandatory:
             req.append(Value(lf.name))
-    for i in range(len(lst.leaf_lists)):
-        ref ll = lst.leaf_lists[i][]
+    for ref ll_arc in lst.leaf_lists:
+        ref ll = ll_arc[]
         props[ll.name] = Value(_leaf_list_property(ll, typedefs))
-    for i in range(len(lst.anydatas)):
-        ref ad = lst.anydatas[i][]
+    for ref ad_arc in lst.anydatas:
+        ref ad = ad_arc[]
         props[ad.name] = Value(_anydata_property(ad))
         if ad.mandatory:
             req.append(Value(ad.name))
-    for i in range(len(lst.anyxmls)):
-        ref ax = lst.anyxmls[i][]
+    for ref ax_arc in lst.anyxmls:
+        ref ax = ax_arc[]
         props[ax.name] = Value(_anyxml_property(ax))
         if ax.mandatory:
             req.append(Value(ax.name))
-    for i in range(len(lst.containers)):
-        ref ch = lst.containers[i][]
+    for ref ch_arc in lst.containers:
+        ref ch = ch_arc[]
         props[ch.name] = Value(_container_property(ch, typedefs))
-    for i in range(len(lst.lists)):
-        ref inner = lst.lists[i][]
+    for ref inner_arc in lst.lists:
+        ref inner = inner_arc[]
         props[inner.name] = Value(_list_property(inner, typedefs))
-    for i in range(len(lst.choices)):
-        ref ch = lst.choices[i][]
+    for ref ch_arc2 in lst.choices:
+        ref ch = ch_arc2[]
         props[ch.name] = Value(
             _choice_property(
                 ch,
@@ -551,11 +550,10 @@ def _list_property(
         xy[schema_keys.XYANG_ORDERED_BY] = Value(lst.ordered_by)
     if len(lst.unique_specs) > 0:
         var uarr = Array()
-        for i in range(len(lst.unique_specs)):
-            ref spec = lst.unique_specs[i]
+        for spec in lst.unique_specs:
             var inner = Array()
-            for j in range(len(spec)):
-                inner.append(Value(spec[j]))
+            for s in spec:
+                inner.append(Value(s))
             uarr.append(Value(inner^))
         xy[schema_keys.XYANG_UNIQUE] = Value(uarr^)
     var out = Object()
@@ -588,13 +586,13 @@ def _identity_def_object(read ident: ast.YangIdentityStmt) raises -> Object:
     xy[schema_keys.XYANG_TYPE] = Value(yang_token.YANG_STMT_IDENTITY)
     if len(ident.bases) > 0:
         var bases = Array()
-        for i in range(len(ident.bases)):
-            bases.append(Value(ident.bases[i]))
+        for b in ident.bases:
+            bases.append(Value(b))
         xy[schema_keys.XYANG_BASES] = Value(bases^)
     if len(ident.if_features) > 0:
         var ff = Array()
-        for i in range(len(ident.if_features)):
-            ff.append(Value(ident.if_features[i]))
+        for f in ident.if_features:
+            ff.append(Value(f))
         xy[schema_keys.XYANG_IF_FEATURES] = Value(ff^)
     out[schema_keys.JSON_SCHEMA_X_YANG] = Value(xy^)
     return out^
@@ -663,8 +661,7 @@ def generate_json_schema(read module: ast.YangModule) raises -> Value:
     var module_containers = List[Arc[ast.YangContainer]]()
     var module_lists = List[Arc[ast.YangList]]()
 
-    for i in range(len(module.statements)):
-        var stmt = module.statements[i]
+    for stmt in module.statements:
         if stmt.isa[Arc[ast.YangLeaf]]():
             module_leaves.append(stmt[Arc[ast.YangLeaf]])
         elif stmt.isa[Arc[ast.YangLeafList]]():
@@ -679,8 +676,7 @@ def generate_json_schema(read module: ast.YangModule) raises -> Value:
             module_lists.append(stmt[Arc[ast.YangList]])
 
     var props = Object()
-    for i in range(len(module.statements)):
-        var stmt = module.statements[i]
+    for stmt in module.statements:
         var prop = _module_statement_property(
             stmt,
             module.typedefs,

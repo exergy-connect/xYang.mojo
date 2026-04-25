@@ -6,6 +6,7 @@ from xyang.ast import YangType
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from std.memory import ArcPointer
 from xyang.xpath import (
+    parse_xpath,
     XPathNode,
     EvalContext,
     XPathEvaluator,
@@ -347,20 +348,19 @@ def check_leafref_reference(
     """Python-style leafref require-instance check in type checker."""
     if type_stmt.name != YANG_TYPE_LEAFREF or not type_stmt.leafref_require_instance():
         return List[String]()
-    if not type_stmt.has_leafref_path() or len(type_stmt.leafref_path()) == 0:
-        var errs = List[String]()
-        errs.append("Leafref is missing required path metadata")
-        return errs^
-    var lr_ast = type_stmt.leafref_xpath_ast()
-    if not type_stmt.leafref_path_parsed() or not lr_ast:
+    var path_str = type_stmt.leafref_path()
+    var lr_ast: Expr.ExprPointer
+    try:
+        lr_ast = parse_xpath(path_str)
+    except:
         var errs = List[String]()
         errs.append("Leafref path expression could not be parsed")
         return errs^
-    var target_paths = _eval_leafref_target_paths(
-        lr_ast,
-        type_stmt.leafref_path(),
-        node_path,
-    )
+    var target_paths = _eval_leafref_target_paths(lr_ast, path_str, node_path)
+    if lr_ast:
+        lr_ast[].free_tree()
+        lr_ast.destroy_pointee()
+        lr_ast.free()
     for i in range(len(target_paths)):
         var targets = _resolve_values_for_xpath_path(target_paths[i], root_data)
         for j in range(len(targets)):

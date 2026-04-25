@@ -1,5 +1,4 @@
 import xyang.ast as ast
-from xyang.xpath import Expr
 from xyang.yang.parser.yang_token import (
     YANG_TYPE_ENUMERATION,
     YANG_TYPE_LEAFREF,
@@ -21,11 +20,8 @@ def _yang_constraints_for_parsed_type(
     range_min: Int64,
     range_max: Int64,
     var enum_values: List[String],
-    has_leafref_path: Bool,
     var leafref_path: String,
     leafref_require_instance: Bool,
-    var leafref_xpath_ast: Expr.ExprPointer,
-    leafref_path_parsed: Bool,
     fraction_digits: Int,
     has_dec_range: Bool,
     dec_lo: Float64,
@@ -44,11 +40,8 @@ def _yang_constraints_for_parsed_type(
         )
     if type_name == YANG_TYPE_LEAFREF:
         return YangTypeLeafref(
-            has_leafref_path,
             leafref_path^,
             leafref_require_instance,
-            leafref_xpath_ast,
-            leafref_path_parsed,
         )
     if type_name == "bits":
         return YangTypeBits(bits_names^)

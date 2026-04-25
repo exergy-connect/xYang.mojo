@@ -94,11 +94,8 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
     var ty_name = _leaf_type_name_from_prop(prop)
     var enum_values = List[String]()
     var union_members = List[Arc[ast.YangType]]()
-    var has_lr_path = False
     var lr_path = ""
     var lr_require_inst = True
-    var lr_ast = Expr.ExprPointer()
-    var lr_parsed = False
     var fraction_digits = 0
     var has_dec_range = False
     var dec_min = Float64(0.0)
@@ -144,14 +141,7 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
                 ty_name = xyang_type
         if ty_name == yang_token.YANG_TYPE_LEAFREF:
             if "path" in xy.object() and xy.object()["path"].is_string():
-                has_lr_path = True
                 lr_path = xy.object()["path"].string()
-                try:
-                    lr_ast = parse_xpath(lr_path)
-                    lr_parsed = True
-                except:
-                    lr_ast = Expr.ExprPointer()
-                    lr_parsed = False
             if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
                 lr_require_inst = xy.object()["require-instance"].bool()
         if ty_name == "decimal64":
@@ -177,11 +167,8 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
     var cons = _json_schema_yang_constraints(
         ty_name,
         enum_values^,
-        has_lr_path,
         lr_path,
         lr_require_inst,
-        lr_ast,
-        lr_parsed,
         fraction_digits,
         has_dec_range,
         dec_min,
@@ -195,11 +182,8 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
 def _json_schema_yang_constraints(
     ty_name: String,
     var enum_values: List[String],
-    has_lr_path: Bool,
     var lr_path: String,
     lr_require_inst: Bool,
-    var lr_ast: Expr.ExprPointer,
-    lr_parsed: Bool,
     fraction_digits: Int,
     has_dec_range: Bool,
     dec_min: Float64,
@@ -210,12 +194,11 @@ def _json_schema_yang_constraints(
     if ty_name == "enumeration":
         return ast.YangTypeEnumeration(enum_values^)
     if ty_name == yang_token.YANG_TYPE_LEAFREF:
+        if len(lr_path) == 0:
+            return ast.YangTypePlain(_pad=0)
         return ast.YangTypeLeafref(
-            has_lr_path,
             lr_path^,
             lr_require_inst,
-            lr_ast,
-            lr_parsed,
         )
     if ty_name == "decimal64":
         return ast.YangTypeDecimal64(

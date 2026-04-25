@@ -30,11 +30,8 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
     var range_max = Int64(0)
     var enum_values = List[String]()
     var union_types = List[Arc[YangType]]()
-    var has_leafref_path = False
     var leafref_path = ""
     var leafref_require_instance = True
-    var leafref_xpath_ast = Expr.ExprPointer()
-    var leafref_path_parsed = False
     var fraction_digits = 0
     var has_dec_range = False
     var dec_lo = Float64(0.0)
@@ -69,13 +66,6 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
             elif stmt == YangToken.PATH:
                 parser._consume()
                 leafref_path = parser._consume_argument_value()
-                has_leafref_path = True
-                try:
-                    leafref_xpath_ast = parse_xpath(leafref_path)
-                    leafref_path_parsed = True
-                except:
-                    leafref_xpath_ast = Expr.ExprPointer()
-                    leafref_path_parsed = False
                 parser._skip_if(YangToken.SEMICOLON)
             elif stmt == YangToken.REQUIRE_INSTANCE:
                 parser._consume()
@@ -110,6 +100,8 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
         parser._expect(YangToken.RBRACE)
     parser._skip_if(YangToken.SEMICOLON)
 
+    if type_name == YANG_TYPE_LEAFREF and len(leafref_path) == 0:
+        parser._error("leafref type requires a 'path' substatement")
     if type_name == YANG_TYPE_ENUMERATION and len(enum_values) == 0:
         parser._error(
             "enumeration type requires at least one '" + YANG_STMT_ENUM + "' statement",
@@ -122,11 +114,8 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 range_min,
                 range_max,
                 enum_values^,
-                has_leafref_path,
                 leafref_path,
                 leafref_require_instance,
-                leafref_xpath_ast,
-                leafref_path_parsed,
                 fraction_digits,
                 has_dec_range,
                 dec_lo,
@@ -156,11 +145,8 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
             range_min,
             range_max,
             enum_values^,
-            has_leafref_path,
             leafref_path,
             leafref_require_instance,
-            leafref_xpath_ast,
-            leafref_path_parsed,
             fraction_digits,
             has_dec_range,
             dec_lo,

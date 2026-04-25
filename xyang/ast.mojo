@@ -40,17 +40,8 @@ struct YangTypeEnumeration(Movable):
 
 @fieldwise_init
 struct YangTypeLeafref(Movable):
-    var has_leafref_path: Bool
     var leafref_path: String
     var leafref_require_instance: Bool
-    var leafref_xpath_ast: Expr.ExprPointer
-    var leafref_path_parsed: Bool
-
-    fn __del__(deinit self):
-        if self.leafref_xpath_ast:
-            self.leafref_xpath_ast[].free_tree()
-            self.leafref_xpath_ast.destroy_pointee()
-            self.leafref_xpath_ast.free()
 
 
 @fieldwise_init
@@ -79,24 +70,18 @@ struct YangType(Movable):
     ## Populated only for `name == "union"`; otherwise empty.
     var union_members: List[Arc[YangType]]
 
-    fn __del__(deinit self):
-        # Ensure leafref XPath storage is freed when this arm is active (`take` runs `YangTypeLeafref.__del__`).
-        if self.constraints.isa[YangTypeLeafref]():
-            _ = self.constraints.take[YangTypeLeafref]()
-
     def __str__(self) -> String:
         if self.constraints.isa[YangTypeLeafref]():
             ref lr = self.constraints[YangTypeLeafref]
-            if lr.has_leafref_path:
-                return (
-                    "YangType("
-                    + self.name
-                    + ", path="
-                    + lr.leafref_path
-                    + ", require-instance="
-                    + ("true" if lr.leafref_require_instance else "false")
-                    + ")"
-                )
+            return (
+                "YangType("
+                + self.name
+                + ", path="
+                + lr.leafref_path
+                + ", require-instance="
+                + ("true" if lr.leafref_require_instance else "false")
+                + ")"
+            )
         if self.constraints.isa[YangTypeIntegerRange]():
             ref ir = self.constraints[YangTypeIntegerRange]
             if ir.has_range:
@@ -186,11 +171,6 @@ struct YangType(Movable):
 
     # --- leafref ---
 
-    def has_leafref_path(read self) -> Bool:
-        if self.constraints.isa[YangTypeLeafref]():
-            return self.constraints[YangTypeLeafref].has_leafref_path
-        return False
-
     def leafref_path(read self) -> String:
         if self.constraints.isa[YangTypeLeafref]():
             return self.constraints[YangTypeLeafref].leafref_path
@@ -200,16 +180,6 @@ struct YangType(Movable):
         if self.constraints.isa[YangTypeLeafref]():
             return self.constraints[YangTypeLeafref].leafref_require_instance
         return True
-
-    def leafref_path_parsed(read self) -> Bool:
-        if self.constraints.isa[YangTypeLeafref]():
-            return self.constraints[YangTypeLeafref].leafref_path_parsed
-        return False
-
-    def leafref_xpath_ast(read self) -> Expr.ExprPointer:
-        if self.constraints.isa[YangTypeLeafref]():
-            return self.constraints[YangTypeLeafref].leafref_xpath_ast
-        return Expr.ExprPointer()
 
     # --- bits ---
 

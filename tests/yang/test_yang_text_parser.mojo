@@ -63,10 +63,8 @@ def test_parse_basic_yang_file() raises:
     assert_equal(system.leaves[hostname_idx][].type.name, "string")
     assert_equal(system.leaves[enabled_idx][].type.name, "boolean")
     assert_equal(system.leaves[mgmt_if_idx][].type.name, YANG_TYPE_LEAFREF)
-    assert_true(system.leaves[mgmt_if_idx][].type.has_leafref_path())
     assert_equal(system.leaves[mgmt_if_idx][].type.leafref_path(), "/system/interface/name")
     assert_equal(system.leaves[mgmt_if_index_idx][].type.name, YANG_TYPE_LEAFREF)
-    assert_true(system.leaves[mgmt_if_index_idx][].type.has_leafref_path())
     assert_equal(system.leaves[mgmt_if_index_idx][].type.leafref_path(), "/system/interface/if-index")
 
     assert_true(len(system.lists) == 1)

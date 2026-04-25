@@ -111,22 +111,11 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
         )
 
     if src.name == YANG_TYPE_LEAFREF:
-        var xpath_ast = Expr.ExprPointer()
-        var parsed = False
-        if src.has_leafref_path():
-            try:
-                xpath_ast = parse_xpath(src.leafref_path())
-                parsed = True
-            except:
-                parsed = False
         return YangType(
             name = src.name,
             constraints = YangTypeLeafref(
-                src.has_leafref_path(),
                 src.leafref_path(),
                 src.leafref_require_instance(),
-                xpath_ast,
-                parsed,
             ),
             union_members = union_members^,
         )

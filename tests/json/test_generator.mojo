@@ -29,7 +29,7 @@ def test_schema_roundtrip_basic_device() raises:
         ref lf = sys1.leaves[i][]
         if lf.type.name == YANG_TYPE_LEAFREF:
             found_leafref = True
-            assert_true(lf.type.has_leafref_path())
+            assert_true(len(lf.type.leafref_path()) > 0)
     assert_true(found_leafref)
 
 
