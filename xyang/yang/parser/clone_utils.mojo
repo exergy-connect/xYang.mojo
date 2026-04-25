@@ -297,6 +297,7 @@ def clone_anyxml_arc_impl(read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
 
 
 def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]:
+    var musts = List[Arc[YangMust]]()
     var leaves = List[Arc[YangLeaf]]()
     var leaf_lists = List[Arc[YangLeafList]]()
     var anydatas = List[Arc[YangAnydata]]()
@@ -305,6 +306,8 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
     var lists = List[Arc[YangList]]()
     var choices = List[Arc[YangChoice]]()
 
+    for i in range(len(src[].must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
     for i in range(len(src[].leaves)):
         leaves.append(clone_leaf_arc_impl(src[].leaves[i]))
     for i in range(len(src[].leaf_lists)):
@@ -324,6 +327,7 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
         YangContainer(
             name = src[].name,
             description = src[].description,
+            must_statements = musts^,
             leaves = leaves^,
             leaf_lists = leaf_lists^,
             anydatas = anydatas^,
@@ -336,6 +340,7 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
 
 
 def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
+    var musts = List[Arc[YangMust]]()
     var leaves = List[Arc[YangLeaf]]()
     var leaf_lists = List[Arc[YangLeafList]]()
     var anydatas = List[Arc[YangAnydata]]()
@@ -345,6 +350,8 @@ def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
     var choices = List[Arc[YangChoice]]()
     var unique_specs = List[List[String]]()
 
+    for i in range(len(src[].must_statements)):
+        musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
     for i in range(len(src[].leaves)):
         leaves.append(clone_leaf_arc_impl(src[].leaves[i]))
     for i in range(len(src[].leaf_lists)):
@@ -367,6 +374,7 @@ def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
             name = src[].name,
             key = src[].key,
             description = src[].description,
+            must_statements = musts^,
             leaves = leaves^,
             leaf_lists = leaf_lists^,
             anydatas = anydatas^,

@@ -47,6 +47,8 @@ def _scan_quoted_string_body(
                         if Codepoint.ord(esc) == CP_NEWLINE:
                             line += 1
                         i += len(esc)
+                        # Consume exactly one escaped codepoint, not the entire remainder.
+                        break
                 break
             if c == CP_NEWLINE:
                 line += 1

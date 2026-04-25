@@ -1,7 +1,7 @@
 ## Round-trip: text YANG → AST → JSON Schema → parse_json_schema.
 
 from std.testing import assert_equal, assert_true, TestSuite
-from xyang.yang import parse_yang_file, parse_yang_string
+from xyang import parse_yang_file, parse_yang_string
 from xyang.json.generator import generate_json_schema, schema_to_yang_json
 from xyang.json.parser import parse_json_schema
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
@@ -110,6 +110,59 @@ def test_generate_and_roundtrip_enum_and_union() raises:
     assert_equal(cfg.leaves[mode_idx][].type.enum_values_len(), 2)
     assert_equal(cfg.leaves[id_or_name_idx][].type.name, "union")
     assert_equal(cfg.leaves[id_or_name_idx][].type.union_members_len(), 2)
+
+
+def test_roundtrip_container_and_list_must() raises:
+    var module = parse_yang_string(
+        """
+        module test-container-list-must {
+          yang-version 1.1;
+          namespace "urn:test:container-list-must";
+          prefix tclm;
+
+          container root {
+            must "string-length(name) > 0";
+            leaf name {
+              type string;
+            }
+            list item {
+              key "id";
+              must "string-length(id) > 0";
+              leaf id {
+                type string;
+              }
+            }
+          }
+        }
+        """
+    )
+
+    var root = generate_json_schema(module)
+    ref root_obj = root.object()
+    ref root_prop = root_obj["properties"]["root"].object()
+    assert_true("must" in root_prop["x-yang"].object())
+    assert_equal(
+        root_prop["x-yang"]["must"].array()[0].object()["must"].string(),
+        "string-length(name) > 0",
+    )
+    ref item_prop = root_prop["properties"]["item"].object()
+    assert_true("must" in item_prop["x-yang"].object())
+    assert_equal(
+        item_prop["x-yang"]["must"].array()[0].object()["must"].string(),
+        "string-length(id) > 0",
+    )
+
+    var json_text = schema_to_yang_json(module)
+    var roundtrip = parse_json_schema(json_text)
+    ref parsed_root = roundtrip.top_level_containers[0][]
+    assert_equal(len(parsed_root.must_statements), 1)
+    assert_equal(parsed_root.must_statements[0][].expression, "string-length(name) > 0")
+    assert_equal(len(parsed_root.lists), 1)
+    assert_equal(len(parsed_root.lists[0][].must_statements), 1)
+    assert_equal(
+        parsed_root.lists[0][].must_statements[0][].expression,
+        "string-length(id) > 0",
+    )
 
 
 def main() raises:

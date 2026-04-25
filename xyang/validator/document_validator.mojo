@@ -738,6 +738,7 @@ struct DocumentValidator:
             self._trace("Container data is not object at path=" + path.current())
             return
         ref obj = data.object()
+        self._evaluate_must_on_object_node(path.current(), obj, container.must_statements)
         var allowed = _container_allowed_instance_keys(obj, container)
         for ref pair in obj.items():
             var key = pair.key
@@ -1172,6 +1173,56 @@ struct DocumentValidator:
                     ),
                 )
         _ = root_data
+
+    def _evaluate_must_on_object_node(
+        mut self,
+        node_path: String,
+        obj: Object,
+        read must_statements: List[Arc[YangMust]],
+    ) raises:
+        for i in range(len(must_statements)):
+            ref must_ref = must_statements[i][]
+            self._trace("Evaluate must at " + node_path + ": " + must_ref.expression)
+            if not must_ref.parsed or not must_ref.xpath_ast:
+                if len(must_ref.expression) > 0:
+                    self._errors.append(
+                        ValidationError(
+                            path=node_path,
+                            message="Must expression could not be parsed",
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
+                continue
+            try:
+                var root_node = XPathNode("/", "/")
+                var root_arc = Arc[XPathNode](root_node^)
+                var current_node = XPathNode(node_path, node_path)
+                var current_arc = Arc[XPathNode](current_node^)
+                var ctx = EvalContext(current_arc, root_arc, must_ref.expression, 0, 0)
+                var ev = XPathEvaluator()
+                var result = ev.eval(must_ref.xpath_ast, ctx, current_arc)
+                if not eval_result_to_bool(result):
+                    var msg = must_ref.error_message
+                    if len(msg) == 0:
+                        msg = "Must constraint violated"
+                    self._errors.append(
+                        ValidationError(
+                            path=node_path,
+                            message=msg,
+                            expression=must_ref.expression,
+                            severity=Severity("error"),
+                        ),
+                    )
+            except:
+                self._errors.append(
+                    ValidationError(
+                        path=node_path,
+                        message="Must expression could not be evaluated",
+                        expression=must_ref.expression,
+                        severity=Severity("error"),
+                    ),
+                )
 
     ## Returns: 1 when true, 0 when false, -1 on parse/eval error (errors appended).
     def _eval_when_on_parent_object(
@@ -1638,6 +1689,7 @@ struct DocumentValidator:
         root_data: Value,
         enforce_mandatory_choice: Bool,
     ) raises:
+        self._evaluate_must_on_object_node(path.current(), obj, list_node.must_statements)
         var allowed = _list_allowed_instance_keys(obj, list_node)
         for ref pair in obj.items():
             var key = pair.key

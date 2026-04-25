@@ -21,6 +21,7 @@ from xyang.ast import (
     YangType,
     YangMust,
     YangWhen,
+    YangGrouping,
 )
 from xyang.yang.parser.tokenizer import tokenize_yang_impl
 from xyang.yang.parser.module_stmt import parse_module_impl
@@ -88,7 +89,7 @@ from xyang.yang.parser.semantics_utils import (
     parse_boolean_value_impl,
 )
 from xyang.yang.parser.parser_contract import ParserContract
-from xyang.yang.parser.types import YangToken, ParsedGrouping
+from xyang.yang.parser.types import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 
 comptime Arc = ArcPointer
@@ -98,14 +99,14 @@ struct _YangParser(Movable, ParserContract):
     var tokens: List[YangToken]
     var source: String
     var index: Int
-    var groupings: Dict[String, Arc[ParsedGrouping]]
+    var groupings: Dict[String, Arc[YangGrouping]]
     var pending_module_augments: List[Arc[ParsedAugment]]
 
     def __init__(out self, source: String):
         self.tokens = tokenize_yang_impl(source)
         self.source = source
         self.index = 0
-        self.groupings = Dict[String, Arc[ParsedGrouping]]()
+        self.groupings = Dict[String, Arc[YangGrouping]]()
         self.pending_module_augments = List[Arc[ParsedAugment]]()
 
     def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
@@ -195,11 +196,11 @@ struct _YangParser(Movable, ParserContract):
     def _parse_grouping_statement(mut self) raises:
         parse_grouping_statement_impl(self)
 
-    def _store_grouping(mut self, var grouping: ParsedGrouping) raises:
+    def _store_grouping(mut self, var grouping: YangGrouping) raises:
         var grouping_name = grouping.name
         if self.groupings.get(grouping_name):
             self._error("Duplicate grouping '" + grouping_name + "'")
-        self.groupings[grouping_name] = Arc[ParsedGrouping](grouping^)
+        self.groupings[grouping_name] = Arc[YangGrouping](grouping^)
 
     def _parse_uses_statement(
         mut self,
@@ -709,6 +710,20 @@ struct _YangParser(Movable, ParserContract):
 
     def _expect(mut self, value: YangToken.Type) raises:
         if not self._has_more():
+            if len(self.tokens) > 0:
+                ref last = self.tokens[len(self.tokens) - 1]
+                raise Error(
+                    "YANG parse error at end of input: Expected "
+                    + _token_type_name(value)
+                    + ", found end of input after last token "
+                    + _token_type_name(last.type)
+                    + " ('"
+                    + _token_text(self.source, last)
+                    + "') at line "
+                    + String(last.line)
+                    + ", col "
+                    + String(_col_for_token(self.source, last)),
+                )
             self._error("Expected " + _token_type_name(value) + ", found end of input")
             return
         var got = self._peek()

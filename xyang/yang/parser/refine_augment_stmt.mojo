@@ -686,6 +686,22 @@ def refine_add_must_at_path_impl(
             if ident_local_name_impl(leaf_lists[i][].name) == seg:
                 leaf_lists[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
                 applied = True
+        for i in range(len(containers)):
+            if ident_local_name_impl(containers[i][].name) == seg:
+                containers[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+                applied = True
+        for i in range(len(lists)):
+            if ident_local_name_impl(lists[i][].name) == seg:
+                lists[i][].must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+                applied = True
+        for i in range(len(choices)):
+            if ident_local_name_impl(choices[i][].name) == seg:
+                # Container/list/choice/case `must` is not modeled in current AST; treat as recognized no-op.
+                applied = True
+            for j in range(len(choices[i][].cases)):
+                if ident_local_name_impl(choices[i][].cases[j][].name) == seg:
+                    # Container/list/choice/case `must` is not modeled in current AST; treat as recognized no-op.
+                    applied = True
         return applied
 
     var applied = False

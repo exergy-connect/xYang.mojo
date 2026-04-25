@@ -3,7 +3,7 @@
 from emberjson import parse as parse_json, Value
 from std.sys import argv
 
-from xyang.yang import parse_yang_file
+from xyang import parse_yang_file
 from xyang.json.generator import schema_to_yang_json
 from xyang.validator import YangValidator
 

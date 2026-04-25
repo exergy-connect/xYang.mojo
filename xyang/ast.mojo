@@ -451,9 +451,10 @@ struct YangChoice(Movable, JsonDeserializable, YangHasWhen):
 
 
 @fieldwise_init
-struct YangContainer(Movable, JsonDeserializable):
+struct YangContainer(Movable, JsonDeserializable, YangHasMustStatements):
     var name: String
     var description: String
+    var must_statements: List[Arc[YangMust]]
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
     var anydatas: List[Arc[YangAnydata]]
@@ -461,6 +462,12 @@ struct YangContainer(Movable, JsonDeserializable):
     var containers: List[Arc[YangContainer]]
     var lists: List[Arc[YangList]]
     var choices: List[Arc[YangChoice]]
+
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
 
     def __str__(self) -> String:
         var nleaf = len(self.leaves)
@@ -473,6 +480,8 @@ struct YangContainer(Movable, JsonDeserializable):
         return (
             "YangContainer("
             + self.name
+            + ", must="
+            + String(len(self.must_statements))
             + ", leaves="
             + String(nleaf)
             + ", leaf-lists="
@@ -492,10 +501,11 @@ struct YangContainer(Movable, JsonDeserializable):
 
 
 @fieldwise_init
-struct YangList(Movable, JsonDeserializable):
+struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
     var name: String
     var key: String
     var description: String
+    var must_statements: List[Arc[YangMust]]
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
     var anydatas: List[Arc[YangAnydata]]
@@ -510,6 +520,12 @@ struct YangList(Movable, JsonDeserializable):
     ## Each inner list is one `unique` statement: descendant leaf names (same list entry).
     var unique_specs: List[List[String]]
 
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
+
     def __str__(self) -> String:
         var nleaf = len(self.leaves)
         var nleaflist = len(self.leaf_lists)
@@ -521,6 +537,8 @@ struct YangList(Movable, JsonDeserializable):
             + self.name
             + ", key="
             + self.key
+            + ", must="
+            + String(len(self.must_statements))
             + ", leaves="
             + String(nleaf)
             + ", leaf-lists="
@@ -537,6 +555,23 @@ struct YangList(Movable, JsonDeserializable):
             + String(nchoice)
             + ")"
         )
+
+
+@fieldwise_init
+struct YangGrouping(Movable):
+    ## Keep Arc at the Variant arm level: YANG AST nodes are not ImplicitlyCopyable.
+    ## Wrapping nodes in Arc lets grouping entries be stored/reused without move-only copy errors.
+    comptime ChildStatement = Variant[
+        Arc[YangLeaf],
+        Arc[YangLeafList],
+        Arc[YangAnydata],
+        Arc[YangAnyxml],
+        Arc[YangContainer],
+        Arc[YangList],
+        Arc[YangChoice],
+    ]
+    var name: String
+    var children: List[Self.ChildStatement]
 
 
 @fieldwise_init

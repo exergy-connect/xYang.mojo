@@ -1,5 +1,5 @@
 from std.testing import assert_equal, assert_true, TestSuite
-from xyang.yang import parse_yang_string
+from xyang import parse_yang_string
 
 
 def test_parse_uses_refine_if_feature_and_augment() raises:

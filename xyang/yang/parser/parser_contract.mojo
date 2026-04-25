@@ -11,8 +11,8 @@ from xyang.ast import (
     YangType,
     YangMust,
     YangWhen,
+    YangGrouping,
 )
-from xyang.yang.parser.types import ParsedGrouping
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.yang_token import YangToken
 
@@ -74,7 +74,7 @@ trait ParserContract:
     def _parse_grouping_statement(mut self) raises:
         ...
 
-    def _store_grouping(mut self, var grouping: ParsedGrouping) raises:
+    def _store_grouping(mut self, var grouping: YangGrouping) raises:
         ...
 
     def _parse_module_augment_statement(

@@ -1,6 +1,6 @@
 from std.testing import assert_equal, assert_true, TestSuite
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
-from xyang.yang import parse_yang_file, parse_yang_string
+from xyang import parse_yang_file, parse_yang_string
 
 
 def _find_leaf_index_by_name_in_container(name: String, path: String) raises -> Int:
@@ -196,6 +196,64 @@ module refine-leaf-description {
     ref root = module.top_level_containers[0][]
     assert_equal(root.leaves[0][].name, "entity")
     assert_true(not root.leaves[0][].mandatory)
+
+
+def test_parse_single_quoted_regex_with_backslashes() raises:
+    var module = parse_yang_string(
+        """
+module regex-escapes {
+  namespace "urn:example:regex-escapes";
+  prefix re;
+
+  typedef date {
+    type string {
+      pattern '\\d{4}-\\d{2}-\\d{2}';
+    }
+  }
+
+  container root {
+    leaf value {
+      type date;
+    }
+  }
+}
+""",
+    )
+    assert_equal(module.name, "regex-escapes")
+    assert_true(len(module.top_level_containers) == 1)
+    assert_equal(module.top_level_containers[0][].name, "root")
+
+
+def test_parse_must_on_container_and_list() raises:
+    var module = parse_yang_string(
+        """
+module must-on-structural-nodes {
+  namespace "urn:example:must-on-structural-nodes";
+  prefix msn;
+
+  container root {
+    must "string-length(name) > 0";
+    leaf name {
+      type string;
+    }
+    list item {
+      key "id";
+      must "string-length(id) > 0";
+      leaf id {
+        type string;
+      }
+    }
+  }
+}
+""",
+    )
+    ref root = module.top_level_containers[0][]
+    assert_equal(len(root.must_statements), 1)
+    assert_equal(root.must_statements[0][].expression, "string-length(name) > 0")
+    assert_equal(len(root.lists), 1)
+    ref item = root.lists[0][]
+    assert_equal(len(item.must_statements), 1)
+    assert_equal(item.must_statements[0][].expression, "string-length(id) > 0")
 
 
 def main() raises:

@@ -5,7 +5,6 @@ from std.testing import assert_true, assert_false, TestSuite
 from emberjson import parse as parse_json, Value
 from xyang.ast import YangModule
 from xyang.json.parser import parse_yang_module
-from xyang.yang import parse_yang_file
 from xyang.validator import YangValidator
 
 
@@ -98,7 +97,7 @@ def test_must_expression_invalid() raises:
 
 
 def test_list_element_must_valid() raises:
-    # /system/interface[*]/name has must "string-length(.) > 0" in basic-device.yang.
+    # /system/interface[*]/name has must "string-length(.) > 0".
     var data: Value = parse_json(
         """
         {
@@ -113,7 +112,53 @@ def test_list_element_must_valid() raises:
         }
         """
     )
-    var module = parse_yang_file("examples/basic_yang/basic-device.yang")
+    var module = parse_yang_module(
+        """
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:test:list-element-must",
+  "x-yang": {
+    "module": "list-element-must",
+    "yang-version": "1.1",
+    "namespace": "urn:test:list-element-must",
+    "prefix": "lem"
+  },
+  "type": "object",
+  "properties": {
+    "system": {
+      "type": "object",
+      "x-yang": { "type": "container" },
+      "properties": {
+        "hostname": { "type": "string", "x-yang": { "type": "leaf" } },
+        "enabled": { "type": "boolean", "x-yang": { "type": "leaf" } },
+        "management-interface": { "type": "string", "x-yang": { "type": "leaf" } },
+        "interface": {
+          "type": "array",
+          "x-yang": { "type": "list", "key": "name" },
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "x-yang": {
+                  "type": "leaf",
+                  "must": [{"must": "string-length(.) > 0"}]
+                }
+              },
+              "mtu": { "type": "integer", "x-yang": { "type": "leaf" } },
+              "admin-up": { "type": "boolean", "x-yang": { "type": "leaf" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+""",
+    )
     var validator = YangValidator()
     var result = validator.validate(data, module)
     assert_true(result.is_valid)
@@ -135,7 +180,53 @@ def test_list_element_must_invalid() raises:
         }
         """
     )
-    var module = parse_yang_file("examples/basic_yang/basic-device.yang")
+    var module = parse_yang_module(
+        """
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:test:list-element-must",
+  "x-yang": {
+    "module": "list-element-must",
+    "yang-version": "1.1",
+    "namespace": "urn:test:list-element-must",
+    "prefix": "lem"
+  },
+  "type": "object",
+  "properties": {
+    "system": {
+      "type": "object",
+      "x-yang": { "type": "container" },
+      "properties": {
+        "hostname": { "type": "string", "x-yang": { "type": "leaf" } },
+        "enabled": { "type": "boolean", "x-yang": { "type": "leaf" } },
+        "management-interface": { "type": "string", "x-yang": { "type": "leaf" } },
+        "interface": {
+          "type": "array",
+          "x-yang": { "type": "list", "key": "name" },
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "x-yang": {
+                  "type": "leaf",
+                  "must": [{"must": "string-length(.) > 0"}]
+                }
+              },
+              "mtu": { "type": "integer", "x-yang": { "type": "leaf" } },
+              "admin-up": { "type": "boolean", "x-yang": { "type": "leaf" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+""",
+    )
     var validator = YangValidator()
     var result = validator.validate(data, module)
     assert_false(result.is_valid)
@@ -176,6 +267,119 @@ def test_must_unparsed_expression_is_validation_error() raises:
     var validator = YangValidator()
     var result = validator.validate(data, mod)
     assert_false(result.is_valid)
+
+
+def test_container_and_list_must_validation() raises:
+    var container_module = parse_yang_module(
+        """
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:test:container-must",
+  "x-yang": {
+    "module": "container-must",
+    "yang-version": "1.1",
+    "namespace": "urn:test:container-must",
+    "prefix": "cm"
+  },
+  "type": "object",
+  "properties": {
+    "root": {
+      "type": "object",
+      "x-yang": {
+        "type": "container",
+        "must": [
+          {
+            "must": "false()",
+            "error-message": "container must failed"
+          }
+        ]
+      },
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-yang": { "type": "leaf" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+""",
+    )
+    var list_module = parse_yang_module(
+        """
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:test:list-must",
+  "x-yang": {
+    "module": "list-must",
+    "yang-version": "1.1",
+    "namespace": "urn:test:list-must",
+    "prefix": "lm"
+  },
+  "type": "object",
+  "properties": {
+    "root": {
+      "type": "object",
+      "x-yang": { "type": "container" },
+      "properties": {
+        "item": {
+          "type": "array",
+          "x-yang": {
+            "type": "list",
+            "key": "id",
+            "must": [
+              {
+                "must": "false()",
+                "error-message": "list must failed"
+              }
+            ]
+          },
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "x-yang": { "type": "leaf" }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+""",
+    )
+    var validator = YangValidator()
+
+    var container_data: Value = parse_json(
+        """
+{
+  "root": {
+    "name": "ok"
+  }
+}
+"""
+    )
+    var invalid_container_result = validator.validate(container_data, container_module)
+    assert_false(invalid_container_result.is_valid)
+
+    var list_data: Value = parse_json(
+        """
+{
+  "root": {
+    "item": [{"id": "x"}]
+  }
+}
+"""
+    )
+    var invalid_list_result = validator.validate(list_data, list_module)
+    assert_false(invalid_list_result.is_valid)
 
 
 def main() raises:

@@ -502,6 +502,9 @@ def _container_property(read c: YangContainer) raises -> Object:
 
     var xy = Object()
     xy[XYANG_TYPE] = Value("container")
+    if len(c.must_statements) > 0:
+        var must_arr = _must_array_from_arc_list(c.must_statements)
+        xy[XYANG_MUST] = Value(must_arr^)
     var out = Object()
     out[JSON_SCHEMA_TYPE] = Value("object")
     out[JSON_SCHEMA_DESCRIPTION] = Value(c.description)
@@ -569,6 +572,9 @@ def _list_property(read lst: YangList) raises -> Object:
     var xy = Object()
     xy[XYANG_TYPE] = Value("list")
     xy[XYANG_KEY] = Value(lst.key)
+    if len(lst.must_statements) > 0:
+        var must_arr = _must_array_from_arc_list(lst.must_statements)
+        xy[XYANG_MUST] = Value(must_arr^)
     if len(lst.ordered_by) > 0:
         xy[XYANG_ORDERED_BY] = Value(lst.ordered_by)
     if len(lst.unique_specs) > 0:

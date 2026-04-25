@@ -2,7 +2,7 @@
 
 from emberjson import parse, Value
 from std.testing import assert_equal, assert_true, TestSuite
-from xyang.yang import parse_yang_string
+from xyang import parse_yang_string
 from xyang.json.generator import generate_json_schema, schema_to_yang_json
 from xyang.json.parser import parse_json_schema
 from xyang.validator.document_validator import DocumentValidator

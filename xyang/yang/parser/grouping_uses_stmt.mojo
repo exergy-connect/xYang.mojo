@@ -7,9 +7,9 @@ from xyang.ast import (
     YangLeafList,
     YangAnydata,
     YangAnyxml,
+    YangGrouping,
 )
 from xyang.yang.parser.yang_token import YangToken
-from xyang.yang.parser.types import ParsedGrouping
 from xyang.yang.parser.parser_contract import ParserContract
 
 comptime Arc = ArcPointer
@@ -80,24 +80,24 @@ def parse_grouping_statement_impl[ParserT: ParserContract](mut parser: ParserT) 
         parser._expect(YangToken.RBRACE)
     parser._skip_if(YangToken.SEMICOLON)
 
-    var children = List[ParsedGrouping.ChildStatement]()
+    var children = List[YangGrouping.ChildStatement]()
     for i in range(len(leaves)):
-        children.append(ParsedGrouping.ChildStatement(leaves[i].copy()))
+        children.append(YangGrouping.ChildStatement(leaves[i].copy()))
     for i in range(len(leaf_lists)):
-        children.append(ParsedGrouping.ChildStatement(leaf_lists[i].copy()))
+        children.append(YangGrouping.ChildStatement(leaf_lists[i].copy()))
     for i in range(len(anydatas)):
-        children.append(ParsedGrouping.ChildStatement(anydatas[i].copy()))
+        children.append(YangGrouping.ChildStatement(anydatas[i].copy()))
     for i in range(len(anyxmls)):
-        children.append(ParsedGrouping.ChildStatement(anyxmls[i].copy()))
+        children.append(YangGrouping.ChildStatement(anyxmls[i].copy()))
     for i in range(len(containers)):
-        children.append(ParsedGrouping.ChildStatement(containers[i].copy()))
+        children.append(YangGrouping.ChildStatement(containers[i].copy()))
     for i in range(len(lists)):
-        children.append(ParsedGrouping.ChildStatement(lists[i].copy()))
+        children.append(YangGrouping.ChildStatement(lists[i].copy()))
     for i in range(len(choices)):
-        children.append(ParsedGrouping.ChildStatement(choices[i].copy()))
+        children.append(YangGrouping.ChildStatement(choices[i].copy()))
 
     parser._store_grouping(
-        ParsedGrouping(
+        YangGrouping(
             name,
             children^,
         ),

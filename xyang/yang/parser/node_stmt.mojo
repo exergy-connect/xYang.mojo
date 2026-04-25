@@ -27,6 +27,7 @@ def parse_container_statement_impl[ParserT: ParserContract](mut parser: ParserT)
     var name = parser._consume_name()
 
     var desc = ""
+    var must = List[Arc[YangMust]]()
     var leaves = List[Arc[YangLeaf]]()
     var leaf_lists = List[Arc[YangLeafList]]()
     var anydatas = List[Arc[YangAnydata]]()
@@ -42,6 +43,9 @@ def parse_container_statement_impl[ParserT: ParserContract](mut parser: ParserT)
                 parser._consume()
                 desc = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.MUST:
+                var m = parser._parse_must_statement()
+                must.append(Arc[YangMust](m^))
             elif stmt == YangToken.LEAF:
                 var leaf = parser._parse_leaf_statement()
                 leaves.append(Arc[YangLeaf](leaf^))
@@ -93,6 +97,7 @@ def parse_container_statement_impl[ParserT: ParserContract](mut parser: ParserT)
     return YangContainer(
         name = name,
         description = desc,
+        must_statements = must^,
         leaves = leaves^,
         leaf_lists = leaf_lists^,
         anydatas = anydatas^,
@@ -109,6 +114,7 @@ def parse_list_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
 
     var key = ""
     var desc = ""
+    var must = List[Arc[YangMust]]()
     var min_el = -1
     var max_el = -1
     var ordered_by = ""
@@ -151,6 +157,9 @@ def parse_list_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 parser._consume()
                 desc = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.MUST:
+                var m = parser._parse_must_statement()
+                must.append(Arc[YangMust](m^))
             elif stmt == YangToken.LEAF:
                 var leaf = parser._parse_leaf_statement()
                 leaves.append(Arc[YangLeaf](leaf^))
@@ -203,6 +212,7 @@ def parse_list_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
         name = name,
         key = key,
         description = desc,
+        must_statements = must^,
         leaves = leaves^,
         leaf_lists = leaf_lists^,
         anydatas = anydatas^,

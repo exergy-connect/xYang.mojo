@@ -3,7 +3,7 @@
 from std.testing import assert_true, assert_false, assert_equal, TestSuite
 from emberjson import parse as parse_json, Value
 from xyang.ast import YangModule
-from xyang.yang import parse_yang_string, parse_yang_file
+from xyang import parse_yang_string, parse_yang_file
 from xyang.validator import YangValidator
 
 

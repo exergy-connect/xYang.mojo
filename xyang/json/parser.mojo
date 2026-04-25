@@ -585,9 +585,11 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
     var max_e = -1
     var ob = ""
     var unique_specs = List[List[String]]()
+    var must_list = List[Arc[YangMust]]()
     ref po = prop.object()
     if "x-yang" in po and po["x-yang"].is_object():
         ref xy = po["x-yang"]
+        must_list = _parse_yang_must_list(xy)
         if "key" in xy:
             key = xy["key"].string()
         if XYANG_ORDERED_BY in xy and xy[XYANG_ORDERED_BY].is_string():
@@ -630,6 +632,7 @@ def parse_yang_list(name: String, prop: Value) raises -> YangList:
         name = name,
         key = key,
         description = desc,
+        must_statements = must_list^,
         leaves = leaves^,
         leaf_lists = leaf_lists^,
         anydatas = anydatas^,
@@ -649,6 +652,9 @@ def parse_yang_container(name: String, prop: Value) raises -> YangContainer:
     var desc = ""
     if "description" in prop.object():
         desc = prop.object()["description"].string()
+    var must_list = List[Arc[YangMust]]()
+    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
+        must_list = _parse_yang_must_list(prop.object()["x-yang"])
 
     var leaves = List[Arc[YangLeaf]]()
     var leaf_lists = List[Arc[YangLeafList]]()
@@ -661,6 +667,7 @@ def parse_yang_container(name: String, prop: Value) raises -> YangContainer:
     return YangContainer(
         name = name,
         description = desc,
+        must_statements = must_list^,
         leaves = leaves^,
         leaf_lists = leaf_lists^,
         anydatas = anydatas^,

@@ -6,7 +6,7 @@
 ##   # or: pixi run mojo -I. examples/basic_yang/main.mojo
 
 from emberjson import parse as parse_json, Value
-from xyang.yang import parse_yang_file
+from xyang import parse_yang_file
 from xyang.validator import YangValidator
 
 comptime YANG_PATH = "examples/basic_yang/basic-device.yang"
