@@ -5,8 +5,10 @@ from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.parser_contract import ParserContract
 import xyang.yang.parser.clone_utils as clone_utils
+import xyang.yang.parser.grouping_uses_stmt as gu_stmt
 
 comptime Arc = ArcPointer
+comptime YangRefineStmt = ast.YangRefineStmt
 comptime YangContainer = ast.YangContainer
 comptime YangList = ast.YangList
 comptime YangChoice = ast.YangChoice
@@ -82,13 +84,13 @@ def _consume_refine_slashed_path_parts[ParserT: ParserContract](mut parser: Pars
 
 def _parse_refine_mandatory_substmt_at_path[ParserT: ParserContract](
     mut parser: ParserT,
-    read refine_path: String,
     read segments: List[String],
     mut leaves: List[Arc[YangLeaf]],
     mut leaf_lists: List[Arc[YangLeafList]],
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
+    mut refine: YangRefineStmt,
 ) raises:
     parser._consume()
     var mandatory = parser._parse_boolean_value()
@@ -103,18 +105,19 @@ def _parse_refine_mandatory_substmt_at_path[ParserT: ParserContract](
         lists,
         choices,
     ):
-        parser._error("Unknown refine target path '" + refine_path + "'")
+        parser._error("Unknown refine target path '" + refine.target_path + "'")
+    refine.mandatory = Optional[Bool](mandatory)
 
 
 def _parse_refine_default_substmt_at_path[ParserT: ParserContract](
     mut parser: ParserT,
-    read refine_path: String,
     read segments: List[String],
     mut leaves: List[Arc[YangLeaf]],
     mut leaf_lists: List[Arc[YangLeafList]],
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
+    mut refine: YangRefineStmt,
 ) raises:
     parser._consume()
     var default_value = parser._consume_argument_value()
@@ -129,7 +132,8 @@ def _parse_refine_default_substmt_at_path[ParserT: ParserContract](
         lists,
         choices,
     ):
-        parser._error("Unknown refine target path '" + refine_path + "'")
+        parser._error("Unknown refine target path '" + refine.target_path + "'")
+    refine.default_values.append(default_value^)
 
 
 ## One substatement in ``refine { ... }``: dispatch keys align with
@@ -138,7 +142,6 @@ def _parse_refine_default_substmt_at_path[ParserT: ParserContract](
 
 def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
     mut parser: ParserT,
-    read refine_path: String,
     read segments: List[String],
     mut leaves: List[Arc[YangLeaf]],
     mut leaf_lists: List[Arc[YangLeafList]],
@@ -147,6 +150,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
+    mut refine: YangRefineStmt,
 ) raises:
     _ = anydatas
     _ = anyxmls
@@ -163,7 +167,8 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             lists,
             choices,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
+        refine.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
     elif tt == YangToken.DESCRIPTION:
         parser._consume()
         var desc = parser._consume_argument_value()
@@ -178,7 +183,8 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             lists,
             choices,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
+        refine.description = Optional[String](desc^)
     elif tt == YangToken.MIN_ELEMENTS:
         parser._consume()
         var min_el = parser._parse_non_negative_int("min-elements")
@@ -192,7 +198,8 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             containers,
             lists,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
+        refine.min_elements = Optional[Int](min_el)
     elif tt == YangToken.MAX_ELEMENTS:
         parser._consume()
         var max_el = parser._parse_non_negative_int("max-elements")
@@ -206,7 +213,8 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             containers,
             lists,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
+        refine.max_elements = Optional[Int](max_el)
     elif tt == YangToken.ORDERED_BY:
         parser._consume()
         var ordered_by = parser._parse_ordered_by_argument()
@@ -220,31 +228,34 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             containers,
             lists,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
     elif tt == YangToken.MANDATORY:
         _parse_refine_mandatory_substmt_at_path(
             parser,
-            refine_path,
             segments,
             leaves,
             leaf_lists,
             containers,
             lists,
             choices,
+            refine,
         )
     elif tt == YangToken.DEFAULT:
         _parse_refine_default_substmt_at_path(
             parser,
-            refine_path,
             segments,
             leaves,
             leaf_lists,
             containers,
             lists,
             choices,
+            refine,
         )
     elif tt == YangToken.IF_FEATURE:
-        parser._parse_if_feature_statement()
+        var if_feature_expr = parser._peek_value_n(1)
+        parser._record_feature_if_feature("__module__", if_feature_expr)
+        gu_stmt.parse_if_feature_statement_impl(parser)
+        refine.if_features.append(if_feature_expr^)
     elif tt == YangToken.TYPE:
         var type_stmt = parser._parse_type_statement()
         if not refine_set_type_at_path_impl(
@@ -257,7 +268,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             lists,
             choices,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
     elif parser._peek_prefixed_extension():
         parser._skip_prefixed_extension_statement()
     elif tt == YangToken.WHEN:
@@ -272,7 +283,8 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             lists,
             choices,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
+        refine.set_when(Optional[YangWhen](when_stmt^))
     elif tt == YangToken.KEY:
         parser._consume()
         var key = parser._consume_argument_value()
@@ -284,7 +296,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             containers,
             lists,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
     elif tt == YangToken.UNIQUE:
         parser._consume()
         var uarg = parser._consume_argument_value()
@@ -297,7 +309,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             containers,
             lists,
         ):
-            parser._error("Unknown refine target path '" + refine_path + "'")
+            parser._error("Unknown refine target path '" + refine.target_path + "'")
     else:
         parser._skip_statement()
 
@@ -311,7 +323,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
-) raises -> String:
+) raises -> YangRefineStmt:
     _ = anydatas
     _ = anyxmls
     parser._expect(YangToken.REFINE)
@@ -321,13 +333,36 @@ def parse_refine_statement_impl[ParserT: ParserContract](
     if len(segments) == 0:
         parser._error("refine requires a descendant schema-node identifier")
         parser._skip_statement_tail()
-        return ""
+        return YangRefineStmt(
+            target_path = "",
+            mandatory = Optional[Bool](),
+            min_elements = Optional[Int](),
+            max_elements = Optional[Int](),
+            presence = Optional[String](),
+            default_values = List[String](),
+            description = Optional[String](),
+            if_features = List[String](),
+            must_statements = List[Arc[YangMust]](),
+            when = Optional[YangWhen](),
+        )
+
+    var refine = YangRefineStmt(
+        target_path = refine_path^,
+        mandatory = Optional[Bool](),
+        min_elements = Optional[Int](),
+        max_elements = Optional[Int](),
+        presence = Optional[String](),
+        default_values = List[String](),
+        description = Optional[String](),
+        if_features = List[String](),
+        must_statements = List[Arc[YangMust]](),
+        when = Optional[YangWhen](),
+    )
 
     if parser._consume_if(YangToken.LBRACE):
         while parser._has_more() and parser._peek() != YangToken.RBRACE:
             _parse_refine_substatement_at_path_impl(
                 parser,
-                refine_path,
                 segments,
                 leaves,
                 leaf_lists,
@@ -336,10 +371,11 @@ def parse_refine_statement_impl[ParserT: ParserContract](
                 containers,
                 lists,
                 choices,
+                refine,
             )
         parser._expect(YangToken.RBRACE)
     parser._skip_if(YangToken.SEMICOLON)
-    return refine_path
+    return refine^
 
 
 def parse_relative_augment_statement_impl[ParserT: ParserContract](

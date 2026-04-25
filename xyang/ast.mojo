@@ -646,14 +646,41 @@ struct YangUsesStmt(Movable):
 
 
 @fieldwise_init
-struct YangRefineStmt(Movable):
+struct YangRefineStmt(Movable, YangHasMustStatements, YangHasWhen):
+    # The target descendant-schema-nodeid
     var target_path: String
-    var has_mandatory: Bool
-    var mandatory: Bool
-    var min_elements: Int
-    var max_elements: Int
-    var description: String
+
+    # Validation & Constraints
+    var mandatory: Optional[Bool]
+    var min_elements: Optional[Int]
+    var max_elements: Optional[Int]
+
+    # Configuration & Presence
+    # var config: Optional[Bool]
+    var presence: Optional[String]
+
+    # Values
+    var default_values: List[String]  ## Can be multiple for leaf-lists
+
+    # Documentation & Features
+    var description: Optional[String]
+    # var reference: Optional[String]
     var if_features: List[String]
+    ## `must` substatements under this refine (parse tree); schema targets also receive clones via refine.
+    var must_statements: List[Arc[YangMust]]
+    var when: Optional[YangWhen]
+
+    def must_count(self) -> Int:
+        return len(self.must_statements)
+
+    def set_must_statements(mut self, var stmts: List[Arc[YangMust]]):
+        self.must_statements = stmts^
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
+
+    def set_when(mut self, var value: Optional[YangWhen]):
+        self.when = value^
 
 
 @fieldwise_init

@@ -289,7 +289,7 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
     ) raises:
-        var path = ra_stmt.parse_refine_statement_impl(
+        var refine_stmt = ra_stmt.parse_refine_statement_impl(
             self,
             leaves,
             leaf_lists,
@@ -301,17 +301,7 @@ struct _YangParser(Movable, ParserContract):
         )
         self._record_module_statement(
             ast.YangModuleStatement(
-                Arc[ast.YangRefineStmt](
-                    ast.YangRefineStmt(
-                        target_path = path,
-                        has_mandatory = False,
-                        mandatory = False,
-                        min_elements = -1,
-                        max_elements = -1,
-                        description = "",
-                        if_features = List[String](),
-                    ),
-                ),
+                Arc[ast.YangRefineStmt](refine_stmt^),
             ),
         )
 
