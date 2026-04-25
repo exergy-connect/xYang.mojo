@@ -477,17 +477,21 @@ struct YangContainer(Movable, JsonDeserializable, YangHasMustStatements):
 
 @fieldwise_init
 struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
+    ## Same arms as `YangGrouping.ChildStatement` / module body data nodes: Arc at variant arm.
+    comptime ChildStatement = Variant[
+        Arc[YangLeaf],
+        Arc[YangLeafList],
+        Arc[YangAnydata],
+        Arc[YangAnyxml],
+        Arc[YangContainer],
+        Arc[YangList],
+        Arc[YangChoice],
+    ]
     var name: String
     var key: String
     var description: String
     var must_statements: List[Arc[YangMust]]
-    var leaves: List[Arc[YangLeaf]]
-    var leaf_lists: List[Arc[YangLeafList]]
-    var anydatas: List[Arc[YangAnydata]]
-    var anyxmls: List[Arc[YangAnyxml]]
-    var containers: List[Arc[YangContainer]]
-    var lists: List[Arc[YangList]]
-    var choices: List[Arc[YangChoice]]
+    var children: List[Self.ChildStatement]
     ## RFC 7950: unset when `min_elements` / `max_elements` are `-1`.
     var min_elements: Int
     var max_elements: Int
@@ -502,11 +506,6 @@ struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
         self.must_statements = stmts^
 
     def __str__(self) -> String:
-        var nleaf = len(self.leaves)
-        var nleaflist = len(self.leaf_lists)
-        var ncont = len(self.containers)
-        var nlist = len(self.lists)
-        var nchoice = len(self.choices)
         return (
             "YangList("
             + self.name
@@ -514,22 +513,78 @@ struct YangList(Movable, JsonDeserializable, YangHasMustStatements):
             + self.key
             + ", must="
             + String(len(self.must_statements))
-            + ", leaves="
-            + String(nleaf)
-            + ", leaf-lists="
-            + String(nleaflist)
-            + ", anydata="
-            + String(len(self.anydatas))
-            + ", anyxml="
-            + String(len(self.anyxmls))
-            + ", containers="
-            + String(ncont)
-            + ", lists="
-            + String(nlist)
-            + ", choices="
-            + String(nchoice)
+            + ", children="
+            + String(len(self.children))
             + ")"
         )
+
+
+## Typed buckets for the seven allowed child node kinds; same merge order as `YangGrouping` packing.
+@fieldwise_init
+struct YangListChildBuckets:
+    var leaves: List[Arc[YangLeaf]]
+    var leaf_lists: List[Arc[YangLeafList]]
+    var anydatas: List[Arc[YangAnydata]]
+    var anyxmls: List[Arc[YangAnyxml]]
+    var containers: List[Arc[YangContainer]]
+    var lists: List[Arc[YangList]]
+    var choices: List[Arc[YangChoice]]
+
+
+def decompose_yang_list_children(
+    read children: List[YangList.ChildStatement],
+) -> YangListChildBuckets:
+    var leaves = List[Arc[YangLeaf]]()
+    var leaf_lists = List[Arc[YangLeafList]]()
+    var anydatas = List[Arc[YangAnydata]]()
+    var anyxmls = List[Arc[YangAnyxml]]()
+    var containers = List[Arc[YangContainer]]()
+    var lists = List[Arc[YangList]]()
+    var choices = List[Arc[YangChoice]]()
+    for i in range(len(children)):
+        var ch = children[i]
+        if ch.isa[Arc[YangLeaf]]():
+            leaves.append(ch[Arc[YangLeaf]])
+        elif ch.isa[Arc[YangLeafList]]():
+            leaf_lists.append(ch[Arc[YangLeafList]])
+        elif ch.isa[Arc[YangAnydata]]():
+            anydatas.append(ch[Arc[YangAnydata]])
+        elif ch.isa[Arc[YangAnyxml]]():
+            anyxmls.append(ch[Arc[YangAnyxml]])
+        elif ch.isa[Arc[YangContainer]]():
+            containers.append(ch[Arc[YangContainer]])
+        elif ch.isa[Arc[YangList]]():
+            lists.append(ch[Arc[YangList]])
+        elif ch.isa[Arc[YangChoice]]():
+            choices.append(ch[Arc[YangChoice]])
+    return YangListChildBuckets(
+        leaves = leaves^,
+        leaf_lists = leaf_lists^,
+        anydatas = anydatas^,
+        anyxmls = anyxmls^,
+        containers = containers^,
+        lists = lists^,
+        choices = choices^,
+    )
+
+
+def pack_yang_list_child_buckets(read buckets: YangListChildBuckets) -> List[YangList.ChildStatement]:
+    var children = List[YangList.ChildStatement]()
+    for i in range(len(buckets.leaves)):
+        children.append(YangList.ChildStatement(buckets.leaves[i].copy()))
+    for i in range(len(buckets.leaf_lists)):
+        children.append(YangList.ChildStatement(buckets.leaf_lists[i].copy()))
+    for i in range(len(buckets.anydatas)):
+        children.append(YangList.ChildStatement(buckets.anydatas[i].copy()))
+    for i in range(len(buckets.anyxmls)):
+        children.append(YangList.ChildStatement(buckets.anyxmls[i].copy()))
+    for i in range(len(buckets.containers)):
+        children.append(YangList.ChildStatement(buckets.containers[i].copy()))
+    for i in range(len(buckets.lists)):
+        children.append(YangList.ChildStatement(buckets.lists[i].copy()))
+    for i in range(len(buckets.choices)):
+        children.append(YangList.ChildStatement(buckets.choices[i].copy()))
+    return children^
 
 
 @fieldwise_init

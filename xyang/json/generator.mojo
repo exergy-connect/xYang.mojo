@@ -485,44 +485,45 @@ def _list_items_schema(
     read lst: ast.YangList,
     read typedefs: Dict[String, Arc[ast.YangTypedefStmt]],
 ) raises -> Object:
+    var b = ast.decompose_yang_list_children(lst.children)
     var props = Object()
     var req = Array()
-    for ref lf_arc in lst.leaves:
+    for ref lf_arc in b.leaves:
         ref lf = lf_arc[]
         props[lf.name] = Value(_leaf_property(lf, typedefs))
         if lf.mandatory:
             req.append(Value(lf.name))
-    for ref ll_arc in lst.leaf_lists:
+    for ref ll_arc in b.leaf_lists:
         ref ll = ll_arc[]
         props[ll.name] = Value(_leaf_list_property(ll, typedefs))
-    for ref ad_arc in lst.anydatas:
+    for ref ad_arc in b.anydatas:
         ref ad = ad_arc[]
         props[ad.name] = Value(_anydata_property(ad))
         if ad.mandatory:
             req.append(Value(ad.name))
-    for ref ax_arc in lst.anyxmls:
+    for ref ax_arc in b.anyxmls:
         ref ax = ax_arc[]
         props[ax.name] = Value(_anyxml_property(ax))
         if ax.mandatory:
             req.append(Value(ax.name))
-    for ref ch_arc in lst.containers:
+    for ref ch_arc in b.containers:
         ref ch = ch_arc[]
         props[ch.name] = Value(_container_property(ch, typedefs))
-    for ref inner_arc in lst.lists:
+    for ref inner_arc in b.lists:
         ref inner = inner_arc[]
         props[inner.name] = Value(_list_property(inner, typedefs))
-    for ref ch_arc2 in lst.choices:
+    for ref ch_arc2 in b.choices:
         ref ch = ch_arc2[]
         props[ch.name] = Value(
             _choice_property(
                 ch,
                 typedefs,
-                lst.leaves,
-                lst.leaf_lists,
-                lst.anydatas,
-                lst.anyxmls,
-                lst.containers,
-                lst.lists,
+                b.leaves,
+                b.leaf_lists,
+                b.anydatas,
+                b.anyxmls,
+                b.containers,
+                b.lists,
             )
         )
 

@@ -331,31 +331,51 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
 
 def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
     var musts = List[Arc[YangMust]]()
-    var leaves = List[Arc[YangLeaf]]()
-    var leaf_lists = List[Arc[YangLeafList]]()
-    var anydatas = List[Arc[YangAnydata]]()
-    var anyxmls = List[Arc[YangAnyxml]]()
-    var containers = List[Arc[YangContainer]]()
-    var lists = List[Arc[YangList]]()
-    var choices = List[Arc[YangChoice]]()
+    var ch = List[YangList.ChildStatement]()
     var unique_specs = List[List[String]]()
 
     for i in range(len(src[].must_statements)):
         musts.append(Arc[YangMust](clone_must_impl(src[].must_statements[i][])))
-    for i in range(len(src[].leaves)):
-        leaves.append(clone_leaf_arc_impl(src[].leaves[i]))
-    for i in range(len(src[].leaf_lists)):
-        leaf_lists.append(clone_leaf_list_arc_impl(src[].leaf_lists[i]))
-    for i in range(len(src[].anydatas)):
-        anydatas.append(clone_anydata_arc_impl(src[].anydatas[i]))
-    for i in range(len(src[].anyxmls)):
-        anyxmls.append(clone_anyxml_arc_impl(src[].anyxmls[i]))
-    for i in range(len(src[].containers)):
-        containers.append(clone_container_arc_impl(src[].containers[i]))
-    for i in range(len(src[].lists)):
-        lists.append(clone_list_arc_impl(src[].lists[i]))
-    for i in range(len(src[].choices)):
-        choices.append(clone_choice_arc_impl(src[].choices[i]))
+    for i in range(len(src[].children)):
+        var stmt = src[].children[i]
+        if stmt.isa[Arc[YangLeaf]]():
+            ch.append(YangList.ChildStatement(clone_leaf_arc_impl(stmt[Arc[YangLeaf]])))
+        elif stmt.isa[Arc[YangLeafList]]():
+            ch.append(
+                YangList.ChildStatement(
+                    clone_leaf_list_arc_impl(stmt[Arc[YangLeafList]]),
+                ),
+            )
+        elif stmt.isa[Arc[YangAnydata]]():
+            ch.append(
+                YangList.ChildStatement(
+                    clone_anydata_arc_impl(stmt[Arc[YangAnydata]]),
+                ),
+            )
+        elif stmt.isa[Arc[YangAnyxml]]():
+            ch.append(
+                YangList.ChildStatement(
+                    clone_anyxml_arc_impl(stmt[Arc[YangAnyxml]]),
+                ),
+            )
+        elif stmt.isa[Arc[YangContainer]]():
+            ch.append(
+                YangList.ChildStatement(
+                    clone_container_arc_impl(stmt[Arc[YangContainer]]),
+                ),
+            )
+        elif stmt.isa[Arc[YangList]]():
+            ch.append(
+                YangList.ChildStatement(
+                    clone_list_arc_impl(stmt[Arc[YangList]]),
+                ),
+            )
+        elif stmt.isa[Arc[YangChoice]]():
+            ch.append(
+                YangList.ChildStatement(
+                    clone_choice_arc_impl(stmt[Arc[YangChoice]]),
+                ),
+            )
     for i in range(len(src[].unique_specs)):
         unique_specs.append(src[].unique_specs[i].copy())
 
@@ -365,13 +385,7 @@ def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
             key = src[].key,
             description = src[].description,
             must_statements = musts^,
-            leaves = leaves^,
-            leaf_lists = leaf_lists^,
-            anydatas = anydatas^,
-            anyxmls = anyxmls^,
-            containers = containers^,
-            lists = lists^,
-            choices = choices^,
+            children = ch^,
             min_elements = src[].min_elements,
             max_elements = src[].max_elements,
             ordered_by = src[].ordered_by,

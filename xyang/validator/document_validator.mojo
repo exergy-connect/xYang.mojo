@@ -238,13 +238,17 @@ def _choice_member_choice_index_container(container: YangContainer, member: Stri
 
 
 def _choice_member_choice_index_list(list_node: YangList, member: String) -> Int:
-    for ci in range(len(list_node.choices)):
-        ref ch = list_node.choices[ci][]
-        for i in range(len(ch.cases)):
-            ref c = ch.cases[i][]
-            for j in range(len(c.node_names)):
-                if c.node_names[j] == member:
-                    return ci
+    var ci = 0
+    for sidx in range(len(list_node.children)):
+        var st = list_node.children[sidx]
+        if st.isa[Arc[YangChoice]]():
+            ref ch = st[Arc[YangChoice]][]
+            for i in range(len(ch.cases)):
+                ref c = ch.cases[i][]
+                for j in range(len(c.node_names)):
+                    if c.node_names[j] == member:
+                        return ci
+            ci += 1
     return -1
 
 
@@ -289,39 +293,40 @@ def _container_allowed_instance_keys(obj: Object, container: YangContainer) rais
 
 
 def _list_allowed_instance_keys(obj: Object, list_node: YangList) raises -> List[String]:
+    var b = ast.decompose_yang_list_children(list_node.children)
     var keys = List[String]()
-    for i in range(len(list_node.leaves)):
-        var nm = list_node.leaves[i][].name
+    for i in range(len(b.leaves)):
+        var nm = b.leaves[i][].name
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
-    for i in range(len(list_node.leaf_lists)):
-        var nm = list_node.leaf_lists[i][].name
+    for i in range(len(b.leaf_lists)):
+        var nm = b.leaf_lists[i][].name
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
-    for c in list_node.containers:
+    for c in b.containers:
         var nm = c[].name
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
-    for i in range(len(list_node.lists)):
-        var nm = list_node.lists[i][].name
+    for i in range(len(b.lists)):
+        var nm = b.lists[i][].name
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
-    for i in range(len(list_node.anydatas)):
-        var nm = list_node.anydatas[i][].name
+    for i in range(len(b.anydatas)):
+        var nm = b.anydatas[i][].name
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
-    for i in range(len(list_node.anyxmls)):
-        var nm = list_node.anyxmls[i][].name
+    for i in range(len(b.anyxmls)):
+        var nm = b.anyxmls[i][].name
         if _choice_member_choice_index_list(list_node, nm) < 0:
             if not _string_in_list(nm, keys):
                 keys.append(nm)
-    for i in range(len(list_node.choices)):
-        var extra = _choice_instance_keys(obj, list_node.choices[i][])
+    for i in range(len(b.choices)):
+        var extra = _choice_instance_keys(obj, b.choices[i][])
         for j in range(len(extra)):
             if not _string_in_list(extra[j], keys):
                 keys.append(extra[j])
@@ -690,35 +695,36 @@ struct DocumentValidator:
         if not entry.is_object():
             return
         ref obj = entry.object()
+        var b = ast.decompose_yang_list_children(list_node.children)
         var choice_member_names = List[String]()
-        for i in range(len(list_node.choices)):
-            ref choice = list_node.choices[i][]
+        for i in range(len(b.choices)):
+            ref choice = b.choices[i][]
             var members = _choice_member_names(choice)
             for j in range(len(members)):
                 choice_member_names.append(members[j])
             self._realize_choice_defaults(
                 obj,
                 choice,
-                list_node.leaves,
-                list_node.leaf_lists,
+                b.leaves,
+                b.leaf_lists,
             )
-        for i in range(len(list_node.leaves)):
-            ref leaf = list_node.leaves[i][]
+        for i in range(len(b.leaves)):
+            ref leaf = b.leaves[i][]
             if _string_in_list(leaf.name, choice_member_names):
                 continue
             self._realize_leaf_default(obj, leaf)
-        for i in range(len(list_node.leaf_lists)):
-            ref leaf_list = list_node.leaf_lists[i][]
+        for i in range(len(b.leaf_lists)):
+            ref leaf_list = b.leaf_lists[i][]
             if _string_in_list(leaf_list.name, choice_member_names):
                 continue
             self._realize_leaf_list_default(obj, leaf_list)
 
-        for i in range(len(list_node.containers)):
-            ref child = list_node.containers[i][]
+        for i in range(len(b.containers)):
+            ref child = b.containers[i][]
             if child.name in obj:
                 self._realize_defaults_in_container(obj[child.name], child)
-        for i in range(len(list_node.lists)):
-            ref child_list = list_node.lists[i][]
+        for i in range(len(b.lists)):
+            ref child_list = b.lists[i][]
             if child_list.name in obj and obj[child_list.name].is_array():
                 ref arr = obj[child_list.name].array()
                 for j in range(len(arr)):
@@ -1707,21 +1713,22 @@ struct DocumentValidator:
                     ),
                 )
         var child_enforce = _child_enforce_mandatory_choice_container(enforce_mandatory_choice)
-        for i in range(len(list_node.leaves)):
-            var nm = list_node.leaves[i][].name
+        var b = ast.decompose_yang_list_children(list_node.children)
+        for i in range(len(b.leaves)):
+            var nm = b.leaves[i][].name
             if _choice_member_choice_index_list(list_node, nm) >= 0:
                 continue
-            self._visit_leaf(obj, list_node.leaves[i][], path, root_data, child_enforce)
-        for i in range(len(list_node.leaf_lists)):
-            var nm = list_node.leaf_lists[i][].name
+            self._visit_leaf(obj, b.leaves[i][], path, root_data, child_enforce)
+        for i in range(len(b.leaf_lists)):
+            var nm = b.leaf_lists[i][].name
             if _choice_member_choice_index_list(list_node, nm) >= 0:
                 continue
-            self._visit_leaf_list(obj, list_node.leaf_lists[i][], path, root_data, child_enforce)
-        for i in range(len(list_node.anydatas)):
-            var nm = list_node.anydatas[i][].name
+            self._visit_leaf_list(obj, b.leaf_lists[i][], path, root_data, child_enforce)
+        for i in range(len(b.anydatas)):
+            var nm = b.anydatas[i][].name
             if _choice_member_choice_index_list(list_node, nm) >= 0:
                 continue
-            ref ad = list_node.anydatas[i][]
+            ref ad = b.anydatas[i][]
             self._visit_untyped_data_node(
                 obj,
                 ad.name,
@@ -1733,11 +1740,11 @@ struct DocumentValidator:
                 child_enforce,
                 "anydata",
             )
-        for i in range(len(list_node.anyxmls)):
-            var nm = list_node.anyxmls[i][].name
+        for i in range(len(b.anyxmls)):
+            var nm = b.anyxmls[i][].name
             if _choice_member_choice_index_list(list_node, nm) >= 0:
                 continue
-            ref ax = list_node.anyxmls[i][]
+            ref ax = b.anyxmls[i][]
             self._visit_untyped_data_node(
                 obj,
                 ax.name,
@@ -1749,7 +1756,7 @@ struct DocumentValidator:
                 child_enforce,
                 "anyxml",
             )
-        for c in list_node.containers:
+        for c in b.containers:
             ref child_cont = c[]
             if child_cont.name in obj:
                 path.push(child_cont.name)
@@ -1761,22 +1768,22 @@ struct DocumentValidator:
                     child_enforce,
                 )
                 path.pop()
-        for i in range(len(list_node.lists)):
-            self._visit_list(obj, list_node.lists[i][], path, root_data, child_enforce)
-        for i in range(len(list_node.choices)):
+        for i in range(len(b.lists)):
+            self._visit_list(obj, b.lists[i][], path, root_data, child_enforce)
+        for i in range(len(b.choices)):
             self._visit_choice(
                 obj,
-                list_node.choices[i][],
+                b.choices[i][],
                 path,
                 root_data,
                 child_enforce,
-                list_node.leaves,
-                list_node.leaf_lists,
-                list_node.anydatas,
-                list_node.anyxmls,
-                list_node.containers,
-                list_node.lists,
-                list_node.choices,
+                b.leaves,
+                b.leaf_lists,
+                b.anydatas,
+                b.anyxmls,
+                b.containers,
+                b.lists,
+                b.choices,
             )
 
     def _visit_choice(

@@ -2,7 +2,7 @@
 
 from std.testing import assert_true, assert_false, assert_equal, TestSuite
 from emberjson import parse as parse_json, Value
-from xyang.ast import YangModule
+from xyang.ast import YangModule, decompose_yang_list_children
 from xyang import parse_yang_string, parse_yang_file
 from xyang.validator import YangValidator
 
@@ -121,14 +121,15 @@ def test_text_parser_extracts_leaf_defaults() raises:
     assert_equal(system.leaves[enabled_idx][].default_value, "true")
 
     ref interface_list = system.lists[0][]
+    var il = decompose_yang_list_children(interface_list.children)
     var admin_up_idx = -1
-    for i in range(len(interface_list.leaves)):
-        if interface_list.leaves[i][].name == "admin-up":
+    for i in range(len(il.leaves)):
+        if il.leaves[i][].name == "admin-up":
             admin_up_idx = i
             break
     assert_true(admin_up_idx >= 0)
-    assert_true(interface_list.leaves[admin_up_idx][].has_default)
-    assert_equal(interface_list.leaves[admin_up_idx][].default_value, "true")
+    assert_true(il.leaves[admin_up_idx][].has_default)
+    assert_equal(il.leaves[admin_up_idx][].default_value, "true")
 
 
 def test_when_uses_effective_default_value() raises:

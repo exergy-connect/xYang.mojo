@@ -433,20 +433,22 @@ def apply_augment_segments_impl(
                 applied = True
         for i in range(len(lists)):
             if ident_local_name_impl(lists[i][].name) == seg:
+                var b_aug = ast.decompose_yang_list_children(lists[i][].children)
                 for j in range(len(aug.leaves)):
-                    lists[i][].leaves.append(clone_leaf_arc_impl(aug.leaves[j]))
+                    b_aug.leaves.append(clone_leaf_arc_impl(aug.leaves[j]))
                 for j in range(len(aug.leaf_lists)):
-                    lists[i][].leaf_lists.append(clone_leaf_list_arc_impl(aug.leaf_lists[j]))
+                    b_aug.leaf_lists.append(clone_leaf_list_arc_impl(aug.leaf_lists[j]))
                 for j in range(len(aug.anydatas)):
-                    lists[i][].anydatas.append(clone_anydata_arc_impl(aug.anydatas[j]))
+                    b_aug.anydatas.append(clone_anydata_arc_impl(aug.anydatas[j]))
                 for j in range(len(aug.anyxmls)):
-                    lists[i][].anyxmls.append(clone_anyxml_arc_impl(aug.anyxmls[j]))
+                    b_aug.anyxmls.append(clone_anyxml_arc_impl(aug.anyxmls[j]))
                 for j in range(len(aug.containers)):
-                    lists[i][].containers.append(clone_container_arc_impl(aug.containers[j]))
+                    b_aug.containers.append(clone_container_arc_impl(aug.containers[j]))
                 for j in range(len(aug.lists)):
-                    lists[i][].lists.append(clone_list_arc_impl(aug.lists[j]))
+                    b_aug.lists.append(clone_list_arc_impl(aug.lists[j]))
                 for j in range(len(aug.choices)):
-                    lists[i][].choices.append(clone_choice_arc_impl(aug.choices[j]))
+                    b_aug.choices.append(clone_choice_arc_impl(aug.choices[j]))
+                lists[i][].children = ast.pack_yang_list_child_buckets(b_aug)
                 applied = True
         return applied
 
@@ -468,19 +470,21 @@ def apply_augment_segments_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_seg = ast.decompose_yang_list_children(lists[i][].children)
             if apply_augment_segments_impl(
                 segments,
                 seg_idx + 1,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].anydatas,
-                lists[i][].anyxmls,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_seg.leaves,
+                b_seg.leaf_lists,
+                b_seg.anydatas,
+                b_seg.anyxmls,
+                b_seg.containers,
+                b_seg.lists,
+                b_seg.choices,
                 aug,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_seg)
     return applied
 
 
@@ -538,17 +542,19 @@ def refine_set_description_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_d = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_description_at_path_impl(
                 segments,
                 seg_idx + 1,
                 description,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_d.leaves,
+                b_d.leaf_lists,
+                b_d.containers,
+                b_d.lists,
+                b_d.choices,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_d)
     return applied
 
 
@@ -591,17 +597,19 @@ def refine_set_mandatory_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_m = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_mandatory_at_path_impl(
                 segments,
                 seg_idx + 1,
                 mandatory,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_m.leaves,
+                b_m.leaf_lists,
+                b_m.containers,
+                b_m.lists,
+                b_m.choices,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_m)
     return applied
 
 
@@ -649,17 +657,19 @@ def refine_set_default_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_def = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_default_at_path_impl(
                 segments,
                 seg_idx + 1,
                 default_value,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_def.leaves,
+                b_def.leaf_lists,
+                b_def.containers,
+                b_def.lists,
+                b_def.choices,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_def)
     return applied
 
 
@@ -718,17 +728,19 @@ def refine_add_must_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_mu = ast.decompose_yang_list_children(lists[i][].children)
             if refine_add_must_at_path_impl(
                 segments,
                 seg_idx + 1,
                 must_stmt,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_mu.leaves,
+                b_mu.leaf_lists,
+                b_mu.containers,
+                b_mu.lists,
+                b_mu.choices,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_mu)
     return applied
 
 
@@ -779,17 +791,19 @@ def refine_set_when_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_w = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_when_at_path_impl(
                 segments,
                 seg_idx + 1,
                 when_stmt,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_w.leaves,
+                b_w.leaf_lists,
+                b_w.containers,
+                b_w.lists,
+                b_w.choices,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_w)
     return applied
 
 
@@ -832,17 +846,19 @@ def refine_set_type_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_t = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_type_at_path_impl(
                 segments,
                 seg_idx + 1,
                 type_stmt,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
-                lists[i][].choices,
+                b_t.leaves,
+                b_t.leaf_lists,
+                b_t.containers,
+                b_t.lists,
+                b_t.choices,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_t)
     return applied
 
 
@@ -883,16 +899,18 @@ def refine_set_min_elements_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_min = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_min_elements_at_path_impl(
                 segments,
                 seg_idx + 1,
                 value,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
+                b_min.leaves,
+                b_min.leaf_lists,
+                b_min.containers,
+                b_min.lists,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_min)
     return applied
 
 
@@ -933,16 +951,18 @@ def refine_set_max_elements_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_max = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_max_elements_at_path_impl(
                 segments,
                 seg_idx + 1,
                 value,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
+                b_max.leaves,
+                b_max.leaf_lists,
+                b_max.containers,
+                b_max.lists,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_max)
     return applied
 
 
@@ -983,16 +1003,18 @@ def refine_set_ordered_by_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_ob = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_ordered_by_at_path_impl(
                 segments,
                 seg_idx + 1,
                 value,
-                lists[i][].leaves,
-                lists[i][].leaf_lists,
-                lists[i][].containers,
-                lists[i][].lists,
+                b_ob.leaves,
+                b_ob.leaf_lists,
+                b_ob.containers,
+                b_ob.lists,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_ob)
     return applied
 
 
@@ -1025,14 +1047,16 @@ def refine_set_key_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_key = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_key_at_path_impl(
                 segments,
                 seg_idx + 1,
                 key,
-                lists[i][].containers,
-                lists[i][].lists,
+                b_key.containers,
+                b_key.lists,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_key)
     return applied
 
 
@@ -1065,12 +1089,14 @@ def refine_add_unique_at_path_impl(
                 applied = True
     for i in range(len(lists)):
         if ident_local_name_impl(lists[i][].name) == seg:
+            var b_uq = ast.decompose_yang_list_children(lists[i][].children)
             if refine_add_unique_at_path_impl(
                 segments,
                 seg_idx + 1,
                 unique_spec,
-                lists[i][].containers,
-                lists[i][].lists,
+                b_uq.containers,
+                b_uq.lists,
             ):
                 applied = True
+            lists[i][].children = ast.pack_yang_list_child_buckets(b_uq)
     return applied

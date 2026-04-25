@@ -1,28 +1,45 @@
 ## YANG AST utilities (e.g. tree printing).
 
-from xyang.ast import YangModule, YangContainer, YangList, YangChoice
+from std.memory import ArcPointer
+from xyang.ast import (
+    YangModule,
+    YangContainer,
+    YangList,
+    YangChoice,
+    YangLeaf,
+    YangAnydata,
+    YangAnyxml,
+    YangLeafList,
+)
+
+comptime Arc = ArcPointer
 
 
 def _print_list(list_node: YangList, indent: String):
     """Print a list node and its children recursively."""
     print(indent + "list " + list_node.name + ((" key " + list_node.key) if len(list_node.key) > 0 else ""))
     var inner = indent + "  "
-    for i in range(len(list_node.leaves)):
-        ref leaf = list_node.leaves[i][]
-        print(inner + "leaf " + leaf.name + " : " + leaf.type.name + (" (mandatory)" if leaf.mandatory else ""))
-    for i in range(len(list_node.anydatas)):
-        ref ad = list_node.anydatas[i][]
-        print(inner + "anydata " + ad.name + (" (mandatory)" if ad.mandatory else ""))
-    for i in range(len(list_node.anyxmls)):
-        ref ax = list_node.anyxmls[i][]
-        print(inner + "anyxml " + ax.name + (" (mandatory)" if ax.mandatory else ""))
-    for i in range(len(list_node.containers)):
-        _print_container(list_node.containers[i][], inner)
-    for i in range(len(list_node.lists)):
-        _print_list(list_node.lists[i][], inner)
-    for i in range(len(list_node.choices)):
-        ref ch = list_node.choices[i][]
-        print(inner + "choice " + ch.name + (" (mandatory)" if ch.mandatory else "") + " cases=" + String(len(ch.case_names)))
+    for sidx in range(len(list_node.children)):
+        var st = list_node.children[sidx]
+        if st.isa[Arc[YangLeaf]]():
+            ref leaf = st[Arc[YangLeaf]][]
+            print(inner + "leaf " + leaf.name + " : " + leaf.type.name + (" (mandatory)" if leaf.mandatory else ""))
+        elif st.isa[Arc[YangLeafList]]():
+            ref llist = st[Arc[YangLeafList]][]
+            print(inner + "leaf-list " + llist.name)
+        elif st.isa[Arc[YangAnydata]]():
+            ref ad = st[Arc[YangAnydata]][]
+            print(inner + "anydata " + ad.name + (" (mandatory)" if ad.mandatory else ""))
+        elif st.isa[Arc[YangAnyxml]]():
+            ref ax = st[Arc[YangAnyxml]][]
+            print(inner + "anyxml " + ax.name + (" (mandatory)" if ax.mandatory else ""))
+        elif st.isa[Arc[YangContainer]]():
+            _print_container(st[Arc[YangContainer]][], inner)
+        elif st.isa[Arc[YangList]]():
+            _print_list(st[Arc[YangList]][], inner)
+        elif st.isa[Arc[YangChoice]]():
+            ref ch = st[Arc[YangChoice]][]
+            print(inner + "choice " + ch.name + (" (mandatory)" if ch.mandatory else "") + " cases=" + String(len(ch.case_names)))
 
 
 def _print_container(container: YangContainer, indent: String):

@@ -2,7 +2,13 @@ from std.testing import assert_equal, assert_true, TestSuite
 from std.memory import ArcPointer
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from xyang import parse_yang_file, parse_yang_string
-from xyang.ast import YangTypedefStmt, YangUsesStmt, YangRefineStmt, YangAugmentStmt
+from xyang.ast import (
+    YangTypedefStmt,
+    YangUsesStmt,
+    YangRefineStmt,
+    YangAugmentStmt,
+    decompose_yang_list_children,
+)
 
 
 def _find_leaf_index_by_name_in_container(name: String, path: String) raises -> Int:
@@ -20,8 +26,9 @@ def _find_leaf_index_in_list(list_name: String, leaf_name: String, path: String)
     for i in range(len(system.lists)):
         if system.lists[i][].name == list_name:
             ref lst = system.lists[i][]
-            for j in range(len(lst.leaves)):
-                if lst.leaves[j][].name == leaf_name:
+            var b = decompose_yang_list_children(lst.children)
+            for j in range(len(b.leaves)):
+                if b.leaves[j][].name == leaf_name:
                     return j
     return -1
 
@@ -74,20 +81,21 @@ def test_parse_basic_yang_file() raises:
 
     var mtu_idx = _find_leaf_index_in_list("interface", "mtu", path)
     assert_true(mtu_idx >= 0)
-    assert_equal(interface_list.leaves[mtu_idx][].type.name, "uint16")
-    assert_true(interface_list.leaves[mtu_idx][].type.has_range())
-    assert_equal(interface_list.leaves[mtu_idx][].type.range_min(), 576)
-    assert_equal(interface_list.leaves[mtu_idx][].type.range_max(), 9216)
+    var ib0 = decompose_yang_list_children(interface_list.children)
+    assert_equal(ib0.leaves[mtu_idx][].type.name, "uint16")
+    assert_true(ib0.leaves[mtu_idx][].type.has_range())
+    assert_equal(ib0.leaves[mtu_idx][].type.range_min(), 576)
+    assert_equal(ib0.leaves[mtu_idx][].type.range_max(), 9216)
 
     var descr_idx = _find_leaf_index_in_list("interface", "description", path)
     var hold_time_idx = _find_leaf_index_in_list("interface", "hold-time", path)
     assert_true(descr_idx >= 0)
     assert_true(hold_time_idx >= 0)
-    assert_equal(interface_list.leaves[descr_idx][].type.name, "string")
-    assert_equal(interface_list.leaves[hold_time_idx][].type.name, "uint16")
-    assert_true(interface_list.leaves[hold_time_idx][].type.has_range())
-    assert_equal(interface_list.leaves[hold_time_idx][].type.range_min(), 0)
-    assert_equal(interface_list.leaves[hold_time_idx][].type.range_max(), 300)
+    assert_equal(ib0.leaves[descr_idx][].type.name, "string")
+    assert_equal(ib0.leaves[hold_time_idx][].type.name, "uint16")
+    assert_true(ib0.leaves[hold_time_idx][].type.has_range())
+    assert_equal(ib0.leaves[hold_time_idx][].type.range_min(), 0)
+    assert_equal(ib0.leaves[hold_time_idx][].type.range_max(), 300)
 
 
 def test_parse_mixed_single_double_quoted_string() raises:
