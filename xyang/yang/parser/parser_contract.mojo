@@ -1,3 +1,4 @@
+from std.collections import Dict
 from std.memory import ArcPointer
 from xyang.ast import (
     YangContainer,
@@ -12,6 +13,11 @@ from xyang.ast import (
     YangMust,
     YangWhen,
     YangGrouping,
+    YangTypedefStmt,
+    YangIdentityStmt,
+    YangExtensionStmt,
+    YangModuleImport,
+    YangModuleStatement,
 )
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.yang_token import YangToken
@@ -77,10 +83,37 @@ trait ParserContract:
     def _store_grouping(mut self, var grouping: YangGrouping) raises:
         ...
 
+    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[YangGrouping]]:
+        ...
+
     def _parse_typedef_statement(mut self) raises:
         ...
 
     def _store_typedef(mut self, name: String, read type_stmt: YangType) raises:
+        ...
+
+    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[YangTypedefStmt]]:
+        ...
+
+    def _record_module_statement(mut self, read stmt: YangModuleStatement):
+        ...
+
+    def _module_statements_snapshot(ref self) -> List[YangModuleStatement]:
+        ...
+
+    def _record_feature_if_feature(mut self, feature_name: String, if_feature: String):
+        ...
+
+    def _feature_if_features_snapshot(ref self) -> Dict[String, List[String]]:
+        ...
+
+    def _identities_snapshot(ref self) -> Dict[String, Arc[YangIdentityStmt]]:
+        ...
+
+    def _extensions_snapshot(ref self) -> Dict[String, Arc[YangExtensionStmt]]:
+        ...
+
+    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[YangModuleImport]]:
         ...
 
     def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[YangType]]:

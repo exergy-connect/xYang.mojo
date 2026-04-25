@@ -1,6 +1,8 @@
 from std.testing import assert_equal, assert_true, TestSuite
+from std.memory import ArcPointer
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 from xyang import parse_yang_file, parse_yang_string
+from xyang.ast import YangTypedefStmt, YangUsesStmt, YangRefineStmt, YangAugmentStmt
 
 
 def _find_leaf_index_by_name_in_container(name: String, path: String) raises -> Int:
@@ -222,6 +224,62 @@ module regex-escapes {
     assert_equal(module.name, "regex-escapes")
     assert_true(len(module.top_level_containers) == 1)
     assert_equal(module.top_level_containers[0][].name, "root")
+    assert_true(len(module.typedefs) == 1)
+
+
+def test_parse_tree_statements_capture_uses_refine_augment() raises:
+    var module = parse_yang_string(
+        """
+module parse-tree-stmts {
+  namespace "urn:example:parse-tree-stmts";
+  prefix pts;
+
+  grouping g {
+    leaf a { type string; }
+  }
+
+  typedef local-string {
+    type string {
+      length "1..16";
+      pattern '[a-z]+';
+    }
+  }
+
+  container root {
+    uses g {
+      refine a {
+        mandatory true;
+      }
+    }
+    leaf enabled { type boolean; }
+  }
+
+  augment /root {
+    leaf extra {
+      type string;
+    }
+  }
+}
+""",
+    )
+    var saw_typedef = False
+    var saw_uses = False
+    var saw_refine = False
+    var saw_augment = False
+    for i in range(len(module.statements)):
+        var stmt = module.statements[i]
+        if stmt.isa[ArcPointer[YangTypedefStmt]]():
+            saw_typedef = True
+        elif stmt.isa[ArcPointer[YangUsesStmt]]():
+            saw_uses = True
+        elif stmt.isa[ArcPointer[YangRefineStmt]]():
+            saw_refine = True
+        elif stmt.isa[ArcPointer[YangAugmentStmt]]():
+            saw_augment = True
+    assert_true(saw_typedef)
+    assert_true(saw_uses)
+    assert_true(saw_refine)
+    assert_true(saw_augment)
 
 
 def test_parse_must_on_container_and_list() raises:

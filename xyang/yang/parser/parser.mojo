@@ -22,6 +22,15 @@ from xyang.ast import (
     YangMust,
     YangWhen,
     YangGrouping,
+    YangTypedefStmt,
+    YangIdentityStmt,
+    YangExtensionStmt,
+    YangModuleImport,
+    YangUnknownStatement,
+    YangUsesStmt,
+    YangRefineStmt,
+    YangAugmentStmt,
+    YangModuleStatement,
 )
 from xyang.yang.parser.tokenizer import tokenize_yang_impl
 from xyang.yang.parser.module_stmt import parse_module_impl
@@ -102,6 +111,12 @@ struct _YangParser(Movable, ParserContract):
     var index: Int
     var groupings: Dict[String, Arc[YangGrouping]]
     var typedefs: Dict[String, Arc[YangType]]
+    var typedef_statements: Dict[String, Arc[YangTypedefStmt]]
+    var identities: Dict[String, Arc[YangIdentityStmt]]
+    var extensions: Dict[String, Arc[YangExtensionStmt]]
+    var import_prefixes: Dict[String, Arc[YangModuleImport]]
+    var module_statements: List[YangModuleStatement]
+    var feature_if_features: Dict[String, List[String]]
     var pending_module_augments: List[Arc[ParsedAugment]]
 
     def __init__(out self, source: String):
@@ -110,6 +125,12 @@ struct _YangParser(Movable, ParserContract):
         self.index = 0
         self.groupings = Dict[String, Arc[YangGrouping]]()
         self.typedefs = Dict[String, Arc[YangType]]()
+        self.typedef_statements = Dict[String, Arc[YangTypedefStmt]]()
+        self.identities = Dict[String, Arc[YangIdentityStmt]]()
+        self.extensions = Dict[String, Arc[YangExtensionStmt]]()
+        self.import_prefixes = Dict[String, Arc[YangModuleImport]]()
+        self.module_statements = List[YangModuleStatement]()
+        self.feature_if_features = Dict[String, List[String]]()
         self.pending_module_augments = List[Arc[ParsedAugment]]()
 
     def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
@@ -182,6 +203,16 @@ struct _YangParser(Movable, ParserContract):
         return peek_prefixed_extension_impl(self)
 
     def _skip_prefixed_extension_statement(mut self) raises:
+        var prefix = self._peek_value()
+        var name = self._peek_value_n(2)
+        var keyword = prefix + ":" + name
+        self._record_module_statement(
+            YangModuleStatement(
+                Arc[YangUnknownStatement](
+                    YangUnknownStatement(keyword = keyword, argument = "", has_argument = False),
+                ),
+            ),
+        )
         skip_prefixed_extension_statement_impl(self)
 
     def _parse_anydata_statement(mut self) raises -> YangAnydata:
@@ -205,6 +236,9 @@ struct _YangParser(Movable, ParserContract):
             self._error("Duplicate grouping '" + grouping_name + "'")
         self.groupings[grouping_name] = Arc[YangGrouping](grouping^)
 
+    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[YangGrouping]]:
+        return self.groupings.copy()
+
     def _parse_typedef_statement(mut self) raises:
         parse_typedef_statement_impl(self)
 
@@ -212,9 +246,48 @@ struct _YangParser(Movable, ParserContract):
         if self.typedefs.get(name):
             self._error("Duplicate typedef '" + name + "'")
         self.typedefs[name] = Arc[YangType](clone_yang_type_impl(type_stmt))
+        self.typedef_statements[name] = Arc[YangTypedefStmt](
+            YangTypedefStmt(
+                name = name,
+                type_stmt = clone_yang_type_impl(type_stmt),
+                description = "",
+            ),
+        )
 
     def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[YangType]]:
         return self.typedefs.get(name)
+
+    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[YangTypedefStmt]]:
+        return self.typedef_statements.copy()
+
+    def _record_module_statement(mut self, read stmt: YangModuleStatement):
+        self.module_statements.append(stmt)
+
+    def _module_statements_snapshot(ref self) -> List[YangModuleStatement]:
+        return self.module_statements.copy()
+
+    def _record_feature_if_feature(mut self, feature_name: String, if_feature: String):
+        var current = self.feature_if_features.get(feature_name)
+        if current:
+            var values = current.value().copy()
+            values.append(if_feature)
+            self.feature_if_features[feature_name] = values^
+        else:
+            var values = List[String]()
+            values.append(if_feature)
+            self.feature_if_features[feature_name] = values^
+
+    def _feature_if_features_snapshot(ref self) -> Dict[String, List[String]]:
+        return self.feature_if_features.copy()
+
+    def _identities_snapshot(ref self) -> Dict[String, Arc[YangIdentityStmt]]:
+        return self.identities.copy()
+
+    def _extensions_snapshot(ref self) -> Dict[String, Arc[YangExtensionStmt]]:
+        return self.extensions.copy()
+
+    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[YangModuleImport]]:
+        return self.import_prefixes.copy()
 
     def _parse_uses_statement(
         mut self,
@@ -226,6 +299,19 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[YangList]],
         mut choices: List[Arc[YangChoice]],
     ) raises:
+        var grouping_name = self._peek_value_n(1)
+        self._record_module_statement(
+            YangModuleStatement(
+                Arc[YangUsesStmt](
+                    YangUsesStmt(
+                        grouping_name = grouping_name,
+                        if_features = List[String](),
+                        has_when = False,
+                        when = Optional[YangWhen](),
+                    ),
+                ),
+            ),
+        )
         parse_uses_statement_impl(
             self,
             leaves,
@@ -270,6 +356,8 @@ struct _YangParser(Movable, ParserContract):
                 choices.append(clone_choice_arc_impl(child[Arc[YangChoice]]))
 
     def _parse_if_feature_statement(mut self) raises:
+        var if_feature = self._peek_value_n(1)
+        self._record_feature_if_feature("__module__", if_feature)
         parse_if_feature_statement_impl(self)
 
     def _parse_refine_statement(
@@ -282,6 +370,22 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[YangList]],
         mut choices: List[Arc[YangChoice]],
     ) raises:
+        var target_path = self._peek_value_n(1)
+        self._record_module_statement(
+            YangModuleStatement(
+                Arc[YangRefineStmt](
+                    YangRefineStmt(
+                        target_path = target_path,
+                        has_mandatory = False,
+                        mandatory = False,
+                        min_elements = -1,
+                        max_elements = -1,
+                        description = "",
+                        if_features = List[String](),
+                    ),
+                ),
+            ),
+        )
         parse_refine_statement_impl(
             self,
             leaves,
@@ -303,6 +407,19 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[YangList]],
         mut choices: List[Arc[YangChoice]],
     ) raises:
+        var augment_path = self._peek_value_n(1)
+        self._record_module_statement(
+            YangModuleStatement(
+                Arc[YangAugmentStmt](
+                    YangAugmentStmt(
+                        augment_path = augment_path,
+                        if_features = List[String](),
+                        has_when = False,
+                        when = Optional[YangWhen](),
+                    ),
+                ),
+            ),
+        )
         parse_relative_augment_statement_impl(
             self,
             leaves,
@@ -318,6 +435,19 @@ struct _YangParser(Movable, ParserContract):
         mut self,
         mut top_containers: List[Arc[YangContainer]],
     ) raises:
+        var augment_path = self._peek_value_n(1)
+        self._record_module_statement(
+            YangModuleStatement(
+                Arc[YangAugmentStmt](
+                    YangAugmentStmt(
+                        augment_path = augment_path,
+                        if_features = List[String](),
+                        has_when = False,
+                        when = Optional[YangWhen](),
+                    ),
+                ),
+            ),
+        )
         parse_module_augment_statement_impl(self, top_containers)
 
     def _apply_pending_module_augments(

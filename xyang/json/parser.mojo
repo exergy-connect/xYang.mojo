@@ -1,6 +1,7 @@
 ## JSON/YANG parser for Mojo xYang using EmberJson.
 
 from emberjson import parse, Value
+from std.collections import Dict
 from std.memory import ArcPointer
 from xyang.xpath import parse_xpath, Expr
 from xyang.ast import (
@@ -13,6 +14,7 @@ from xyang.ast import (
     YangLeafList,
     YangAnydata,
     YangAnyxml,
+    YangGrouping,
     YangType,
     YangTypePlain,
     YangTypeDecimal64,
@@ -22,6 +24,13 @@ from xyang.ast import (
     YangTypeIdentityref,
     YangMust,
     YangWhen,
+    YangTypedefStmt,
+    YangIdentityStmt,
+    YangFeatureStmt,
+    YangModuleImport,
+    YangExtensionStmt,
+    YangModuleStatement,
+    YangRevisionStmt,
 )
 from xyang.yang.parser.yang_token import (
     YANG_TYPE_LEAFREF,
@@ -80,9 +89,20 @@ def parse_yang_module(source: String) raises -> YangModule:
         namespace = ns,
         prefix = prefix,
         description = "",
+        yang_version = "1.1",
+        belongs_to_module = "",
         revisions = List[String](),
+        revision_statements = List[Arc[YangRevisionStmt]](),
         organization = "",
         contact = "",
+        typedefs = Dict[String, Arc[YangTypedefStmt]](),
+        identities = Dict[String, Arc[YangIdentityStmt]](),
+        groupings = Dict[String, Arc[YangGrouping]](),
+        features = List[Arc[YangFeatureStmt]](),
+        feature_if_features = Dict[String, List[String]](),
+        import_prefixes = Dict[String, Arc[YangModuleImport]](),
+        extensions = Dict[String, Arc[YangExtensionStmt]](),
+        statements = List[YangModuleStatement](),
         top_level_containers = containers^,
     )
 

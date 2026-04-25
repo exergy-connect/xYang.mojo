@@ -1,5 +1,6 @@
 ## Minimal YANG AST model in Mojo for xYang.mojo.
 
+from std.collections import Dict
 from std.memory import ArcPointer
 from std.utils import Variant
 from emberjson import JsonDeserializable
@@ -220,12 +221,14 @@ struct YangType(Movable):
     def bits_name_at(read self, i: Int) -> String:
         return self.constraints[YangTypeBits].bits_names[i]
 
+
     # --- identityref ---
 
     def identityref_base(read self) -> String:
         if self.constraints.isa[YangTypeIdentityref]():
             return self.constraints[YangTypeIdentityref].identityref_base
         return ""
+
 
 
 @fieldwise_init
@@ -577,6 +580,112 @@ struct YangGrouping(Movable):
 
 
 @fieldwise_init
+struct YangTypedefStmt(Movable):
+    var name: String
+    var type_stmt: YangType
+    var description: String
+
+
+@fieldwise_init
+struct YangIdentityStmt(Movable):
+    var name: String
+    var bases: List[String]
+    var if_features: List[String]
+    var description: String
+
+
+@fieldwise_init
+struct YangExtensionStmt(Movable):
+    var name: String
+    var argument_name: String
+    var argument_yin_element: Bool
+    var has_argument_yin_element: Bool
+    var description: String
+
+
+@fieldwise_init
+struct YangExtensionInvocationStmt(Movable):
+    var prefix: String
+    var name: String
+    var argument: String
+    var has_argument: Bool
+    var description: String
+
+
+@fieldwise_init
+struct YangUsesStmt(Movable):
+    var grouping_name: String
+    var if_features: List[String]
+    var has_when: Bool
+    var when: Optional[YangWhen]
+
+
+@fieldwise_init
+struct YangRefineStmt(Movable):
+    var target_path: String
+    var has_mandatory: Bool
+    var mandatory: Bool
+    var min_elements: Int
+    var max_elements: Int
+    var description: String
+    var if_features: List[String]
+
+
+@fieldwise_init
+struct YangAugmentStmt(Movable):
+    var augment_path: String
+    var if_features: List[String]
+    var has_when: Bool
+    var when: Optional[YangWhen]
+
+
+@fieldwise_init
+struct YangUnknownStatement(Movable):
+    var keyword: String
+    var argument: String
+    var has_argument: Bool
+
+
+@fieldwise_init
+struct YangModuleImport(Movable):
+    var local_prefix: String
+    var module_name: String
+
+
+@fieldwise_init
+struct YangRevisionStmt(Movable):
+    var date: String
+    var description: String
+
+
+@fieldwise_init
+struct YangFeatureStmt(Movable):
+    var name: String
+    var if_features: List[String]
+    var description: String
+
+
+comptime YangModuleStatement = Variant[
+    Arc[YangContainer],
+    Arc[YangList],
+    Arc[YangChoice],
+    Arc[YangLeaf],
+    Arc[YangLeafList],
+    Arc[YangAnydata],
+    Arc[YangAnyxml],
+    Arc[YangGrouping],
+    Arc[YangTypedefStmt],
+    Arc[YangIdentityStmt],
+    Arc[YangExtensionStmt],
+    Arc[YangExtensionInvocationStmt],
+    Arc[YangUsesStmt],
+    Arc[YangRefineStmt],
+    Arc[YangAugmentStmt],
+    Arc[YangUnknownStatement],
+]
+
+
+@fieldwise_init
 struct YangModule(Movable, JsonDeserializable):
     ## Minimal YANG module representation for JSON/YANG parsing.
     var name: String
@@ -584,10 +693,23 @@ struct YangModule(Movable, JsonDeserializable):
     var prefix: String
     ## Module-level `description` (RFC 7950); empty if absent in source.
     var description: String
-    ## `revision` date strings in module source order (RFC 7950 allows multiple). Substatements inside each revision block are not modeled.
+    var yang_version: String
+    var belongs_to_module: String
+    ## `revision` date strings in module source order (RFC 7950 allows multiple).
     var revisions: List[String]
+    ## Parse-tree oriented revision entries with optional substatement data.
+    var revision_statements: List[Arc[YangRevisionStmt]]
     var organization: String
     var contact: String
+    var typedefs: Dict[String, Arc[YangTypedefStmt]]
+    var identities: Dict[String, Arc[YangIdentityStmt]]
+    var groupings: Dict[String, Arc[YangGrouping]]
+    var features: List[Arc[YangFeatureStmt]]
+    var feature_if_features: Dict[String, List[String]]
+    var import_prefixes: Dict[String, Arc[YangModuleImport]]
+    var extensions: Dict[String, Arc[YangExtensionStmt]]
+    ## Parse-tree top-level body statements in source order.
+    var statements: List[YangModuleStatement]
     var top_level_containers: List[Arc[YangContainer]]
 
     def get_name(self) -> String:
@@ -613,6 +735,10 @@ struct YangModule(Movable, JsonDeserializable):
 
     ## Returns a copy of the top-level container list; use the `top_level_containers` field when a borrow is enough.
     def get_top_level_containers(self) -> List[Arc[YangContainer]]:
+        return self.top_level_containers.copy()
+
+    ## Explicit materialization hook: parse tree -> schema tree currently returns the parser-produced schema list.
+    def materialize_top_level_containers(self) -> List[Arc[YangContainer]]:
         return self.top_level_containers.copy()
 
     def __str__(self) -> String:
