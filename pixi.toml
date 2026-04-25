@@ -5,6 +5,20 @@ name = "xYang.mojo"
 platforms = ["linux-64"]
 version = "0.1.0"
 
+[dependencies]
+mblack = "==26.2.0"
+mojo = "0.26.2.0.*"
+emberjson = ">=0.3.1,<0.4"
+
+[tasks.build-lib]
+cmd = "mojo package xyang -o build/xyang.mojopkg"
+inputs = ["xyang/**/*.mojo"]
+outputs = ["build/xyang.mojopkg"]
+
+[tasks.tests_yang]
+depends-on = ["build-lib"]
+cmd = "mojo -I build tests/yang/*.mojo"
+
 [tasks]
 # Compile `xyang/` into `build/xyang.mojopkg` (requires EmberJson on MOJO import path; uses pixi env). Run this after changing sources under `xyang/`, then use `compile-check` or a targeted `mojo` command with `-I build` — faster than re-elaborating the full source tree.
 package = "bash -lc 'mkdir -p build && export MODULAR_MOJO_IMPORT_PATH=\"$PWD/.pixi/envs/default/lib/mojo\" && mojo package -I. -o build/xyang.mojopkg xyang'"
@@ -27,8 +41,5 @@ basic-yang-example = "mojo -I . examples/basic_yang/main.mojo"
 
 # CLI (same commands as Python `xyang`: parse, validate, convert). Example: `pixi run xyang -- parse file.yang`
 xyang = "mojo -I . main.mojo"
-[dependencies]
-mblack = "==26.2.0"
-mojo = "0.26.2.0.*"
-emberjson = ">=0.3.1,<0.4"
-rattler-build = ">=0.63.0,<0.64"
+convert = "mojo -I . main.mojo convert examples/meta-model.yang -o examples/meta-model.yang.json"
+

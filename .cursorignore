@@ -11,6 +11,7 @@
 
 # 3. Specifically allow code files
 !*.mojo
+!pixi.toml
 
 # 4. Re-ignore common massive folders (optional but safer)
 node_modules/
