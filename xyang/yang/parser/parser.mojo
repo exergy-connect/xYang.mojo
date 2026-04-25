@@ -289,12 +289,21 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
     ) raises:
-        var target_path = self._peek_value_n(1)
+        var path = ra_stmt.parse_refine_statement_impl(
+            self,
+            leaves,
+            leaf_lists,
+            anydatas,
+            anyxmls,
+            containers,
+            lists,
+            choices,
+        )
         self._record_module_statement(
             ast.YangModuleStatement(
                 Arc[ast.YangRefineStmt](
                     ast.YangRefineStmt(
-                        target_path = target_path,
+                        target_path = path,
                         has_mandatory = False,
                         mandatory = False,
                         min_elements = -1,
@@ -304,16 +313,6 @@ struct _YangParser(Movable, ParserContract):
                     ),
                 ),
             ),
-        )
-        ra_stmt.parse_refine_statement_impl(
-            self,
-            leaves,
-            leaf_lists,
-            anydatas,
-            anyxmls,
-            containers,
-            lists,
-            choices,
         )
 
     def _parse_relative_augment_statement(
@@ -394,7 +393,7 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
         read aug: ParsedAugment,
-    ) -> Bool:
+    ) raises -> Bool:
         return ra_stmt.apply_augment_to_path_impl(
             path,
             leaves,

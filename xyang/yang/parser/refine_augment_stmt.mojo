@@ -1,5 +1,6 @@
 from std.memory import ArcPointer
 import xyang.ast as ast
+from xyang.xpath.path_parser import local_names_from_slashed_path_parts, parse_path
 from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.parser_contract import ParserContract
@@ -17,7 +18,6 @@ comptime YangType = ast.YangType
 comptime YangMust = ast.YangMust
 comptime YangWhen = ast.YangWhen
 comptime ident_local_name_impl = clone_utils.ident_local_name_impl
-comptime split_schema_path_impl = clone_utils.split_schema_path_impl
 comptime clone_must_impl = clone_utils.clone_must_impl
 comptime clone_when_impl = clone_utils.clone_when_impl
 comptime clone_yang_type_impl = clone_utils.clone_yang_type_impl
@@ -30,8 +30,116 @@ comptime clone_container_arc_impl = clone_utils.clone_container_arc_impl
 comptime clone_list_arc_impl = clone_utils.clone_list_arc_impl
 
 
-def parse_refine_statement_impl[ParserT: ParserContract](
+def _join_slashed_path_parts(read parts: List[String]) -> String:
+    var out = String("")
+    for i in range(len(parts)):
+        if i > 0:
+            out += "/"
+        out += parts[i]
+    return out^
+
+
+def _local_segments_from_schema_path_string(path: String) raises -> List[String]:
+    """String-only path (e.g. augment); single ``parse_path`` of the full argument."""
+    var parsed = parse_path(path)
+    var out = List[String]()
+    for i in range(len(parsed.segments)):
+        out.append(parsed.segments[i].local_name)
+    return out^
+
+
+## Refined from ``xyang/parser/statements/refine.py::RefineStatementParser``:
+## slash-separated `node-identifier` segments (``parts.append`` / ``".".join"`` in Python
+## is the same as ``/``.join for schema paths).
+
+
+def _consume_refine_slashed_path_parts[ParserT: ParserContract](mut parser: ParserT) raises -> List[String]:
+    """Token `/` steps only; one ``local_names_from_slashed_path_parts`` + one join, no re-split of a full string."""
+    if not parser._has_more():
+        parser._error("refine requires a path")
+    var first = parser._consume_value()
+    if not parser._has_more() or parser._peek() != YangToken.SLASH:
+        var value = first
+        while parser._has_more() and parser._peek() == YangToken.PLUS:
+            parser._consume()
+            value += parser._consume_value()
+        var one_part = List[String]()
+        one_part.append(value^)
+        return one_part^
+    var parts = List[String]()
+    parts.append(first^)
+    while parser._has_more() and parser._peek() == YangToken.SLASH:
+        parser._consume()
+        if not parser._has_more():
+            parser._error("trailing '/' in refine path")
+        parts.append(parser._consume_value())
+    return parts^
+
+
+## Handlers in ``refine.py::RefineStatementParser`` for MANDATORY and DEFAULT
+## (``_parse_refine_mandatory`` / ``_parse_refine_default``).
+
+
+def _parse_refine_mandatory_substmt_at_path[ParserT: ParserContract](
     mut parser: ParserT,
+    read refine_path: String,
+    read segments: List[String],
+    mut leaves: List[Arc[YangLeaf]],
+    mut leaf_lists: List[Arc[YangLeafList]],
+    mut containers: List[Arc[YangContainer]],
+    mut lists: List[Arc[YangList]],
+    mut choices: List[Arc[YangChoice]],
+) raises:
+    parser._consume()
+    var mandatory = parser._parse_boolean_value()
+    parser._skip_if(YangToken.SEMICOLON)
+    if not refine_set_mandatory_at_path_impl(
+        segments,
+        0,
+        mandatory,
+        leaves,
+        leaf_lists,
+        containers,
+        lists,
+        choices,
+    ):
+        parser._error("Unknown refine target path '" + refine_path + "'")
+
+
+def _parse_refine_default_substmt_at_path[ParserT: ParserContract](
+    mut parser: ParserT,
+    read refine_path: String,
+    read segments: List[String],
+    mut leaves: List[Arc[YangLeaf]],
+    mut leaf_lists: List[Arc[YangLeafList]],
+    mut containers: List[Arc[YangContainer]],
+    mut lists: List[Arc[YangList]],
+    mut choices: List[Arc[YangChoice]],
+) raises:
+    parser._consume()
+    var default_value = parser._consume_argument_value()
+    parser._skip_if(YangToken.SEMICOLON)
+    if not refine_set_default_at_path_impl(
+        segments,
+        0,
+        default_value,
+        leaves,
+        leaf_lists,
+        containers,
+        lists,
+        choices,
+    ):
+        parser._error("Unknown refine target path '" + refine_path + "'")
+
+
+## One substatement in ``refine { ... }``: dispatch keys align with
+## ``RefineStatementParser._refine_substatement_dispatch`` in ``refine.py``.
+
+
+def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
+    mut parser: ParserT,
+    read refine_path: String,
+    read segments: List[String],
     mut leaves: List[Arc[YangLeaf]],
     mut leaf_lists: List[Arc[YangLeafList]],
     mut anydatas: List[Arc[YangAnydata]],
@@ -42,174 +150,196 @@ def parse_refine_statement_impl[ParserT: ParserContract](
 ) raises:
     _ = anydatas
     _ = anyxmls
+    var tt = parser._peek()
+    if tt == YangToken.MUST:
+        var must_stmt = parser._parse_must_statement()
+        if not refine_add_must_at_path_impl(
+            segments,
+            0,
+            must_stmt,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.DESCRIPTION:
+        parser._consume()
+        var desc = parser._consume_argument_value()
+        parser._skip_if(YangToken.SEMICOLON)
+        if not refine_set_description_at_path_impl(
+            segments,
+            0,
+            desc,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.MIN_ELEMENTS:
+        parser._consume()
+        var min_el = parser._parse_non_negative_int("min-elements")
+        parser._skip_if(YangToken.SEMICOLON)
+        if not refine_set_min_elements_at_path_impl(
+            segments,
+            0,
+            min_el,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.MAX_ELEMENTS:
+        parser._consume()
+        var max_el = parser._parse_non_negative_int("max-elements")
+        parser._skip_if(YangToken.SEMICOLON)
+        if not refine_set_max_elements_at_path_impl(
+            segments,
+            0,
+            max_el,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.ORDERED_BY:
+        parser._consume()
+        var ordered_by = parser._parse_ordered_by_argument()
+        parser._skip_if(YangToken.SEMICOLON)
+        if not refine_set_ordered_by_at_path_impl(
+            segments,
+            0,
+            ordered_by,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.MANDATORY:
+        _parse_refine_mandatory_substmt_at_path(
+            parser,
+            refine_path,
+            segments,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        )
+    elif tt == YangToken.DEFAULT:
+        _parse_refine_default_substmt_at_path(
+            parser,
+            refine_path,
+            segments,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        )
+    elif tt == YangToken.IF_FEATURE:
+        parser._parse_if_feature_statement()
+    elif tt == YangToken.TYPE:
+        var type_stmt = parser._parse_type_statement()
+        if not refine_set_type_at_path_impl(
+            segments,
+            0,
+            type_stmt,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif parser._peek_prefixed_extension():
+        parser._skip_prefixed_extension_statement()
+    elif tt == YangToken.WHEN:
+        var when_stmt = parser._parse_when_statement()
+        if not refine_set_when_at_path_impl(
+            segments,
+            0,
+            when_stmt,
+            leaves,
+            leaf_lists,
+            containers,
+            lists,
+            choices,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.KEY:
+        parser._consume()
+        var key = parser._consume_argument_value()
+        parser._skip_if(YangToken.SEMICOLON)
+        if not refine_set_key_at_path_impl(
+            segments,
+            0,
+            key,
+            containers,
+            lists,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    elif tt == YangToken.UNIQUE:
+        parser._consume()
+        var uarg = parser._consume_argument_value()
+        var ucomp = parser._unique_components_from_argument(uarg)
+        parser._skip_if(YangToken.SEMICOLON)
+        if not refine_add_unique_at_path_impl(
+            segments,
+            0,
+            ucomp,
+            containers,
+            lists,
+        ):
+            parser._error("Unknown refine target path '" + refine_path + "'")
+    else:
+        parser._skip_statement()
+
+
+def parse_refine_statement_impl[ParserT: ParserContract](
+    mut parser: ParserT,
+    mut leaves: List[Arc[YangLeaf]],
+    mut leaf_lists: List[Arc[YangLeafList]],
+    mut anydatas: List[Arc[YangAnydata]],
+    mut anyxmls: List[Arc[YangAnyxml]],
+    mut containers: List[Arc[YangContainer]],
+    mut lists: List[Arc[YangList]],
+    mut choices: List[Arc[YangChoice]],
+) raises -> String:
+    _ = anydatas
+    _ = anyxmls
     parser._expect(YangToken.REFINE)
-    var refine_path = parser._consume_argument_value()
-    var segments = split_schema_path_impl(refine_path)
+    var path_parts = _consume_refine_slashed_path_parts(parser)
+    var refine_path = _join_slashed_path_parts(path_parts)
+    var segments = local_names_from_slashed_path_parts(path_parts^)
     if len(segments) == 0:
         parser._error("refine requires a descendant schema-node identifier")
         parser._skip_statement_tail()
-        return
+        return ""
 
     if parser._consume_if(YangToken.LBRACE):
         while parser._has_more() and parser._peek() != YangToken.RBRACE:
-            var stmt = parser._peek()
-            if stmt == YangToken.DESCRIPTION:
-                parser._consume()
-                var desc = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_description_at_path_impl(
-                    segments,
-                    0,
-                    desc,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                    choices,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.MANDATORY:
-                parser._consume()
-                var mandatory = parser._parse_boolean_value()
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_mandatory_at_path_impl(
-                    segments,
-                    0,
-                    mandatory,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                    choices,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.DEFAULT:
-                parser._consume()
-                var default_value = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_default_at_path_impl(
-                    segments,
-                    0,
-                    default_value,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                    choices,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.MUST:
-                var must_stmt = parser._parse_must_statement()
-                if not refine_add_must_at_path_impl(
-                    segments,
-                    0,
-                    must_stmt,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                    choices,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.WHEN:
-                var when_stmt = parser._parse_when_statement()
-                if not refine_set_when_at_path_impl(
-                    segments,
-                    0,
-                    when_stmt,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                    choices,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.TYPE:
-                var type_stmt = parser._parse_type_statement()
-                if not refine_set_type_at_path_impl(
-                    segments,
-                    0,
-                    type_stmt,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                    choices,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.MIN_ELEMENTS:
-                parser._consume()
-                var min_el = parser._parse_non_negative_int("min-elements")
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_min_elements_at_path_impl(
-                    segments,
-                    0,
-                    min_el,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.MAX_ELEMENTS:
-                parser._consume()
-                var max_el = parser._parse_non_negative_int("max-elements")
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_max_elements_at_path_impl(
-                    segments,
-                    0,
-                    max_el,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.ORDERED_BY:
-                parser._consume()
-                var ordered_by = parser._parse_ordered_by_argument()
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_ordered_by_at_path_impl(
-                    segments,
-                    0,
-                    ordered_by,
-                    leaves,
-                    leaf_lists,
-                    containers,
-                    lists,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.KEY:
-                parser._consume()
-                var key = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_set_key_at_path_impl(
-                    segments,
-                    0,
-                    key,
-                    containers,
-                    lists,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.UNIQUE:
-                parser._consume()
-                var uarg = parser._consume_argument_value()
-                var ucomp = parser._unique_components_from_argument(uarg)
-                parser._skip_if(YangToken.SEMICOLON)
-                if not refine_add_unique_at_path_impl(
-                    segments,
-                    0,
-                    ucomp,
-                    containers,
-                    lists,
-                ):
-                    parser._error("Unknown refine target path '" + refine_path + "'")
-            elif stmt == YangToken.IF_FEATURE:
-                parser._parse_if_feature_statement()
-            else:
-                parser._skip_statement()
+            _parse_refine_substatement_at_path_impl(
+                parser,
+                refine_path,
+                segments,
+                leaves,
+                leaf_lists,
+                anydatas,
+                anyxmls,
+                containers,
+                lists,
+                choices,
+            )
         parser._expect(YangToken.RBRACE)
     parser._skip_if(YangToken.SEMICOLON)
+    return refine_path
 
 
 def parse_relative_augment_statement_impl[ParserT: ParserContract](
@@ -271,7 +401,7 @@ def parse_module_augment_statement_impl[ParserT: ParserContract](
 def apply_pending_module_augments_impl(
     read pending_module_augments: List[Arc[ParsedAugment]],
     mut top_containers: List[Arc[YangContainer]],
-) -> String:
+) raises -> String:
     var root_leaves = List[Arc[YangLeaf]]()
     var root_leaf_lists = List[Arc[YangLeafList]]()
     var root_anydatas = List[Arc[YangAnydata]]()
@@ -381,8 +511,8 @@ def apply_augment_to_path_impl(
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
     read aug: ParsedAugment,
-) -> Bool:
-    var segments = split_schema_path_impl(path)
+) raises -> Bool:
+    var segments = _local_segments_from_schema_path_string(path)
     if len(segments) == 0:
         return False
     return apply_augment_segments_impl(

@@ -7,6 +7,7 @@ from xyang.xpath.pratt_parser import (
     ExprContext,
     ExprStringifier,
     accept,
+    parse_refine_path,
     parse_xpath,
 )
 
@@ -239,6 +240,26 @@ def test_parse_path_three_steps() raises:
     assert_equal(_val(ptr[].steps[0][], ex), "foo")
     assert_equal(_val(ptr[].steps[1][], ex), "bar")
     assert_equal(_val(ptr[].steps[2][], ex), "baz")
+    _free_expr(ptr)
+
+
+def test_parse_refine_path_prefixed_relative() raises:
+    var ex = "if:interfaces/if:interface"
+    var ptr = parse_refine_path(ex)
+    assert_equal(ptr[].kind, Expr.PATH)
+    assert_equal(len(ptr[].steps), 2)
+    assert_equal(_val(ptr[].steps[0][], ex), "if:interfaces")
+    assert_equal(_val(ptr[].steps[1][], ex), "if:interface")
+    _free_expr(ptr)
+
+
+def test_parse_refine_path_prefixed_absolute() raises:
+    var ex = "/if:interfaces/if:interface"
+    var ptr = parse_refine_path(ex)
+    assert_equal(ptr[].kind, Expr.PATH)
+    assert_equal(len(ptr[].steps), 2)
+    assert_equal(_val(ptr[].steps[0][], ex), "if:interfaces")
+    assert_equal(_val(ptr[].steps[1][], ex), "if:interface")
     _free_expr(ptr)
 
 

@@ -421,7 +421,6 @@ struct Parser:
 
         raise Error("Unexpected token")
 
-
     # -----------------------------
     # Infix Operator Precedence
     # -----------------------------
@@ -558,3 +557,27 @@ def parse_xpath(var expression: String) raises -> Expr.ExprPointer:
     var tokenizer = XPathTokenizer(expression)
     var parser = Parser(tokenizer^)
     return parser.parse_expression()
+
+
+def parse_refine_path(var expression: String) raises -> Expr.ExprPointer:
+    """Parse a refine-style schema path (supports prefixed identifiers like mod:name)."""
+    var tokenizer = XPathTokenizer(expression)
+    var parser = Parser(tokenizer^)
+
+    var steps = List[Arc[Expr]]()
+
+    if parser.current().type == Token.SLASH:
+        parser.skip()
+
+    var first_step_ptr = parser.parse_step()
+    steps.append(Arc[Expr](first_step_ptr.take_pointee()))
+    first_step_ptr.free()
+
+    while parser.current().type == Token.SLASH:
+        parser.skip()
+        var step_ptr = parser.parse_step()
+        steps.append(Arc[Expr](step_ptr.take_pointee()))
+        step_ptr.free()
+
+    parser.skip_or_raise(Token.EOF)
+    return Expr.path(steps^)
