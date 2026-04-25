@@ -19,16 +19,51 @@ comptime CP_UNDERSCORE = Codepoint.ord("_")
 comptime CP_DOT = Codepoint.ord(".")
 
 
+# Outside string literals, YANG is ASCII. UTF-8 (codepoint) handling applies only
+# to quoted string bodies: `_scan_quoted_string_body`.
+def _codepoint_at_ascii_byte(read source: String, i: Int) -> Codepoint:
+    return Codepoint.ord(source[byte=i : i + 1])
+
+
+# Returns byte offset after the closing quote, or `n` if unclosed, and the updated
+# `line` count (embedded newlines in the string).
+def _scan_quoted_string_body(
+    read source: String, n: Int, start: Int, start_line: Int, quote: Codepoint
+) -> Tuple[Int, Int]:
+    var i = start
+    var line = start_line
+    while i < n:
+        var rest = String(source[byte=i:n])
+        for cp_slice in rest.codepoint_slices():
+            var c = Codepoint.ord(cp_slice)
+            var w = len(cp_slice)
+            if c == quote:
+                return Tuple[Int, Int](i + w, line)
+            if c == CP_BACKSLASH:
+                i += w
+                if i < n:
+                    var esc_part = String(source[byte=i:n])
+                    for esc in esc_part.codepoint_slices():
+                        if Codepoint.ord(esc) == CP_NEWLINE:
+                            line += 1
+                        i += len(esc)
+                break
+            if c == CP_NEWLINE:
+                line += 1
+            i += w
+            break
+    return Tuple[Int, Int](i, line)
+
+
 def tokenize_yang_impl(source: String) -> List[YangToken]:
     var tokens = List[YangToken]()
     var keyword_types = make_keyword_type_map()
-
-    var i = 0
     var n = len(source)
+    var i = 0
     var line = 1
 
     while i < n:
-        var ch = _codepoint_at_byte(source, i)
+        var ch = _codepoint_at_ascii_byte(source, i)
 
         if _is_space(ch):
             if ch == CP_NEWLINE:
@@ -37,17 +72,19 @@ def tokenize_yang_impl(source: String) -> List[YangToken]:
             continue
 
         if ch == CP_SLASH and i + 1 < n:
-            var nxt = _codepoint_at_byte(source, i + 1)
+            var nxt = _codepoint_at_ascii_byte(source, i + 1)
             if nxt == CP_SLASH:
                 i += 2
-                while i < n and _codepoint_at_byte(source, i) != CP_NEWLINE:
+                while i < n and _codepoint_at_ascii_byte(source, i) != CP_NEWLINE:
                     i += 1
                 continue
             if nxt == CP_STAR:
                 i += 2
                 while i < n:
-                    var c = _codepoint_at_byte(source, i)
-                    if i + 1 < n and c == CP_STAR and _codepoint_at_byte(source, i + 1) == CP_SLASH:
+                    var c = _codepoint_at_ascii_byte(source, i)
+                    if i + 1 < n and c == CP_STAR and _codepoint_at_ascii_byte(
+                        source, i + 1
+                    ) == CP_SLASH:
                         i += 2
                         break
                     if c == CP_NEWLINE:
@@ -68,51 +105,42 @@ def tokenize_yang_impl(source: String) -> List[YangToken]:
             continue
 
         if ch == CP_DQUOTE or ch == CP_SQUOTE:
-            var quote = ch
-            var start = i
+            var t_start = i
             var token_line = line
             i += 1
-            while i < n:
-                var c = _codepoint_at_byte(source, i)
-                if c == quote:
-                    i += 1
-                    break
-                if c == CP_BACKSLASH and i + 1 < n:
-                    i += 2
-                    continue
-                if c == CP_NEWLINE:
-                    line += 1
-                i += 1
+            var r = _scan_quoted_string_body(source, n, i, line, ch)
+            i = r[0]
+            line = r[1]
             tokens.append(
                 YangToken(
                     type=YangToken.STRING,
-                    start=start,
-                    length=i - start,
+                    start=t_start,
+                    length=i - t_start,
                     line=token_line,
                 ),
             )
             continue
 
-        var start = i
+        var t_start = i
         var token_line = line
         while i < n:
-            var c = _codepoint_at_byte(source, i)
+            var c = _codepoint_at_ascii_byte(source, i)
             if _is_space(c) or _is_symbol(c) or c == CP_DQUOTE or c == CP_SQUOTE:
                 break
             if c == CP_SLASH and i + 1 < n:
-                var n2 = _codepoint_at_byte(source, i + 1)
+                var n2 = _codepoint_at_ascii_byte(source, i + 1)
                 if n2 == CP_SLASH or n2 == CP_STAR:
                     break
             i += 1
-        if i > start:
+        if i > t_start:
             tokens.append(
                 YangToken(
                     type=_token_type_for_lexeme(
-                        String(source[byte=start : i]),
+                        String(source[byte=t_start:i]),
                         keyword_types,
                     ),
-                    start=start,
-                    length=i - start,
+                    start=t_start,
+                    length=i - t_start,
                     line=token_line,
                 ),
             )
@@ -135,10 +163,6 @@ def _is_symbol(ch: Codepoint) -> Bool:
         or ch == CP_COLON
         or ch == CP_PLUS
     )
-
-
-def _codepoint_at_byte(source: String, i: Int) -> Codepoint:
-    return Codepoint.ord(source[byte=i : i + 1])
 
 
 def _symbol_token_type(ch: Codepoint) -> Int:
@@ -176,61 +200,80 @@ def _keyword_type_for_lexeme(
 
 
 def _starts_numeric_lexeme(lexeme: String) -> Bool:
-    var n = len(lexeme)
-    if n == 0:
+    var cp_count = 0
+    var c0 = Optional[Codepoint]()
+    var c1 = Optional[Codepoint]()
+    for cp in lexeme.codepoints():
+        if cp_count == 0:
+            c0 = Optional(cp)
+        elif cp_count == 1:
+            c1 = Optional(cp)
+        cp_count += 1
+
+    if cp_count == 0:
         return False
-    var c0 = _codepoint_at_byte(lexeme, 0)
-    if c0.is_ascii_digit():
+    if c0.value().is_ascii_digit():
         return True
-    if c0 == CP_MINUS and n > 1:
-        return _codepoint_at_byte(lexeme, 1).is_ascii_digit()
+    if c0.value() == CP_MINUS and cp_count > 1:
+        return c1.value().is_ascii_digit()
     return False
 
 
 def _starts_identifier_lexeme(lexeme: String) -> Bool:
-    if len(lexeme) == 0:
+    var c0 = Optional[Codepoint]()
+    for cp in lexeme.codepoints():
+        c0 = Optional(cp)
+        break
+    if not c0:
         return False
-    var c0 = _codepoint_at_byte(lexeme, 0)
-    return c0.is_ascii_upper() or c0.is_ascii_lower() or c0 == CP_UNDERSCORE
+    return (
+        c0.value().is_ascii_upper()
+        or c0.value().is_ascii_lower()
+        or c0.value() == CP_UNDERSCORE
+    )
 
 
 def _is_integer_lexeme(lexeme: String) -> Bool:
-    if len(lexeme) == 0:
-        return False
     var i = 0
-    if _codepoint_at_byte(lexeme, 0) == CP_MINUS:
-        if len(lexeme) == 1:
-            return False
-        i = 1
-    while i < len(lexeme):
-        var c = _codepoint_at_byte(lexeme, i)
+    var saw_minus = False
+    var saw_digit = False
+    for c in lexeme.codepoints():
+        if i == 0 and c == CP_MINUS:
+            saw_minus = True
+            i += 1
+            continue
         if not c.is_ascii_digit():
             return False
+        saw_digit = True
         i += 1
-    return True
+    if i == 0:
+        return False
+    if saw_minus and not saw_digit:
+        return False
+    return saw_digit
 
 
 def _is_dotted_number_lexeme(lexeme: String) -> Bool:
-    var n = len(lexeme)
-    if n < 3:
-        return False
     var i = 0
     var saw_dot = False
     var saw_digit = False
-    while i < n:
-        var c = _codepoint_at_byte(lexeme, i)
+    var prev_was_dot = False
+    for c in lexeme.codepoints():
         if c.is_ascii_digit():
             saw_digit = True
+            prev_was_dot = False
             i += 1
             continue
         if c == CP_DOT:
-            if i == 0 or i + 1 >= n:
-                return False
-            var next_c = _codepoint_at_byte(lexeme, i + 1)
-            if not next_c.is_ascii_digit():
+            if i == 0 or prev_was_dot:
                 return False
             saw_dot = True
+            prev_was_dot = True
             i += 1
             continue
+        return False
+    if i < 3:
+        return False
+    if prev_was_dot:
         return False
     return saw_dot and saw_digit
