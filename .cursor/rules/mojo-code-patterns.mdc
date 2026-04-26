@@ -7,13 +7,9 @@ alwaysApply: true
 # Build and verify (prefer the precompiled package; avoid full test runs for quick checks)
 
 1. After editing anything under `xyang/`, rebuild the library:
-   `pixi run package`
-2. Check that the project still compiles/loads with **`xyang` as `build/xyang.mojopkg`** (fast — does not re-elaborate the whole `xyang` source tree):
-   `pixi run compile-check`
-   or
-   `pixi run mojo -I build -I .pixi/envs/default/lib/mojo <a small .mojo file>`
-3. Do **not** run the full `tests` or `tests-mojopkg` suites by default; they are slow. Use `compile-check` or a single targeted test. Run the full mojopkg test sweep only when a broad regression check is needed.
-4. To validate **source** directly (e.g. before a new `package`), you may use `mojo -I . <file>.mojo` — slower than (2).
+   `pixi run build-lib`
+2. Do **not** run the full `tests` or `tests-mojopkg` suites by default; they are slow. Use `compile-check` or a single targeted test. Run the full mojopkg test sweep only when a broad regression check is needed.
+3. To validate **source** directly (e.g. before a full `build-lib`), you may use `pixi run mojo format --quiet [.mojo file]`.
 
 # Mojo AST & Ownership Patterns
 

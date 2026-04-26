@@ -71,7 +71,9 @@ struct _YangParser(Movable, ParserContract):
             while self._has_more() and self._peek() != YangToken.RBRACE:
                 if self._peek() == YangToken.GROUPING:
                     var grouping_name = self._peek_value_n(1)
-                    if len(grouping_name) > 0 and self.groupings.get(grouping_name):
+                    if len(grouping_name) > 0 and self.groupings.get(
+                        grouping_name
+                    ):
                         self._skip_statement()
                         continue
                     var stmt_start = self.index
@@ -128,7 +130,9 @@ struct _YangParser(Movable, ParserContract):
         self._record_module_statement(
             ast.YangModuleStatement(
                 Arc[ast.YangUnknownStatement](
-                    ast.YangUnknownStatement(keyword = keyword, argument = "", has_argument = False),
+                    ast.YangUnknownStatement(
+                        keyword=keyword, argument="", has_argument=False
+                    ),
                 ),
             ),
         )
@@ -155,28 +159,38 @@ struct _YangParser(Movable, ParserContract):
             self._error("Duplicate grouping '" + grouping_name + "'")
         self.groupings[grouping_name] = Arc[ast.YangGrouping](grouping^)
 
-    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[ast.YangGrouping]]:
+    def _get_groupings_snapshot(
+        ref self,
+    ) -> Dict[String, Arc[ast.YangGrouping]]:
         return self.groupings.copy()
 
     def _parse_typedef_statement(mut self) raises:
         tc_stmt.parse_typedef_statement_impl(self)
 
-    def _store_typedef(mut self, name: String, read type_stmt: ast.YangType) raises:
+    def _store_typedef(
+        mut self, name: String, read type_stmt: ast.YangType
+    ) raises:
         if self.typedefs.get(name):
             self._error("Duplicate typedef '" + name + "'")
-        self.typedefs[name] = Arc[ast.YangType](clone_utils.clone_yang_type_impl(type_stmt))
+        self.typedefs[name] = Arc[ast.YangType](
+            clone_utils.clone_yang_type_impl(type_stmt)
+        )
         self.typedef_statements[name] = Arc[ast.YangTypedefStmt](
             ast.YangTypedefStmt(
-                name = name,
-                type_stmt = clone_utils.clone_yang_type_impl(type_stmt),
-                description = "",
+                name=name,
+                type_stmt=clone_utils.clone_yang_type_impl(type_stmt),
+                description="",
             ),
         )
 
-    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[ast.YangType]]:
+    def _resolve_typedef_type(
+        ref self, name: String
+    ) -> Optional[Arc[ast.YangType]]:
         return self.typedefs.get(name)
 
-    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[ast.YangTypedefStmt]]:
+    def _get_typedef_statements_snapshot(
+        ref self,
+    ) -> Dict[String, Arc[ast.YangTypedefStmt]]:
         return self.typedef_statements.copy()
 
     def _record_module_statement(mut self, read stmt: ast.YangModuleStatement):
@@ -185,7 +199,9 @@ struct _YangParser(Movable, ParserContract):
     def _module_statements_snapshot(ref self) -> List[ast.YangModuleStatement]:
         return self.module_statements.copy()
 
-    def _record_feature_if_feature(mut self, feature_name: String, if_feature: String):
+    def _record_feature_if_feature(
+        mut self, feature_name: String, if_feature: String
+    ):
         var current = self.feature_if_features.get(feature_name)
         if current:
             var values = current.value().copy()
@@ -199,13 +215,19 @@ struct _YangParser(Movable, ParserContract):
     def _feature_if_features_snapshot(ref self) -> Dict[String, List[String]]:
         return self.feature_if_features.copy()
 
-    def _identities_snapshot(ref self) -> Dict[String, Arc[ast.YangIdentityStmt]]:
+    def _identities_snapshot(
+        ref self,
+    ) -> Dict[String, Arc[ast.YangIdentityStmt]]:
         return self.identities.copy()
 
-    def _extensions_snapshot(ref self) -> Dict[String, Arc[ast.YangExtensionStmt]]:
+    def _extensions_snapshot(
+        ref self,
+    ) -> Dict[String, Arc[ast.YangExtensionStmt]]:
         return self.extensions.copy()
 
-    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[ast.YangModuleImport]]:
+    def _import_prefixes_snapshot(
+        ref self,
+    ) -> Dict[String, Arc[ast.YangModuleImport]]:
         return self.import_prefixes.copy()
 
     def _parse_uses_statement(
@@ -223,10 +245,10 @@ struct _YangParser(Movable, ParserContract):
             ast.YangModuleStatement(
                 Arc[ast.YangUsesStmt](
                     ast.YangUsesStmt(
-                        grouping_name = grouping_name,
-                        if_features = List[String](),
-                        has_when = False,
-                        when = Optional[ast.YangWhen](),
+                        grouping_name=grouping_name,
+                        if_features=List[String](),
+                        has_when=False,
+                        when=Optional[ast.YangWhen](),
                     ),
                 ),
             ),
@@ -255,24 +277,50 @@ struct _YangParser(Movable, ParserContract):
     ) raises:
         var grouping_opt = self.groupings.get(grouping_name)
         if not grouping_opt:
-            self._error("Unknown grouping '" + grouping_name + "' in uses statement")
+            self._error(
+                "Unknown grouping '" + grouping_name + "' in uses statement"
+            )
         ref grouping = grouping_opt.value()[]
         for i in range(len(grouping.children)):
             var child = grouping.children[i]
             if child.isa[Arc[ast.YangLeaf]]():
-                leaves.append(clone_utils.clone_leaf_arc_impl(child[Arc[ast.YangLeaf]]))
+                leaves.append(
+                    clone_utils.clone_leaf_arc_impl(child[Arc[ast.YangLeaf]])
+                )
             elif child.isa[Arc[ast.YangLeafList]]():
-                leaf_lists.append(clone_utils.clone_leaf_list_arc_impl(child[Arc[ast.YangLeafList]]))
+                leaf_lists.append(
+                    clone_utils.clone_leaf_list_arc_impl(
+                        child[Arc[ast.YangLeafList]]
+                    )
+                )
             elif child.isa[Arc[ast.YangAnydata]]():
-                anydatas.append(clone_utils.clone_anydata_arc_impl(child[Arc[ast.YangAnydata]]))
+                anydatas.append(
+                    clone_utils.clone_anydata_arc_impl(
+                        child[Arc[ast.YangAnydata]]
+                    )
+                )
             elif child.isa[Arc[ast.YangAnyxml]]():
-                anyxmls.append(clone_utils.clone_anyxml_arc_impl(child[Arc[ast.YangAnyxml]]))
+                anyxmls.append(
+                    clone_utils.clone_anyxml_arc_impl(
+                        child[Arc[ast.YangAnyxml]]
+                    )
+                )
             elif child.isa[Arc[ast.YangContainer]]():
-                containers.append(clone_utils.clone_container_arc_impl(child[Arc[ast.YangContainer]]))
+                containers.append(
+                    clone_utils.clone_container_arc_impl(
+                        child[Arc[ast.YangContainer]]
+                    )
+                )
             elif child.isa[Arc[ast.YangList]]():
-                lists.append(clone_utils.clone_list_arc_impl(child[Arc[ast.YangList]]))
+                lists.append(
+                    clone_utils.clone_list_arc_impl(child[Arc[ast.YangList]])
+                )
             elif child.isa[Arc[ast.YangChoice]]():
-                choices.append(clone_utils.clone_choice_arc_impl(child[Arc[ast.YangChoice]]))
+                choices.append(
+                    clone_utils.clone_choice_arc_impl(
+                        child[Arc[ast.YangChoice]]
+                    )
+                )
 
     def _parse_if_feature_statement(mut self) raises:
         var if_feature = self._peek_value_n(1)
@@ -320,10 +368,10 @@ struct _YangParser(Movable, ParserContract):
             ast.YangModuleStatement(
                 Arc[ast.YangAugmentStmt](
                     ast.YangAugmentStmt(
-                        augment_path = augment_path,
-                        if_features = List[String](),
-                        has_when = False,
-                        when = Optional[ast.YangWhen](),
+                        augment_path=augment_path,
+                        if_features=List[String](),
+                        has_when=False,
+                        when=Optional[ast.YangWhen](),
                     ),
                 ),
             ),
@@ -348,10 +396,10 @@ struct _YangParser(Movable, ParserContract):
             ast.YangModuleStatement(
                 Arc[ast.YangAugmentStmt](
                     ast.YangAugmentStmt(
-                        augment_path = augment_path,
-                        if_features = List[String](),
-                        has_when = False,
-                        when = Optional[ast.YangWhen](),
+                        augment_path=augment_path,
+                        if_features=List[String](),
+                        has_when=False,
+                        when=Optional[ast.YangWhen](),
                     ),
                 ),
             ),
@@ -622,7 +670,9 @@ struct _YangParser(Movable, ParserContract):
         mut containers: List[Arc[ast.YangContainer]],
         mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return ra_stmt.refine_set_key_at_path_impl(segments, seg_idx, key, containers, lists)
+        return ra_stmt.refine_set_key_at_path_impl(
+            segments, seg_idx, key, containers, lists
+        )
 
     def _refine_add_unique_at_path(
         ref self,
@@ -632,7 +682,9 @@ struct _YangParser(Movable, ParserContract):
         mut containers: List[Arc[ast.YangContainer]],
         mut lists: List[Arc[ast.YangList]],
     ) -> Bool:
-        return ra_stmt.refine_add_unique_at_path_impl(segments, seg_idx, unique_spec, containers, lists)
+        return ra_stmt.refine_add_unique_at_path_impl(
+            segments, seg_idx, unique_spec, containers, lists
+        )
 
     def _split_schema_path(ref self, path: String) -> List[String]:
         return clone_utils.split_schema_path_impl(path)
@@ -649,25 +701,39 @@ struct _YangParser(Movable, ParserContract):
     def _clone_yang_type(ref self, read src: ast.YangType) -> ast.YangType:
         return clone_utils.clone_yang_type_impl(src)
 
-    def _clone_leaf_arc(ref self, read src: Arc[ast.YangLeaf]) -> Arc[ast.YangLeaf]:
+    def _clone_leaf_arc(
+        ref self, read src: Arc[ast.YangLeaf]
+    ) -> Arc[ast.YangLeaf]:
         return clone_utils.clone_leaf_arc_impl(src)
 
-    def _clone_leaf_list_arc(ref self, read src: Arc[ast.YangLeafList]) -> Arc[ast.YangLeafList]:
+    def _clone_leaf_list_arc(
+        ref self, read src: Arc[ast.YangLeafList]
+    ) -> Arc[ast.YangLeafList]:
         return clone_utils.clone_leaf_list_arc_impl(src)
 
-    def _clone_choice_arc(ref self, read src: Arc[ast.YangChoice]) -> Arc[ast.YangChoice]:
+    def _clone_choice_arc(
+        ref self, read src: Arc[ast.YangChoice]
+    ) -> Arc[ast.YangChoice]:
         return clone_utils.clone_choice_arc_impl(src)
 
-    def _clone_anydata_arc(ref self, read src: Arc[ast.YangAnydata]) -> Arc[ast.YangAnydata]:
+    def _clone_anydata_arc(
+        ref self, read src: Arc[ast.YangAnydata]
+    ) -> Arc[ast.YangAnydata]:
         return clone_utils.clone_anydata_arc_impl(src)
 
-    def _clone_anyxml_arc(ref self, read src: Arc[ast.YangAnyxml]) -> Arc[ast.YangAnyxml]:
+    def _clone_anyxml_arc(
+        ref self, read src: Arc[ast.YangAnyxml]
+    ) -> Arc[ast.YangAnyxml]:
         return clone_utils.clone_anyxml_arc_impl(src)
 
-    def _clone_container_arc(ref self, read src: Arc[ast.YangContainer]) -> Arc[ast.YangContainer]:
+    def _clone_container_arc(
+        ref self, read src: Arc[ast.YangContainer]
+    ) -> Arc[ast.YangContainer]:
         return clone_utils.clone_container_arc_impl(src)
 
-    def _clone_list_arc(ref self, read src: Arc[ast.YangList]) -> Arc[ast.YangList]:
+    def _clone_list_arc(
+        ref self, read src: Arc[ast.YangList]
+    ) -> Arc[ast.YangList]:
         return clone_utils.clone_list_arc_impl(src)
 
     def _parse_type_statement(mut self) raises -> ast.YangType:
@@ -685,10 +751,14 @@ struct _YangParser(Movable, ParserContract):
     def _parse_ordered_by_argument(mut self) raises -> String:
         return sem_utils.parse_ordered_by_argument_impl(self)
 
-    def _unique_components_from_argument(mut self, arg: String) raises -> List[String]:
+    def _unique_components_from_argument(
+        mut self, arg: String
+    ) raises -> List[String]:
         return sem_utils.unique_components_from_argument_impl(arg)
 
-    def _validate_choice_unique_node_names(mut self, read choice: ast.YangChoice) raises:
+    def _validate_choice_unique_node_names(
+        mut self, read choice: ast.YangChoice
+    ) raises:
         sem_utils.validate_choice_unique_node_names_impl(self, choice)
 
     def _parse_boolean_value(mut self) raises -> Bool:
@@ -776,12 +846,17 @@ struct _YangParser(Movable, ParserContract):
                     + ", col "
                     + String(_col_for_token(self.source, last)),
                 )
-            self._error("Expected " + _token_type_name(value) + ", found end of input")
+            self._error(
+                "Expected " + _token_type_name(value) + ", found end of input"
+            )
             return
         var got = self._peek()
         if got != value:
             self._error(
-                "Expected " + _token_type_name(value) + ", got " + _token_type_name(got),
+                "Expected "
+                + _token_type_name(value)
+                + ", got "
+                + _token_type_name(got),
             )
             return
         self.index += 1
@@ -807,7 +882,9 @@ struct _YangParser(Movable, ParserContract):
             self._error("Unexpected end of input")
             return ""
         ref tok = self.tokens[self.index]
-        var out = _token_text(self.source, tok, strip_quotes = tok.type == YangToken.STRING)
+        var out = _token_text(
+            self.source, tok, strip_quotes=tok.type == YangToken.STRING
+        )
         self.index += 1
         return out
 
@@ -846,8 +923,10 @@ struct _YangParser(Movable, ParserContract):
         raise Error("YANG parse error at end of input: " + message)
 
 
-def _token_text(source: String, read tok: YangToken, strip_quotes: Bool = False) -> String:
-    return tok.text(source, strip_quotes = strip_quotes)
+def _token_text(
+    source: String, read tok: YangToken, strip_quotes: Bool = False
+) -> String:
+    return tok.text(source, strip_quotes=strip_quotes)
 
 
 def _token_type_name(t: YangToken.Type) -> String:
@@ -897,7 +976,7 @@ def _token_type_name(t: YangToken.Type) -> String:
 def _col_for_token(source: String, tok: YangToken) -> Int:
     var i = tok.start
     while i > 0:
-        if source[byte=i - 1 : i] == "\n":
+        if source[byte = i - 1 : i] == "\n":
             break
         i -= 1
     return tok.start - i
@@ -920,4 +999,3 @@ def _message_after_colon(message: String) -> String:
     if len(parts) == 0:
         return message
     return String(parts[len(parts) - 1])
-
