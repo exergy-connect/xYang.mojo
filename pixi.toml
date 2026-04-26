@@ -40,7 +40,7 @@ tests-mojopkg = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; test 
 # Mojo 0.26+ rejects multiple entry `.mojo` paths in one invocation; run each file separately.
 tests = "bash -lc 'set -e; for f in tests/test_ast_deserialize.mojo tests/test_validator.mojo tests/yang/test_must_expression.mojo; do echo \"== $f\"; mojo -I . \"$f\"; done'"
 
-crash_test = "mojo -I . tests/crash/type_error_first_value.mojo"
+crash_test = "mojo build -g2 -I . tests/crash/type_constraint_stmt_min_crash_repro.mojo"
 
 # Full yang suite runs one entry file per `mojo` (0.26+). Single file: `pixi run mojo -I . tests/yang/<name>.mojo`
 yang_tests = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; for f in tests/yang/test_anydata_anyxml.mojo tests/yang/test_choice_case_validation.mojo tests/yang/test_default_semantics.mojo tests/yang/test_enum_union.mojo tests/yang/test_leaf_list_validation.mojo tests/yang/test_leafref_validation.mojo tests/yang/test_must_expression.mojo tests/yang/test_range_validation.mojo tests/yang/test_uses_refine_augment.mojo tests/yang/test_when_expression.mojo tests/yang/test_yang_text_parser.mojo; do echo \"== $f\"; mojo -I . -I \"$M\" \"$f\"; done'"

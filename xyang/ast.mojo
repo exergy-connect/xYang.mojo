@@ -60,6 +60,12 @@ struct YangTypeString(Movable):
 
 
 @fieldwise_init
+## Built-in `boolean` (YANG): no real constraints; `dummy` is a reserved placeholder.
+struct YangTypeBoolean(Movable):
+    var dummy: Bool
+
+
+@fieldwise_init
 struct YangTypeUnion(Movable):
     var union_members: List[Arc[YangType]]
 
@@ -75,6 +81,7 @@ struct YangType(Movable):
         YangTypeBits,
         YangTypeIdentityref,
         YangTypeString,
+        YangTypeBoolean,
         YangTypeUnion,
     ]
     var name: String

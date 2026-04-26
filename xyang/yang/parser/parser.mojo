@@ -42,7 +42,7 @@ struct _YangParser(Movable, ParserContract):
     var pending_module_augments: List[Arc[ParsedAugment]]
     ## Built-in `type` keyword → parse function (`tc_stmt.new_builtin_type_parser_table`).
     var _builtin_type_parsers: Dict[
-        String, fn (mut _YangParser, String, out ast.YangType) raises
+        String, fn (mut _YangParser, String) raises -> ast.YangType
     ]
 
     def __init__(out self, source: String):
@@ -199,12 +199,10 @@ struct _YangParser(Movable, ParserContract):
     def _parse_yang_type(
         mut self, read type_name: String
     ) raises -> ast.YangType:
-        var f = self._builtin_type_parsers.get(type_name)
-        var t = String(type_name)
-        if f:
-            return f.value()(self, t^)
+        if type_name in self._builtin_type_parsers: 
+            return self._builtin_type_parsers[type_name](self, type_name)
         return ast.YangType(
-            name=t^,
+            name=type_name,
             constraints=ast.YangTypeTypedef(
                 resolved=UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
             ),

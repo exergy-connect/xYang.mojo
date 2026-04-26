@@ -264,6 +264,8 @@ def _json_schema_yang_constraints(
         return ast.YangTypeIdentityref(identityref_base^)
     if ty_name == "string":
         return ast.YangTypeString(string_pattern^)
+    if ty_name == yang_token.YANG_TYPE_BOOLEAN:
+        return ast.YangTypeBoolean(False)
     return ast.YangTypeTypedef(
         resolved=UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
     )
