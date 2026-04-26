@@ -46,25 +46,14 @@ def split_schema_path_impl(path: String) -> List[String]:
     return out^
 
 
-def clone_must_impl(read src: YangMust) -> YangMust:
-    var xpath_ast = Expr.ExprPointer()
-    try:
-        xpath_ast = parse_xpath(src.expression)
-        return YangMust(
-            expression = src.expression,
-            error_message = src.error_message,
-            description = src.description,
-            xpath_ast = xpath_ast,
-            parsed = True,
-        )
-    except:
-        return YangMust(
-            expression = src.expression,
-            error_message = src.error_message,
-            description = src.description,
-            xpath_ast = xpath_ast,
-            parsed = False,
-        )
+def clone_must_impl(read src: YangMust) raises -> YangMust:
+    var xpath_ast = parse_xpath(src.expression)
+    return YangMust(
+        expression = src.expression,
+        error_message = src.error_message,
+        description = src.description,
+        xpath_ast = xpath_ast,
+    )
 
 
 def clone_when_impl(read src: YangWhen) -> YangWhen:
@@ -174,7 +163,7 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
     )
 
 
-def clone_leaf_arc_impl(read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
+def clone_leaf_arc_impl(read src: Arc[YangLeaf]) raises -> Arc[YangLeaf]:
     var musts = List[Arc[YangMust]]()
     for i in range(len(src[].must.must_statements)):
         musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
@@ -197,7 +186,7 @@ def clone_leaf_arc_impl(read src: Arc[YangLeaf]) -> Arc[YangLeaf]:
     )
 
 
-def clone_leaf_list_arc_impl(read src: Arc[YangLeafList]) -> Arc[YangLeafList]:
+def clone_leaf_list_arc_impl(read src: Arc[YangLeafList]) raises -> Arc[YangLeafList]:
     var musts = List[Arc[YangMust]]()
     for i in range(len(src[].must.must_statements)):
         musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
@@ -253,7 +242,7 @@ def clone_choice_arc_impl(read src: Arc[YangChoice]) -> Arc[YangChoice]:
     )
 
 
-def clone_anydata_arc_impl(read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
+def clone_anydata_arc_impl(read src: Arc[YangAnydata]) raises -> Arc[YangAnydata]:
     var musts = List[Arc[YangMust]]()
     for i in range(len(src[].must.must_statements)):
         musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
@@ -271,7 +260,7 @@ def clone_anydata_arc_impl(read src: Arc[YangAnydata]) -> Arc[YangAnydata]:
     )
 
 
-def clone_anyxml_arc_impl(read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
+def clone_anyxml_arc_impl(read src: Arc[YangAnyxml]) raises -> Arc[YangAnyxml]:
     var musts = List[Arc[YangMust]]()
     for i in range(len(src[].must.must_statements)):
         musts.append(Arc[YangMust](clone_must_impl(src[].must.must_statements[i][])))
@@ -289,7 +278,7 @@ def clone_anyxml_arc_impl(read src: Arc[YangAnyxml]) -> Arc[YangAnyxml]:
     )
 
 
-def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]:
+def clone_container_arc_impl(read src: Arc[YangContainer]) raises -> Arc[YangContainer]:
     var musts = List[Arc[YangMust]]()
     var leaves = List[Arc[YangLeaf]]()
     var leaf_lists = List[Arc[YangLeafList]]()
@@ -332,7 +321,7 @@ def clone_container_arc_impl(read src: Arc[YangContainer]) -> Arc[YangContainer]
     )
 
 
-def clone_list_arc_impl(read src: Arc[YangList]) -> Arc[YangList]:
+def clone_list_arc_impl(read src: Arc[YangList]) raises -> Arc[YangList]:
     var musts = List[Arc[YangMust]]()
     var ch = List[YangList.ChildStatement]()
     var unique_specs = List[List[String]]()

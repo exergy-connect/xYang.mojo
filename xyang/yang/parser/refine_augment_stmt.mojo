@@ -576,7 +576,7 @@ def apply_augment_segments_impl(
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
     read aug: ParsedAugment,
-) -> Bool:
+) raises -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
@@ -848,7 +848,7 @@ def refine_add_must_at_path_impl(
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
-) -> Bool:
+) raises -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False

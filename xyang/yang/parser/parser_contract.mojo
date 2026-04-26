@@ -5,23 +5,6 @@ from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.yang_token import YangToken
 
 comptime Arc = ArcPointer
-comptime YangContainer = ast.YangContainer
-comptime YangList = ast.YangList
-comptime YangChoice = ast.YangChoice
-comptime YangChoiceCase = ast.YangChoiceCase
-comptime YangLeaf = ast.YangLeaf
-comptime YangLeafList = ast.YangLeafList
-comptime YangAnydata = ast.YangAnydata
-comptime YangAnyxml = ast.YangAnyxml
-comptime YangType = ast.YangType
-comptime YangMust = ast.YangMust
-comptime YangWhen = ast.YangWhen
-comptime YangGrouping = ast.YangGrouping
-comptime YangTypedefStmt = ast.YangTypedefStmt
-comptime YangIdentityStmt = ast.YangIdentityStmt
-comptime YangExtensionStmt = ast.YangExtensionStmt
-comptime YangModuleImport = ast.YangModuleImport
-comptime YangModuleStatement = ast.YangModuleStatement
 
 
 trait ParserContract:
@@ -73,33 +56,33 @@ trait ParserContract:
     def _skip_statement_tail(mut self) raises:
         ...
 
-    def _parse_container_statement(mut self) raises -> YangContainer:
+    def _parse_container_statement(mut self) raises -> ast.YangContainer:
         ...
 
     def _parse_grouping_statement(mut self) raises:
         ...
 
-    def _store_grouping(mut self, var grouping: YangGrouping) raises:
+    def _store_grouping(mut self, var grouping: ast.YangGrouping) raises:
         ...
 
-    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[YangGrouping]]:
+    def _get_groupings_snapshot(ref self) -> Dict[String, Arc[ast.YangGrouping]]:
         ...
 
     def _parse_typedef_statement(mut self) raises:
         ...
 
     def _store_typedef(
-        mut self, name: String, read type_stmt: YangType, description: String
+        mut self, name: String, read type_stmt: ast.YangType, description: String
     ) raises:
         ...
 
-    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[YangTypedefStmt]]:
+    def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[ast.YangTypedefStmt]]:
         ...
 
-    def _record_module_statement(mut self, read stmt: YangModuleStatement):
+    def _record_module_statement(mut self, read stmt: ast.YangModuleStatement):
         ...
 
-    def _module_statements_snapshot(ref self) -> List[YangModuleStatement]:
+    def _module_statements_snapshot(ref self) -> List[ast.YangModuleStatement]:
         ...
 
     def _record_feature_if_feature(mut self, feature_name: String, if_feature: String):
@@ -108,88 +91,88 @@ trait ParserContract:
     def _feature_if_features_snapshot(ref self) -> Dict[String, List[String]]:
         ...
 
-    def _identities_snapshot(ref self) -> Dict[String, Arc[YangIdentityStmt]]:
+    def _identities_snapshot(ref self) -> Dict[String, Arc[ast.YangIdentityStmt]]:
         ...
 
-    def _extensions_snapshot(ref self) -> Dict[String, Arc[YangExtensionStmt]]:
+    def _extensions_snapshot(ref self) -> Dict[String, Arc[ast.YangExtensionStmt]]:
         ...
 
-    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[YangModuleImport]]:
+    def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[ast.YangModuleImport]]:
         ...
 
-    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[YangType]]:
+    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[ast.YangType]]:
         ...
 
     def _parse_module_augment_statement(
         mut self,
-        mut top_containers: List[Arc[YangContainer]],
+        mut top_containers: List[Arc[ast.YangContainer]],
     ) raises:
         ...
 
     def _apply_pending_module_augments(
         mut self,
-        mut top_containers: List[Arc[YangContainer]],
+        mut top_containers: List[Arc[ast.YangContainer]],
     ) raises:
         ...
 
     def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
         ...
 
-    def _parse_leaf_statement(mut self) raises -> YangLeaf:
+    def _parse_leaf_statement(mut self) raises -> ast.YangLeaf:
         ...
 
-    def _parse_leaf_list_statement(mut self) raises -> YangLeafList:
+    def _parse_leaf_list_statement(mut self) raises -> ast.YangLeafList:
         ...
 
-    def _parse_anydata_statement(mut self) raises -> YangAnydata:
+    def _parse_anydata_statement(mut self) raises -> ast.YangAnydata:
         ...
 
-    def _parse_anyxml_statement(mut self) raises -> YangAnyxml:
+    def _parse_anyxml_statement(mut self) raises -> ast.YangAnyxml:
         ...
 
-    def _parse_list_statement(mut self) raises -> YangList:
+    def _parse_list_statement(mut self) raises -> ast.YangList:
         ...
 
-    def _parse_choice_statement(mut self) raises -> YangChoice:
+    def _parse_choice_statement(mut self) raises -> ast.YangChoice:
         ...
 
-    def _parse_case_statement(mut self) raises -> YangChoiceCase:
+    def _parse_case_statement(mut self) raises -> ast.YangChoiceCase:
         ...
 
     def _parse_uses_statement(
         mut self,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         ...
 
     def _append_grouping_nodes_by_name(
         ref self,
         grouping_name: String,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         ...
 
     def _parse_relative_augment_statement(
         mut self,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         ...
 
@@ -198,13 +181,13 @@ trait ParserContract:
 
     def _parse_refine_statement(
         mut self,
-        mut leaves: List[Arc[YangLeaf]],
-        mut leaf_lists: List[Arc[YangLeafList]],
-        mut anydatas: List[Arc[YangAnydata]],
-        mut anyxmls: List[Arc[YangAnyxml]],
-        mut containers: List[Arc[YangContainer]],
-        mut lists: List[Arc[YangList]],
-        mut choices: List[Arc[YangChoice]],
+        mut leaves: List[Arc[ast.YangLeaf]],
+        mut leaf_lists: List[Arc[ast.YangLeafList]],
+        mut anydatas: List[Arc[ast.YangAnydata]],
+        mut anyxmls: List[Arc[ast.YangAnyxml]],
+        mut containers: List[Arc[ast.YangContainer]],
+        mut lists: List[Arc[ast.YangList]],
+        mut choices: List[Arc[ast.YangChoice]],
     ) raises:
         ...
 
@@ -214,7 +197,7 @@ trait ParserContract:
     def _skip_prefixed_extension_statement(mut self) raises:
         ...
 
-    def _parse_type_statement(mut self) raises -> YangType:
+    def _parse_type_statement(mut self) raises -> ast.YangType:
         ...
 
     def _parse_boolean_value(mut self) raises -> Bool:
@@ -229,13 +212,13 @@ trait ParserContract:
     def _unique_components_from_argument(mut self, arg: String) raises -> List[String]:
         ...
 
-    def _parse_must_statement(mut self) raises -> YangMust:
+    def _parse_must_statement(mut self) raises -> ast.YangMust:
         ...
 
-    def _parse_when_statement(mut self) raises -> YangWhen:
+    def _parse_when_statement(mut self) raises -> ast.YangWhen:
         ...
 
-    def _validate_choice_unique_node_names(mut self, read choice: YangChoice) raises:
+    def _validate_choice_unique_node_names(mut self, read choice: ast.YangChoice) raises:
         ...
 
     def _error(ref self, message: String) raises:

@@ -311,22 +311,14 @@ def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[ast.YangMust]]:
         ):
             desc = mobj[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
 
-        # Parse the must expression via the XPath parser when possible; store AST in YangMust (it owns and frees).
-        # If parsing fails (e.g. unsupported syntax like ('a','b')), xpath_ast is empty and parsed=False.
-        var ptr = Expr.ExprPointer()
-        var parsed = False
-        try:
-            ptr = parse_xpath(expr)
-            parsed = True
-        except e:
-            print("[x-yang must] parse_xpath failed for expression: ", expr, " error: ", String(e))
+        # Parse the must expression; YangMust only exists when parse_xpath succeeds.
+        var ptr = parse_xpath(expr)
         must_list.append(Arc[ast.YangMust](
             ast.YangMust(
                 expression = expr,
                 error_message = errmsg,
                 description = desc,
                 xpath_ast = ptr,
-                parsed = parsed,
             ),
         ))
     return must_list^

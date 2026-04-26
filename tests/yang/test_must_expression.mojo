@@ -232,8 +232,8 @@ def test_list_element_must_invalid() raises:
     assert_false(result.is_valid)
 
 
-def test_must_unparsed_expression_is_validation_error() raises:
-    # XPath parse failure must surface as a validation error, not be skipped.
+def test_unparseable_must_raises_at_schema_parse() raises:
+    # Invalid XPath in `must` is rejected when building the module, not at data validation.
     var schema = """
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -254,7 +254,7 @@ def test_must_unparsed_expression_is_validation_error() raises:
               "type": "string",
               "x-yang": {
                 "type": "leaf",
-                "must": [{"must": "('a','b')"}]
+                "must": [{"must": "1 +"}]
               }
             }
           }
@@ -262,11 +262,12 @@ def test_must_unparsed_expression_is_validation_error() raises:
       }
     }
     """
-    var mod = parse_yang_module(schema)
-    var data: Value = parse_json('{"data-model": {"name": "x"}}')
-    var validator = YangValidator()
-    var result = validator.validate(data, mod)
-    assert_false(result.is_valid)
+    var failed = False
+    try:
+        _ = parse_yang_module(schema)
+    except:
+        failed = True
+    assert_true(failed)
 
 
 def test_container_and_list_must_validation() raises:

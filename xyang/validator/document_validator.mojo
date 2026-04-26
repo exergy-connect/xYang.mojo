@@ -971,17 +971,6 @@ struct DocumentValidator:
         for i in range(len(leaf.must.must_statements)):
             ref must_ref = leaf.must.must_statements[i][]
             self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
-            if not must_ref.parsed or not must_ref.xpath_ast:
-                if len(must_ref.expression) > 0:
-                    self._errors.append(
-                        ValidationError(
-                            path=child_path,
-                            message="Must expression could not be parsed",
-                            expression=must_ref.expression,
-                            severity=Severity("error"),
-                        ),
-                    )
-                continue
             try:
                 var root_node = XPathNode("/", "/")
                 var root_arc = Arc[XPathNode](root_node^)
@@ -1137,17 +1126,6 @@ struct DocumentValidator:
         for i in range(len(must_statements)):
             ref must_ref = must_statements[i][]
             self._trace("Evaluate must at " + child_path + ": " + must_ref.expression)
-            if not must_ref.parsed or not must_ref.xpath_ast:
-                if len(must_ref.expression) > 0:
-                    self._errors.append(
-                        ValidationError(
-                            path=child_path,
-                            message="Must expression could not be parsed",
-                            expression=must_ref.expression,
-                            severity=Severity("error"),
-                        ),
-                    )
-                continue
             try:
                 var root_node = XPathNode("/", "/")
                 var root_arc = Arc[XPathNode](root_node^)
@@ -1188,17 +1166,6 @@ struct DocumentValidator:
         for i in range(len(must_statements)):
             ref must_ref = must_statements[i][]
             self._trace("Evaluate must at " + node_path + ": " + must_ref.expression)
-            if not must_ref.parsed or not must_ref.xpath_ast:
-                if len(must_ref.expression) > 0:
-                    self._errors.append(
-                        ValidationError(
-                            path=node_path,
-                            message="Must expression could not be parsed",
-                            expression=must_ref.expression,
-                            severity=Severity("error"),
-                        ),
-                    )
-                continue
             try:
                 var root_node = XPathNode("/", "/")
                 var root_arc = Arc[XPathNode](root_node^)
@@ -1567,17 +1534,6 @@ struct DocumentValidator:
                     )
             for j in range(len(leaf_list.must.must_statements)):
                 ref must_ref = leaf_list.must.must_statements[j][]
-                if not must_ref.parsed or not must_ref.xpath_ast:
-                    if len(must_ref.expression) > 0:
-                        self._errors.append(
-                            ValidationError(
-                                path=item_path,
-                                message="Must expression could not be parsed",
-                                expression=must_ref.expression,
-                                severity=Severity("error"),
-                            ),
-                        )
-                    continue
                 try:
                     var root_node = XPathNode("/", "/")
                     var root_arc = Arc[XPathNode](root_node^)

@@ -235,13 +235,11 @@ struct YangType(Movable):
 struct YangMust(Movable):
     ## Represents a YANG `must` expression attached to a leaf.
     ## - expression: raw XPath string from the schema (x-yang.must[].must)
-    ## - xpath_ast: parsed XPath AST root when parsed=True; do not dereference when parsed=False.
-    ## - parsed: True when parse_xpath succeeded; validator only evaluates when parsed.
+    ## - xpath_ast: parsed XPath AST from `parse_xpath(expression)`; construction implies parse succeeded.
     var expression: String
     var error_message: String
     var description: String
     var xpath_ast: Expr.ExprPointer
-    var parsed: Bool
 
     fn __del__(deinit self):
         if self.xpath_ast:

@@ -14,6 +14,7 @@ from xyang.yang.parser.module_stmt import parse_module_impl
 import xyang.yang.parser.grouping_uses_stmt as gu_stmt
 import xyang.yang.parser.refine_augment_stmt as ra_stmt
 import xyang.yang.parser.node_stmt as node_stmt
+import xyang.yang.parser.must_stmt as must_stmt
 import xyang.yang.parser.type_constraint_stmt as tc_stmt
 import xyang.yang.parser.clone_utils as clone_utils
 import xyang.yang.parser.semantics_utils as sem_utils
@@ -456,7 +457,7 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
         read aug: ParsedAugment,
-    ) -> Bool:
+    ) raises -> Bool:
         return ra_stmt.apply_augment_segments_impl(
             segments,
             seg_idx,
@@ -546,7 +547,7 @@ struct _YangParser(Movable, ParserContract):
         mut containers: List[Arc[ast.YangContainer]],
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
-    ) -> Bool:
+    ) raises -> Bool:
         return ra_stmt.refine_add_must_at_path_impl(
             segments,
             seg_idx,
@@ -692,7 +693,7 @@ struct _YangParser(Movable, ParserContract):
     def _ident_local_name(ref self, ident: String) -> String:
         return clone_utils.ident_local_name_impl(ident)
 
-    def _clone_must(ref self, read src: ast.YangMust) -> ast.YangMust:
+    def _clone_must(ref self, read src: ast.YangMust) raises -> ast.YangMust:
         return clone_utils.clone_must_impl(src)
 
     def _clone_when(ref self, read src: ast.YangWhen) -> ast.YangWhen:
@@ -703,12 +704,12 @@ struct _YangParser(Movable, ParserContract):
 
     def _clone_leaf_arc(
         ref self, read src: Arc[ast.YangLeaf]
-    ) -> Arc[ast.YangLeaf]:
+    ) raises -> Arc[ast.YangLeaf]:
         return clone_utils.clone_leaf_arc_impl(src)
 
     def _clone_leaf_list_arc(
         ref self, read src: Arc[ast.YangLeafList]
-    ) -> Arc[ast.YangLeafList]:
+    ) raises -> Arc[ast.YangLeafList]:
         return clone_utils.clone_leaf_list_arc_impl(src)
 
     def _clone_choice_arc(
@@ -718,29 +719,29 @@ struct _YangParser(Movable, ParserContract):
 
     def _clone_anydata_arc(
         ref self, read src: Arc[ast.YangAnydata]
-    ) -> Arc[ast.YangAnydata]:
+    ) raises -> Arc[ast.YangAnydata]:
         return clone_utils.clone_anydata_arc_impl(src)
 
     def _clone_anyxml_arc(
         ref self, read src: Arc[ast.YangAnyxml]
-    ) -> Arc[ast.YangAnyxml]:
+    ) raises -> Arc[ast.YangAnyxml]:
         return clone_utils.clone_anyxml_arc_impl(src)
 
     def _clone_container_arc(
         ref self, read src: Arc[ast.YangContainer]
-    ) -> Arc[ast.YangContainer]:
+    ) raises -> Arc[ast.YangContainer]:
         return clone_utils.clone_container_arc_impl(src)
 
     def _clone_list_arc(
         ref self, read src: Arc[ast.YangList]
-    ) -> Arc[ast.YangList]:
+    ) raises -> Arc[ast.YangList]:
         return clone_utils.clone_list_arc_impl(src)
 
     def _parse_type_statement(mut self) raises -> ast.YangType:
         return tc_stmt.parse_type_statement_impl(self)
 
     def _parse_must_statement(mut self) raises -> ast.YangMust:
-        return tc_stmt.parse_must_statement_impl(self)
+        return must_stmt.parse_must_statement_impl(self)
 
     def _parse_when_statement(mut self) raises -> ast.YangWhen:
         return tc_stmt.parse_when_statement_impl(self)
