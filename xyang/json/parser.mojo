@@ -85,7 +85,6 @@ def _empty_type(name: String) -> ast.YangType:
     return ast.YangType(
         name=name,
         constraints=ast.YangTypePlain(_pad=0),
-        union_members=List[Arc[ast.YangType]](),
     )
 
 
@@ -176,7 +175,12 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
         bits_names^,
         identityref_base,
     )
-    return ast.YangType(name=ty_name, constraints=cons, union_members=union_members^)
+    if ty_name == yang_token.YANG_STMT_UNION:
+        return ast.YangType(
+            name=ty_name,
+            constraints=ast.YangTypeUnion(union_members=union_members^),
+        )
+    return ast.YangType(name=ty_name, constraints=cons)
 
 
 def _json_schema_yang_constraints(

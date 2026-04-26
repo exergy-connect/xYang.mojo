@@ -2,6 +2,7 @@ from std.memory import ArcPointer
 from xyang.ast import (
     YangType,
     YangTypePlain,
+    YangTypeUnion,
     YangMust,
     YangWhen,
 )
@@ -123,14 +124,12 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 bits_names^,
                 identityref_base,
             ),
-            union_members = union_types^,
         )
 
     if type_name == YANG_STMT_UNION:
         return YangType(
             name = type_name,
-            constraints = YangTypePlain(_pad=0),
-            union_members = union_types^,
+            constraints = YangTypeUnion(union_members = union_types^),
         )
 
     var typedef_opt = parser._resolve_typedef_type(type_name)
@@ -154,7 +153,6 @@ def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
             bits_names^,
             identityref_base,
         ),
-        union_members = List[Arc[YangType]](),
     )
 
 
@@ -165,7 +163,6 @@ def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) r
     var type_stmt = YangType(
         name = "string",
         constraints = YangTypePlain(_pad=0),
-        union_members = List[Arc[YangType]](),
     )
     if parser._consume_if(YangToken.LBRACE):
         while parser._has_more() and parser._peek() != YangToken.RBRACE:

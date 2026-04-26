@@ -98,5 +98,54 @@ def test_validator_enforces_enum_and_union() raises:
     assert_false(bad_union_result.is_valid)
 
 
+def _module_mixed_union() raises -> YangModule:
+    return parse_yang_string(
+        """
+        module test-mixed-union {
+          yang-version 1.1;
+          namespace "urn:test:mixed-union";
+          prefix tmu;
+
+          container cfg {
+            leaf speed-or-mode {
+              type union {
+                type uint16;
+                type enumeration {
+                  enum auto;
+                  enum off;
+                }
+              }
+            }
+          }
+        }
+        """
+    )
+
+
+def test_union_with_inline_enumeration_member() raises:
+    var module = _module_mixed_union()
+    ref cfg = module.top_level_containers[0][]
+    assert_equal(len(cfg.leaves), 1)
+    ref speed_or_mode = cfg.leaves[0][]
+
+    assert_equal(speed_or_mode.type.name, "union")
+    assert_equal(speed_or_mode.type.union_members_len(), 2)
+    assert_equal(speed_or_mode.type.union_member_arc(0)[].name, "uint16")
+    assert_equal(speed_or_mode.type.union_member_arc(1)[].name, "enumeration")
+    assert_equal(speed_or_mode.type.union_member_arc(1)[].enum_values_len(), 2)
+    assert_equal(speed_or_mode.type.union_member_arc(1)[].enum_value_at(0), "auto")
+    assert_equal(speed_or_mode.type.union_member_arc(1)[].enum_value_at(1), "off")
+
+    var validator = YangValidator()
+    var ok_number: Value = parse_json("""{"cfg":{"speed-or-mode":1200}}""")
+    assert_true(validator.validate(ok_number, module).is_valid)
+
+    var ok_enum: Value = parse_json("""{"cfg":{"speed-or-mode":"auto"}}""")
+    assert_true(validator.validate(ok_enum, module).is_valid)
+
+    var bad_value: Value = parse_json("""{"cfg":{"speed-or-mode":"manual"}}""")
+    assert_false(validator.validate(bad_value, module).is_valid)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

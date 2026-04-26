@@ -55,6 +55,11 @@ struct YangTypeIdentityref(Movable):
 
 
 @fieldwise_init
+struct YangTypeUnion(Movable):
+    var union_members: List[Arc[YangType]]
+
+
+@fieldwise_init
 struct YangType(Movable):
     comptime Constraints = Variant[
         YangTypePlain,
@@ -64,11 +69,10 @@ struct YangType(Movable):
         YangTypeLeafref,
         YangTypeBits,
         YangTypeIdentityref,
+        YangTypeUnion,
     ]
     var name: String
     var constraints: Self.Constraints
-    ## Populated only for `name == "union"`; otherwise empty.
-    var union_members: List[Arc[YangType]]
 
     def __str__(self) -> String:
         if self.constraints.isa[YangTypeLeafref]():
@@ -103,11 +107,14 @@ struct YangType(Movable):
                 + ")"
             )
         if self.name == "union":
+            var member_count = 0
+            if self.constraints.isa[YangTypeUnion]():
+                member_count = len(self.constraints[YangTypeUnion].union_members)
             return (
                 "YangType("
                 + self.name
                 + ", types="
-                + String(len(self.union_members))
+                + String(member_count)
                 + ")"
             )
         return "YangType(" + self.name + ")"
@@ -164,10 +171,12 @@ struct YangType(Movable):
     # --- union member types ---
 
     def union_members_len(read self) -> Int:
-        return len(self.union_members)
+        if self.constraints.isa[YangTypeUnion]():
+            return len(self.constraints[YangTypeUnion].union_members)
+        return 0
 
     def union_member_arc(read self, i: Int) -> Arc[YangType]:
-        return self.union_members[i]
+        return self.constraints[YangTypeUnion].union_members[i]
 
     # --- leafref ---
 

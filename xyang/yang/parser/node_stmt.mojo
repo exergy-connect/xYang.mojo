@@ -238,7 +238,6 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
     var type_stmt = YangType(
         name = YANG_TYPE_UNKNOWN,
         constraints = YangTypePlain(_pad=0),
-        union_members = List[Arc[YangType]](),
     )
     var mandatory = False
     var has_default = False
@@ -297,7 +296,6 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
     var type_stmt = YangType(
         name = YANG_TYPE_UNKNOWN,
         constraints = YangTypePlain(_pad=0),
-        union_members = List[Arc[YangType]](),
     )
     var must = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()

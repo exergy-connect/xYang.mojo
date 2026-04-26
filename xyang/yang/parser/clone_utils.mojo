@@ -20,6 +20,7 @@ comptime YangTypeEnumeration = ast.YangTypeEnumeration
 comptime YangTypeLeafref = ast.YangTypeLeafref
 comptime YangTypeBits = ast.YangTypeBits
 comptime YangTypeIdentityref = ast.YangTypeIdentityref
+comptime YangTypeUnion = ast.YangTypeUnion
 comptime YangMust = ast.YangMust
 comptime YangMustStatements = ast.YangMustStatements
 comptime YangWhen = ast.YangWhen
@@ -96,7 +97,6 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
         return YangType(
             name = src.name,
             constraints = YangTypeEnumeration(enum_values^),
-            union_members = union_members^,
         )
 
     if src.name == "decimal64":
@@ -108,7 +108,6 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
                 src.decimal64_range_min(),
                 src.decimal64_range_max(),
             ),
-            union_members = union_members^,
         )
 
     if src.name == YANG_TYPE_LEAFREF:
@@ -118,7 +117,6 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
                 src.leafref_path(),
                 src.leafref_require_instance(),
             ),
-            union_members = union_members^,
         )
 
     if src.name == "bits":
@@ -128,21 +126,18 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
         return YangType(
             name = src.name,
             constraints = YangTypeBits(names^),
-            union_members = union_members^,
         )
 
     if src.name == "identityref":
         return YangType(
             name = src.name,
             constraints = YangTypeIdentityref(src.identityref_base()),
-            union_members = union_members^,
         )
 
     if src.name == "union":
         return YangType(
             name = src.name,
-            constraints = YangTypePlain(_pad=0),
-            union_members = union_members^,
+            constraints = YangTypeUnion(union_members = union_members^),
         )
 
     if (
@@ -164,13 +159,11 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
                 src.range_min(),
                 src.range_max(),
             ),
-            union_members = union_members^,
         )
 
     return YangType(
         name = src.name,
         constraints = YangTypePlain(_pad=0),
-        union_members = union_members^,
     )
 
 
