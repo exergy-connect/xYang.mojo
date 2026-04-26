@@ -2,7 +2,7 @@
 
 from emberjson import parse, Value
 from std.collections import Dict
-from std.memory import ArcPointer
+from std.memory import ArcPointer, UnsafePointer
 from xyang.xpath import parse_xpath
 import xyang.ast as ast
 import xyang.yang.parser.yang_token as yang_token
@@ -89,7 +89,9 @@ def _leaf_type_name_from_prop(prop: Value) raises -> String:
 def _empty_type(name: String) -> ast.YangType:
     return ast.YangType(
         name=name,
-        constraints=ast.YangTypePlain(_pad=0),
+        constraints=ast.YangTypeTypedef(
+            resolved=UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+        ),
     )
 
 
@@ -242,7 +244,9 @@ def _json_schema_yang_constraints(
         return ast.YangTypeEnumeration(enum_values^)
     if ty_name == yang_token.YANG_TYPE_LEAFREF:
         if len(lr_path) == 0:
-            return ast.YangTypePlain(_pad=0)
+            return ast.YangTypeTypedef(
+                resolved=UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+            )
         return ast.YangTypeLeafref(
             lr_path^,
             lr_require_inst,
@@ -260,7 +264,9 @@ def _json_schema_yang_constraints(
         return ast.YangTypeIdentityref(identityref_base^)
     if ty_name == "string":
         return ast.YangTypeString(string_pattern^)
-    return ast.YangTypePlain(_pad=0)
+    return ast.YangTypeTypedef(
+        resolved=UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+    )
 
 
 def _is_required(prop_key: String, container_prop: Value) raises -> Bool:

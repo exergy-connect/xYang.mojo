@@ -1,7 +1,7 @@
 ## Minimal YANG AST model in Mojo for xYang.mojo.
 
 from std.collections import Dict
-from std.memory import ArcPointer
+from std.memory import ArcPointer, UnsafePointer
 from std.utils import Variant
 from emberjson import JsonDeserializable
 from xyang.xpath import Expr
@@ -11,11 +11,10 @@ comptime Arc = ArcPointer
 
 ## --- YANG `type` statement: lexical name + constraint payload (mutually exclusive shapes). ---
 
-
 @fieldwise_init
-struct YangTypePlain(Movable):
-    var _pad: UInt8
-
+## When non-null, `resolved` points at the module `typedef` for this `type` reference (external lifetime; not owned here).
+struct YangTypeTypedef(Movable):
+    var resolved: UnsafePointer[YangTypedefStmt, MutExternalOrigin]
 
 @fieldwise_init
 struct YangTypeIntegerRange(Movable):
@@ -68,7 +67,7 @@ struct YangTypeUnion(Movable):
 @fieldwise_init
 struct YangType(Movable):
     comptime Constraints = Variant[
-        YangTypePlain,
+        YangTypeTypedef,
         YangTypeIntegerRange,
         YangTypeDecimal64,
         YangTypeEnumeration,
@@ -124,6 +123,16 @@ struct YangType(Movable):
                 + String(member_count)
                 + ")"
             )
+        if self.constraints.isa[YangTypeTypedef]():
+            ref tdef = self.constraints[YangTypeTypedef]
+            if tdef.resolved:
+                return (
+                    "YangType("
+                    + self.name
+                    + ", typedef="
+                    + tdef.resolved[].name
+                    + ")"
+                )
         return "YangType(" + self.name + ")"
 
     # --- Integer / numeric range (integer types, `integer`, `number` with optional range) ---
@@ -227,6 +236,16 @@ struct YangType(Movable):
     def string_pattern(read self) -> String:
         if self.name == "string" and self.constraints.isa[YangTypeString]():
             return self.constraints[YangTypeString].pattern
+        return ""
+
+    # --- optional resolved `typedef` (see `YangTypeTypedef`) ---
+
+    def typedef_reference(read self) -> String:
+        if self.constraints.isa[YangTypeTypedef]():
+            ref tdef = self.constraints[YangTypeTypedef]
+            if tdef.resolved:
+                return tdef.resolved[].name
+            return self.name
         return ""
 
 

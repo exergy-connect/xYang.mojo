@@ -103,6 +103,11 @@ trait ParserContract:
     def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[ast.YangType]]:
         ...
 
+    def _parse_yang_type(
+        mut self, read type_name: String
+    ) raises -> ast.YangType:
+        ...
+
     def _parse_module_augment_statement(
         mut self,
         mut top_containers: List[Arc[ast.YangContainer]],

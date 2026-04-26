@@ -1,4 +1,5 @@
-from std.memory import ArcPointer
+from std.collections import Dict
+from std.memory import ArcPointer, UnsafePointer
 from xyang.ast import (
     YangType,
     YangTypeBits,
@@ -7,7 +8,8 @@ from xyang.ast import (
     YangTypeIdentityref,
     YangTypeIntegerRange,
     YangTypeLeafref,
-    YangTypePlain,
+    YangTypedefStmt,
+    YangTypeTypedef,
     YangTypeString,
     YangTypeUnion,
 )
@@ -17,6 +19,69 @@ from xyang.yang.parser.clone_utils import clone_yang_type_impl
 
 comptime Arc = ArcPointer
 
+def new_builtin_type_parser_table[ParserT: ParserContract](
+    out m: Dict[String, fn (mut ParserT, String, out YangType) raises]
+):
+    m = Dict[String, fn (mut ParserT, String, out YangType) raises]()
+    m[yang_token.YANG_TYPE_DECIMAL64] = _builtin_type_parse_decimal64[ParserT]
+    # m[yang_token.YANG_TYPE_ENUMERATION] = _builtin_type_parse_enumeration[ParserT]
+    # m["integer"] = _builtin_type_parse_integer_range[ParserT]
+    # m["number"] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_INT8] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_INT16] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_INT32] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_INT64] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_UINT8] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_UINT16] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_UINT32] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_UINT64] = _builtin_type_parse_integer_range[ParserT]
+    # m[yang_token.YANG_TYPE_LEAFREF] = _builtin_type_parse_leafref[ParserT]
+    # m[yang_token.YANG_STMT_UNION] = _builtin_type_parse_union[ParserT]
+    # m[yang_token.YANG_TYPE_BITS] = _builtin_type_parse_bits[ParserT]
+    # m[yang_token.YANG_TYPE_IDENTITYREF] = _builtin_type_parse_identityref[ParserT]
+    # m[yang_token.YANG_TYPE_STRING] = _builtin_type_parse_string[ParserT]
+
+def _builtin_type_parse_decimal64[ParserT: ParserContract](
+    mut p: ParserT, n: String, out out_type: YangType
+) raises:
+    var name = n
+    var fd = 0
+    var has_r = False
+    var lo = Float64(0.0)
+    var hi = Float64(0.0)
+    if p._consume_if(yang_token.YangToken.LBRACE):
+        while p._has_more() and p._peek() != yang_token.YangToken.RBRACE:
+            var s = p._peek()
+            if s == yang_token.YangToken.RANGE:
+                p._consume()
+                var r_ex = p._consume_argument_value()
+                var parts = r_ex.split("..")
+                if len(parts) == 2:
+                    try:
+                        lo = atof(parts[0].strip())
+                        hi = atof(parts[1].strip())
+                        has_r = True
+                    except:
+                        has_r = False
+                else:
+                    has_r = False
+                p._skip_if(yang_token.YangToken.SEMICOLON)
+            elif s == yang_token.YangToken.FRACTION_DIGITS:
+                p._consume()
+                try:
+                    var d = atol(p._consume_name().strip())
+                    if d >= 1 and d <= 18:
+                        fd = Int(d)
+                except:
+                    pass
+                p._skip_if(yang_token.YangToken.SEMICOLON)
+            else:
+                p._skip_statement()
+        p._expect(yang_token.YangToken.RBRACE)
+    p._skip_if(yang_token.YangToken.SEMICOLON)
+    out_type = YangType(
+        name = name, constraints = YangTypeDecimal64(fd, has_r, lo, hi)
+    )
 
 def _type_name_uses_integer_range_substmts(name: String) -> Bool:
     if name == "integer" or name == "number":
@@ -272,8 +337,10 @@ def parse_type_statement_impl[ParserT: ParserContract](
     # Fallback: boolean, empty, unknown keyword, etc.
     _type_skip_rest_of_statement(parser)
     return YangType(
-        name = type_name,
-        constraints = YangTypePlain(_pad=0),
+        name=type_name,
+        constraints=YangTypeTypedef(
+            resolved=UnsafePointer[YangTypedefStmt, MutExternalOrigin](),
+        ),
     )
 
 

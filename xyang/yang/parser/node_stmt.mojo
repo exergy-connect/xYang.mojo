@@ -1,4 +1,4 @@
-from std.memory import ArcPointer
+from std.memory import ArcPointer, UnsafePointer
 import xyang.ast as ast
 from xyang.yang.parser.yang_token import (
     YangToken,
@@ -16,7 +16,7 @@ comptime YangLeafList = ast.YangLeafList
 comptime YangAnydata = ast.YangAnydata
 comptime YangAnyxml = ast.YangAnyxml
 comptime YangType = ast.YangType
-comptime YangTypePlain = ast.YangTypePlain
+comptime YangTypeTypedef = ast.YangTypeTypedef
 comptime YangMust = ast.YangMust
 comptime YangMustStatements = ast.YangMustStatements
 comptime YangWhen = ast.YangWhen
@@ -237,7 +237,9 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
 
     var type_stmt = YangType(
         name = YANG_TYPE_UNKNOWN,
-        constraints = YangTypePlain(_pad=0),
+        constraints = YangTypeTypedef(
+            resolved = UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+        ),
     )
     var mandatory = False
     var has_default = False
@@ -295,7 +297,9 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
 
     var type_stmt = YangType(
         name = YANG_TYPE_UNKNOWN,
-        constraints = YangTypePlain(_pad=0),
+        constraints = YangTypeTypedef(
+            resolved = UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+        ),
     )
     var must = List[Arc[YangMust]]()
     var when = Optional[YangWhen]()

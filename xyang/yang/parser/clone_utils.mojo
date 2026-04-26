@@ -1,4 +1,4 @@
-from std.memory import ArcPointer
+from std.memory import ArcPointer, UnsafePointer
 import xyang.ast as ast
 from xyang.xpath import parse_xpath
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
@@ -13,7 +13,7 @@ comptime YangLeafList = ast.YangLeafList
 comptime YangAnydata = ast.YangAnydata
 comptime YangAnyxml = ast.YangAnyxml
 comptime YangType = ast.YangType
-comptime YangTypePlain = ast.YangTypePlain
+comptime YangTypeTypedef = ast.YangTypeTypedef
 comptime YangTypeIntegerRange = ast.YangTypeIntegerRange
 comptime YangTypeDecimal64 = ast.YangTypeDecimal64
 comptime YangTypeEnumeration = ast.YangTypeEnumeration
@@ -147,9 +147,19 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
             constraints = YangTypeString(src.string_pattern()),
         )
 
+    if src.constraints.isa[YangTypeTypedef]():
+        return YangType(
+            name = src.name,
+            constraints = YangTypeTypedef(
+                resolved=src.constraints[YangTypeTypedef].resolved,
+            ),
+        )
+
     return YangType(
         name = src.name,
-        constraints = YangTypePlain(_pad=0),
+        constraints = YangTypeTypedef(
+            resolved = UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+        ),
     )
 
 

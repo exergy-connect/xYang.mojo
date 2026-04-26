@@ -7,7 +7,7 @@
 ## - must on leaves with optional error-message/description block
 
 from std.collections import Dict
-from std.memory import ArcPointer
+from std.memory import ArcPointer, UnsafePointer
 import xyang.ast as ast
 from xyang.yang.parser.tokenizer import tokenize_yang_impl
 from xyang.yang.parser.module_stmt import parse_module_impl
@@ -20,6 +20,7 @@ import xyang.yang.parser.when_stmt as when_stmt
 import xyang.yang.parser.clone_utils as clone_utils
 import xyang.yang.parser.semantics_utils as sem_utils
 from xyang.yang.parser.parser_contract import ParserContract
+import xyang.yang.parser.yang_token as yang_token
 from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 
@@ -39,6 +40,10 @@ struct _YangParser(Movable, ParserContract):
     var module_statements: List[ast.YangModuleStatement]
     var feature_if_features: Dict[String, List[String]]
     var pending_module_augments: List[Arc[ParsedAugment]]
+    ## Built-in `type` keyword → parse function (`tc_stmt.new_builtin_type_parser_table`).
+    var _builtin_type_parsers: Dict[
+        String, fn (mut _YangParser, String, out ast.YangType) raises
+    ]
 
     def __init__(out self, source: String):
         self.tokens = tokenize_yang_impl(source)
@@ -53,6 +58,7 @@ struct _YangParser(Movable, ParserContract):
         self.module_statements = List[ast.YangModuleStatement]()
         self.feature_if_features = Dict[String, List[String]]()
         self.pending_module_augments = List[Arc[ParsedAugment]]()
+        self._builtin_type_parsers = tc_stmt.new_builtin_type_parser_table[_YangParser]()
 
     def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
         self.pending_module_augments.append(Arc[ParsedAugment](aug^))
@@ -189,6 +195,20 @@ struct _YangParser(Movable, ParserContract):
         ref self, name: String
     ) -> Optional[Arc[ast.YangType]]:
         return self.typedefs.get(name)
+
+    def _parse_yang_type(
+        mut self, read type_name: String
+    ) raises -> ast.YangType:
+        var f = self._builtin_type_parsers.get(type_name)
+        var t = String(type_name)
+        if f:
+            return f.value()(self, t^)
+        return ast.YangType(
+            name=t^,
+            constraints=ast.YangTypeTypedef(
+                resolved=UnsafePointer[ast.YangTypedefStmt, MutExternalOrigin](),
+            ),
+        )
 
     def _get_typedef_statements_snapshot(
         ref self,
