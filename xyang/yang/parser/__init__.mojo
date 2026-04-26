@@ -1,7 +1,7 @@
 from xyang.ast import YangModule
 from xyang.yang.parser.parser import _YangParser
 from xyang.yang.parser.tokenizer import tokenize_yang_impl
-from xyang.yang.parser.types import YangToken
+from xyang.yang.parser.yang_token import YangToken
 
 
 def parse_yang_string(source: String) raises -> YangModule:

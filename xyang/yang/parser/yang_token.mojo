@@ -68,6 +68,7 @@ comptime YANG_STMT_ORDERED_BY = "ordered-by"
 comptime YANG_STMT_UNIQUE = "unique"
 comptime YANG_STMT_TYPEDEF = "typedef"
 comptime YANG_STMT_IDENTITY = "identity"
+comptime YANG_STMT_PATTERN = "pattern"
 
 
 @fieldwise_init
@@ -157,6 +158,7 @@ struct YangToken(Copyable):
     comptime UNIQUE: Self.Type = 71
     comptime TYPEDEF: Self.Type = 72
     comptime IDENTITY: Self.Type = 73
+    comptime PATTERN: Self.Type = 74
 
     var type: Self.Type
     var start: Int
@@ -242,5 +244,6 @@ def make_keyword_type_map() -> Dict[String, YangToken.Type]:
     d[YANG_STMT_UNIQUE] = YangToken.UNIQUE
     d[YANG_STMT_TYPEDEF] = YangToken.TYPEDEF
     d[YANG_STMT_IDENTITY] = YangToken.IDENTITY
+    d[YANG_STMT_PATTERN] = YangToken.PATTERN
 
     return d^

@@ -106,6 +106,7 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
     var dec_max = Float64(0.0)
     var bits_names = List[String]()
     var identityref_base = ""
+    var string_pattern = ""
 
     if (
         schema_keys.JSON_SCHEMA_ENUM in obj
@@ -196,6 +197,13 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
         if ty_name == yang_token.YANG_TYPE_IDENTITYREF and schema_keys.XYANG_BASE in xy.object() and xy.object()[schema_keys.XYANG_BASE].is_string():
             identityref_base = xy.object()[schema_keys.XYANG_BASE].string()
 
+    if (
+        ty_name == "string"
+        and schema_keys.JSON_SCHEMA_PATTERN in obj
+        and obj[schema_keys.JSON_SCHEMA_PATTERN].is_string()
+    ):
+        string_pattern = obj[schema_keys.JSON_SCHEMA_PATTERN].string()
+
     var cons = _json_schema_yang_constraints(
         ty_name,
         enum_values^,
@@ -207,6 +215,7 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
         dec_max,
         bits_names^,
         identityref_base,
+        string_pattern^,
     )
     if ty_name == yang_token.YANG_STMT_UNION:
         return ast.YangType(
@@ -227,6 +236,7 @@ def _json_schema_yang_constraints(
     dec_max: Float64,
     var bits_names: List[String],
     var identityref_base: String,
+    var string_pattern: String,
 ) -> ast.YangType.Constraints:
     if ty_name == yang_token.YANG_TYPE_ENUMERATION:
         return ast.YangTypeEnumeration(enum_values^)
@@ -248,6 +258,8 @@ def _json_schema_yang_constraints(
         return ast.YangTypeBits(bits_names^)
     if ty_name == yang_token.YANG_TYPE_IDENTITYREF:
         return ast.YangTypeIdentityref(identityref_base^)
+    if ty_name == "string":
+        return ast.YangTypeString(string_pattern^)
     return ast.YangTypePlain(_pad=0)
 
 

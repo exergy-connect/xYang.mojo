@@ -18,7 +18,7 @@ import xyang.yang.parser.type_constraint_stmt as tc_stmt
 import xyang.yang.parser.clone_utils as clone_utils
 import xyang.yang.parser.semantics_utils as sem_utils
 from xyang.yang.parser.parser_contract import ParserContract
-from xyang.yang.parser.types import YangToken
+from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.parsed_augment import ParsedAugment
 
 comptime Arc = ArcPointer

@@ -9,7 +9,10 @@ alwaysApply: true
 1. After editing anything under `xyang/`, rebuild the library:
    `pixi run build-lib`
 2. Do **not** run the full `tests` or `tests-mojopkg` suites by default; they are slow. Use `compile-check` or a single targeted test. Run the full mojopkg test sweep only when a broad regression check is needed.
-3. To validate **source** directly (e.g. before a full `build-lib`), you may use `pixi run mojo format --quiet [.mojo file]`.
+3. To validate **source** directly (e.g. before a full `build-lib`), you may use `pixi run mojo format --quiet <file.mojo>`.
+4. To run **one** test entry file (Mojo 0.26+ does not allow multiple `.mojo` entry paths in a single `mojo` invocation):
+   `pixi run mojo -I . tests/yang/<name>.mojo`  
+   Example: `pixi run mojo -I . tests/yang/test_when_expression.mojo`
 
 # Mojo AST & Ownership Patterns
 

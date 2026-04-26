@@ -55,6 +55,12 @@ struct YangTypeIdentityref(Movable):
 
 
 @fieldwise_init
+## Built-in `string` (YANG) constraints: regex pattern, empty = unconstrained.
+struct YangTypeString(Movable):
+    var pattern: String
+
+
+@fieldwise_init
 struct YangTypeUnion(Movable):
     var union_members: List[Arc[YangType]]
 
@@ -69,6 +75,7 @@ struct YangType(Movable):
         YangTypeLeafref,
         YangTypeBits,
         YangTypeIdentityref,
+        YangTypeString,
         YangTypeUnion,
     ]
     var name: String
@@ -206,6 +213,20 @@ struct YangType(Movable):
     def identityref_base(read self) -> String:
         if self.constraints.isa[YangTypeIdentityref]():
             return self.constraints[YangTypeIdentityref].identityref_base
+        return ""
+
+    # --- string (YANG) pattern ---
+
+    def has_string_pattern(read self) -> Bool:
+        if self.name != "string":
+            return False
+        if self.constraints.isa[YangTypeString]():
+            return len(self.constraints[YangTypeString].pattern) > 0
+        return False
+
+    def string_pattern(read self) -> String:
+        if self.name == "string" and self.constraints.isa[YangTypeString]():
+            return self.constraints[YangTypeString].pattern
         return ""
 
 

@@ -1,6 +1,6 @@
 from std.collections import Dict
 from std.collections.string import Codepoint
-from xyang.yang.parser.types import YangToken
+from xyang.yang.parser.yang_token import YangToken
 from xyang.yang.parser.yang_token import make_keyword_type_map
 
 comptime CP_NEWLINE = Codepoint.ord("\n")

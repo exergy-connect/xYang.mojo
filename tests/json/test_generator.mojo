@@ -7,6 +7,36 @@ from xyang.json.parser import parse_json_schema
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 
 
+def test_string_type_emits_json_schema_pattern() raises:
+    var module = parse_yang_string(
+        """
+        module test-string-pattern {
+          yang-version 1.1;
+          namespace "urn:test:string-pattern";
+          prefix tsp;
+
+          container c {
+            leaf id {
+              type string {
+                pattern "[0-9a-f]+";
+              }
+            }
+          }
+        }
+        """
+    )
+    var root = generate_json_schema(module)
+    ref c_props = (
+        root.object()["properties"]["c"].object()["properties"].object()
+    )
+    ref id_prop = c_props["id"].object()
+    assert_true("pattern" in id_prop)
+    assert_equal(
+        id_prop["pattern"].string(),
+        "^[0-9a-f]+$",
+    )
+
+
 def test_schema_roundtrip_basic_device() raises:
     var path = "examples/basic_yang/basic-device.yang"
     var module = parse_yang_file(path)

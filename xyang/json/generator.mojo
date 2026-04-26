@@ -123,6 +123,16 @@ def _leaf_list_xyang(read ll: ast.YangLeafList) raises -> Object:
     return xy^
 
 
+def _json_schema_pattern_from_yang_str(read p: String) -> String:
+    ## RFC 7950 patterns are XSD regexes; align with Python xYang by anchoring
+    ## as full JSON Schema pattern when the model is not already anchored.
+    if len(p) == 0:
+        return p
+    if p.startswith("^") and p.endswith("$"):
+        return p
+    return "^" + p + "$"
+
+
 def _type_schema(
     read t: ast.YangType,
     read typedefs: Dict[String, Arc[ast.YangTypedefStmt]],
@@ -225,6 +235,14 @@ def _type_schema(
             xy[schema_keys.XYANG_BASE] = Value(t.identityref_base())
         o[schema_keys.JSON_SCHEMA_X_YANG] = Value(xy^)
         return o^
+    if tn == "string":
+        var st = Object()
+        st[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_STRING)
+        if t.has_string_pattern():
+            st[schema_keys.JSON_SCHEMA_PATTERN] = Value(
+                _json_schema_pattern_from_yang_str(t.string_pattern())
+            )
+        return st^
     var s = Object()
     s[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_STRING)
     return s^
@@ -233,7 +251,21 @@ def _type_schema(
 def _default_json_value(default_text: String, type_name: String) raises -> Optional[Value]:
     if len(default_text) == 0:
         return Optional[Value]()
-    _ = type_name
+    if (
+        type_name == "int8"
+        or type_name == "int16"
+        or type_name == "int32"
+        or type_name == "int64"
+        or type_name == "uint8"
+        or type_name == "uint16"
+        or type_name == "uint32"
+        or type_name == "uint64"
+        or type_name == "integer"
+    ):
+        try:
+            return Optional(Value(Int64(atol(default_text.strip()))))
+        except:
+            return Optional[Value]()
     return Optional(Value(default_text))
 
 

@@ -21,6 +21,7 @@ comptime YangTypeLeafref = ast.YangTypeLeafref
 comptime YangTypeBits = ast.YangTypeBits
 comptime YangTypeIdentityref = ast.YangTypeIdentityref
 comptime YangTypeUnion = ast.YangTypeUnion
+comptime YangTypeString = ast.YangTypeString
 comptime YangMust = ast.YangMust
 comptime YangMustStatements = ast.YangMustStatements
 comptime YangWhen = ast.YangWhen
@@ -159,6 +160,12 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
                 src.range_min(),
                 src.range_max(),
             ),
+        )
+
+    if src.name == "string" and src.constraints.isa[YangTypeString]():
+        return YangType(
+            name = "string",
+            constraints = YangTypeString(src.string_pattern()),
         )
 
     return YangType(

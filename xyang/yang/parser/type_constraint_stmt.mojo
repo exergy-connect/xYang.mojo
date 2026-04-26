@@ -1,210 +1,334 @@
 from std.memory import ArcPointer
 from xyang.ast import (
     YangType,
+    YangTypeBits,
+    YangTypeDecimal64,
+    YangTypeEnumeration,
+    YangTypeIdentityref,
+    YangTypeIntegerRange,
+    YangTypeLeafref,
     YangTypePlain,
+    YangTypeString,
     YangTypeUnion,
     YangMust,
     YangWhen,
 )
 from xyang.xpath import parse_xpath, Expr
 import xyang.yang.parser.yang_token as yang_token
-from xyang.yang.parser.state_support import _yang_constraints_for_parsed_type
 from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.clone_utils import clone_yang_type_impl
 
 comptime Arc = ArcPointer
-comptime YangToken = yang_token.YangToken
-comptime YANG_STMT_ENUM = yang_token.YANG_STMT_ENUM
-comptime YANG_STMT_UNION = yang_token.YANG_STMT_UNION
-comptime YANG_TYPE_BITS = yang_token.YANG_TYPE_BITS
-comptime YANG_TYPE_DECIMAL64 = yang_token.YANG_TYPE_DECIMAL64
-comptime YANG_TYPE_ENUMERATION = yang_token.YANG_TYPE_ENUMERATION
-comptime YANG_TYPE_IDENTITYREF = yang_token.YANG_TYPE_IDENTITYREF
-comptime YANG_TYPE_LEAFREF = yang_token.YANG_TYPE_LEAFREF
 
 
-def parse_type_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangType:
-    parser._expect(YangToken.TYPE)
-    var type_name = parser._consume_name()
-    var has_range = False
-    var range_min = Int64(0)
-    var range_max = Int64(0)
-    var enum_values = List[String]()
-    var union_types = List[Arc[YangType]]()
-    var leafref_path = ""
-    var leafref_require_instance = True
-    var fraction_digits = 0
-    var has_dec_range = False
-    var dec_lo = Float64(0.0)
-    var dec_hi = Float64(0.0)
-    var bits_names = List[String]()
-    var identityref_base = ""
+def _type_name_uses_integer_range_substmts(name: String) -> Bool:
+    if name == "integer" or name == "number":
+        return True
+    return (
+        name == yang_token.YANG_TYPE_INT8
+        or name == yang_token.YANG_TYPE_INT16
+        or name == yang_token.YANG_TYPE_INT32
+        or name == yang_token.YANG_TYPE_INT64
+        or name == yang_token.YANG_TYPE_UINT8
+        or name == yang_token.YANG_TYPE_UINT16
+        or name == yang_token.YANG_TYPE_UINT32
+        or name == yang_token.YANG_TYPE_UINT64
+    )
 
-    if parser._consume_if(YangToken.LBRACE):
-        while parser._has_more() and parser._peek() != YangToken.RBRACE:
-            var stmt = parser._peek()
-            if stmt == YangToken.RANGE:
+
+## Skip optional `{ ... }` and trailing `;` for the current `type` statement.
+def _type_skip_rest_of_statement[ParserT: ParserContract](
+    mut parser: ParserT
+) raises:
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+
+
+def _parse_decimal64[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var fd = 0
+    var has_r = False
+    var lo = Float64(0.0)
+    var hi = Float64(0.0)
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            var s = parser._peek()
+            if s == yang_token.YangToken.RANGE:
                 parser._consume()
-                var range_expr = parser._consume_argument_value()
-                var parts = range_expr.split("..")
-                if len(parts) == 2 and type_name == "decimal64":
+                var r_ex = parser._consume_argument_value()
+                var p = r_ex.split("..")
+                if len(p) == 2:
                     try:
-                        var a = parts[0].strip()
-                        var b = parts[1].strip()
-                        dec_lo = atof(a)
-                        dec_hi = atof(b)
-                        has_dec_range = True
+                        lo = atof(p[0].strip())
+                        hi = atof(p[1].strip())
+                        has_r = True
                     except:
-                        has_dec_range = False
-                elif len(parts) == 2:
-                    try:
-                        range_min = Int64(atol(parts[0].strip()))
-                        range_max = Int64(atol(parts[1].strip()))
-                        has_range = True
-                    except:
-                        has_range = False
-                parser._skip_if(YangToken.SEMICOLON)
-            elif stmt == YangToken.PATH:
-                parser._consume()
-                leafref_path = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
-            elif stmt == YangToken.REQUIRE_INSTANCE:
-                parser._consume()
-                leafref_require_instance = parser._parse_boolean_value()
-                parser._skip_if(YangToken.SEMICOLON)
-            elif stmt == YangToken.ENUM:
-                parser._consume()
-                enum_values.append(parser._consume_name())
-                parser._skip_statement_tail()
-            elif stmt == YangToken.TYPE and type_name == YANG_STMT_UNION:
-                var union_type = parser._parse_type_statement()
-                union_types.append(Arc[YangType](union_type^))
-            elif stmt == YangToken.FRACTION_DIGITS and type_name == YANG_TYPE_DECIMAL64:
+                        has_r = False
+                else:
+                    has_r = False
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
+            elif s == yang_token.YangToken.FRACTION_DIGITS:
                 parser._consume()
                 try:
-                    var fd = atol(parser._consume_name().strip())
-                    if fd >= 1 and fd <= 18:
-                        fraction_digits = Int(fd)
+                    var n = atol(parser._consume_name().strip())
+                    if n >= 1 and n <= 18:
+                        fd = Int(n)
                 except:
                     pass
-                parser._skip_if(YangToken.SEMICOLON)
-            elif stmt == YangToken.BIT and type_name == YANG_TYPE_BITS:
-                parser._consume()
-                bits_names.append(parser._consume_name())
-                parser._skip_statement_tail()
-            elif stmt == YangToken.BASE and type_name == YANG_TYPE_IDENTITYREF:
-                parser._consume()
-                identityref_base = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect(YangToken.RBRACE)
-    parser._skip_if(YangToken.SEMICOLON)
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(
+        name = name, constraints = YangTypeDecimal64(fd, has_r, lo, hi)
+    )
 
-    if type_name == YANG_TYPE_LEAFREF and len(leafref_path) == 0:
-        parser._error("leafref type requires a 'path' substatement")
-    if type_name == YANG_TYPE_ENUMERATION and len(enum_values) == 0:
+
+def _parse_enumeration[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var values = List[String]()
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            if parser._peek() == yang_token.YangToken.ENUM:
+                parser._consume()
+                values.append(parser._consume_name())
+                parser._skip_statement_tail()
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    if len(values) == 0:
         parser._error(
-            "enumeration type requires at least one '" + YANG_STMT_ENUM + "' statement",
+            "enumeration type requires at least one '"
+            + yang_token.YANG_STMT_ENUM
+            + "' statement",
         )
-        return YangType(
-            name = type_name,
-            constraints = _yang_constraints_for_parsed_type(
-                type_name,
-                has_range,
-                range_min,
-                range_max,
-                enum_values^,
-                leafref_path,
-                leafref_require_instance,
-                fraction_digits,
-                has_dec_range,
-                dec_lo,
-                dec_hi,
-                bits_names^,
-                identityref_base,
-            ),
-        )
+    return YangType(
+        name = name, constraints = YangTypeEnumeration(values^)
+    )
 
-    if type_name == YANG_STMT_UNION:
-        return YangType(
-            name = type_name,
-            constraints = YangTypeUnion(union_members = union_types^),
-        )
 
+def _parse_integer_range[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var has_r = False
+    var lo = Int64(0)
+    var hi = Int64(0)
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            if parser._peek() == yang_token.YangToken.RANGE:
+                parser._consume()
+                var r_ex = parser._consume_argument_value()
+                var p = r_ex.split("..")
+                if len(p) == 2:
+                    try:
+                        lo = Int64(atol(p[0].strip()))
+                        hi = Int64(atol(p[1].strip()))
+                        has_r = True
+                    except:
+                        has_r = False
+                else:
+                    has_r = False
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(
+        name = name, constraints = YangTypeIntegerRange(has_r, lo, hi)
+    )
+
+
+def _parse_leafref[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var path = ""
+    var need_inst = True
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            var s = parser._peek()
+            if s == yang_token.YangToken.PATH:
+                parser._consume()
+                path = parser._consume_argument_value()
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
+            elif s == yang_token.YangToken.REQUIRE_INSTANCE:
+                parser._consume()
+                need_inst = parser._parse_boolean_value()
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    if len(path) == 0:
+        parser._error("leafref type requires a 'path' substatement")
+    return YangType(
+        name = name, constraints = YangTypeLeafref(path^, need_inst)
+    )
+
+
+def _parse_union[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var members = List[Arc[YangType]]()
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            if parser._peek() == yang_token.YangToken.TYPE:
+                var t = parser._parse_type_statement()
+                members.append(Arc[YangType](t^))
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(
+        name = name, constraints = YangTypeUnion(union_members = members^)
+    )
+
+
+def _parse_bits[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var names = List[String]()
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            if parser._peek() == yang_token.YangToken.BIT:
+                parser._consume()
+                names.append(parser._consume_name())
+                parser._skip_statement_tail()
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(name = name, constraints = YangTypeBits(names^))
+
+
+def _parse_identityref[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var base = ""
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            if parser._peek() == yang_token.YangToken.BASE:
+                parser._consume()
+                base = parser._consume_argument_value()
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(
+        name = name, constraints = YangTypeIdentityref(base^)
+    )
+
+
+def _parse_string[ParserT: ParserContract](
+    mut parser: ParserT, var name: String
+) raises -> YangType:
+    var pat = ""
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            if parser._peek() == yang_token.YangToken.PATTERN:
+                parser._consume()
+                pat = parser._consume_argument_value()
+                parser._skip_statement_tail()
+            else:
+                parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(
+        name = name, constraints = YangTypeString(pat^)
+    )
+
+
+def parse_type_statement_impl[ParserT: ParserContract](
+    mut parser: ParserT
+) raises -> YangType:
+    parser._expect(yang_token.YangToken.TYPE)
+    var type_name = parser._consume_name()
+    # Early: user-defined `typedef` — must still consume the rest of the stmt.
     var typedef_opt = parser._resolve_typedef_type(type_name)
     if typedef_opt:
+        _type_skip_rest_of_statement(parser)
         return clone_yang_type_impl(typedef_opt.value()[])
 
+    if type_name == yang_token.YANG_TYPE_DECIMAL64:
+        return _parse_decimal64(parser, type_name^)
+    if type_name == yang_token.YANG_TYPE_ENUMERATION:
+        return _parse_enumeration(parser, type_name^)
+    if _type_name_uses_integer_range_substmts(type_name):
+        return _parse_integer_range(parser, type_name^)
+    if type_name == yang_token.YANG_TYPE_LEAFREF:
+        return _parse_leafref(parser, type_name^)
+    if type_name == yang_token.YANG_STMT_UNION:
+        return _parse_union(parser, type_name^)
+    if type_name == yang_token.YANG_TYPE_BITS:
+        return _parse_bits(parser, type_name^)
+    if type_name == yang_token.YANG_TYPE_IDENTITYREF:
+        return _parse_identityref(parser, type_name^)
+    if type_name == yang_token.YANG_TYPE_STRING:
+        return _parse_string(parser, type_name^)
+    # Fallback: boolean, empty, unknown keyword, etc.
+    _type_skip_rest_of_statement(parser)
     return YangType(
         name = type_name,
-        constraints = _yang_constraints_for_parsed_type(
-            type_name,
-            has_range,
-            range_min,
-            range_max,
-            enum_values^,
-            leafref_path,
-            leafref_require_instance,
-            fraction_digits,
-            has_dec_range,
-            dec_lo,
-            dec_hi,
-            bits_names^,
-            identityref_base,
-        ),
+        constraints = YangTypePlain(_pad=0),
     )
 
 
 def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises:
-    parser._expect(YangToken.TYPEDEF)
+    parser._expect(yang_token.YangToken.TYPEDEF)
     var name = parser._consume_name()
     var has_type = False
     var typedef_description = ""
     var type_stmt = YangType(
         name = "string",
-        constraints = YangTypePlain(_pad=0),
+        constraints = YangTypeString(pattern = ""),
     )
-    if parser._consume_if(YangToken.LBRACE):
-        while parser._has_more() and parser._peek() != YangToken.RBRACE:
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YangToken.TYPE:
+            if stmt == yang_token.YangToken.TYPE:
                 type_stmt = parser._parse_type_statement()
                 has_type = True
-            elif stmt == YangToken.DESCRIPTION:
+            elif stmt == yang_token.YangToken.DESCRIPTION:
                 parser._consume()
                 typedef_description = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect(YangToken.RBRACE)
-    parser._skip_if(YangToken.SEMICOLON)
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
     if not has_type:
         parser._error("typedef '" + name + "' requires a type statement")
     parser._store_typedef(name, type_stmt, typedef_description^)
 
 
 def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangMust:
-    parser._expect(YangToken.MUST)
+    parser._expect(yang_token.YangToken.MUST)
     var expression = parser._consume_argument_value()
     var error_message = ""
     var description = ""
 
-    if parser._consume_if(YangToken.LBRACE):
-        while parser._has_more() and parser._peek() != YangToken.RBRACE:
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YangToken.ERROR_MESSAGE:
+            if stmt == yang_token.YangToken.ERROR_MESSAGE:
                 parser._consume()
                 error_message = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
-            elif stmt == YangToken.DESCRIPTION:
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
+            elif stmt == yang_token.YangToken.DESCRIPTION:
                 parser._consume()
                 description = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect(YangToken.RBRACE)
-    parser._skip_if(YangToken.SEMICOLON)
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
 
     var xpath_ast = Expr.ExprPointer()
     try:
@@ -227,21 +351,21 @@ def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
 
 
 def parse_when_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangWhen:
-    parser._expect(YangToken.WHEN)
+    parser._expect(yang_token.YangToken.WHEN)
     var expression = parser._consume_argument_value()
     var description = ""
 
-    if parser._consume_if(YangToken.LBRACE):
-        while parser._has_more() and parser._peek() != YangToken.RBRACE:
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
             var stmt = parser._peek()
-            if stmt == YangToken.DESCRIPTION:
+            if stmt == yang_token.YangToken.DESCRIPTION:
                 parser._consume()
                 description = parser._consume_argument_value()
-                parser._skip_if(YangToken.SEMICOLON)
+                parser._skip_if(yang_token.YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
-        parser._expect(YangToken.RBRACE)
-    parser._skip_if(YangToken.SEMICOLON)
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
 
     var xpath_ast = Expr.ExprPointer()
     try:
