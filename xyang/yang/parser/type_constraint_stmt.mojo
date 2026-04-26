@@ -10,7 +10,7 @@ from xyang.ast import (
     YangTypeLeafref,
     YangTypedefStmt,
     YangTypeTypedef,
-    YangTypeBoolean,
+    YangTypeBasic,
     YangTypeString,
     YangTypeUnion,
 )
@@ -42,6 +42,7 @@ def new_builtin_type_parser_table[ParserT: ParserContract](
     m[yang_token.YANG_TYPE_IDENTITYREF] = _parse_identityref[ParserT]
     m[yang_token.YANG_TYPE_STRING] = _parse_string[ParserT]
     m[yang_token.YANG_TYPE_BOOLEAN] = _parse_boolean[ParserT]
+    m[yang_token.YANG_TYPE_EMPTY] = _parse_empty[ParserT]
 
 
 def _parse_boolean[ParserT: ParserContract](
@@ -52,7 +53,22 @@ def _parse_boolean[ParserT: ParserContract](
             parser._skip_statement()
         parser._expect(yang_token.YangToken.RBRACE)
     parser._skip_if(yang_token.YangToken.SEMICOLON)
-    return YangType(name = n, constraints = YangTypeBoolean(dummy = False))
+    return YangType(
+        name = n, constraints = YangTypeBasic(kind = YangTypeBasic.boolean)
+    )
+
+
+def _parse_empty[ParserT: ParserContract](
+    mut parser: ParserT, n: String
+) raises -> YangType:
+    if parser._consume_if(yang_token.YangToken.LBRACE):
+        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
+            parser._skip_statement()
+        parser._expect(yang_token.YangToken.RBRACE)
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return YangType(
+        name = n, constraints = YangTypeBasic(kind = YangTypeBasic.empty)
+    )
 
 
 def _parse_decimal64[ParserT: ParserContract](

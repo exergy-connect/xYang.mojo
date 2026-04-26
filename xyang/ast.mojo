@@ -67,9 +67,12 @@ struct YangTypeString(Movable):
 
 
 @fieldwise_init
-## Built-in `boolean` (YANG): no real constraints; `dummy` is a reserved placeholder.
-struct YangTypeBoolean(Movable):
-    var dummy: Bool
+## Built-in YANG types with no substatements: `boolean`, `empty`.
+struct YangTypeBasic(Movable):
+    comptime Kind = Int
+    comptime boolean: Self.Kind = 0
+    comptime empty: Self.Kind = 1
+    var kind: Self.Kind
 
 
 @fieldwise_init
@@ -88,7 +91,7 @@ struct YangType(Movable):
         YangTypeBits,
         YangTypeIdentityref,
         YangTypeString,
-        YangTypeBoolean,
+        YangTypeBasic,
         YangTypeUnion,
     ]
     var name: String
