@@ -10,9 +10,7 @@ from xyang.ast import (
     YangTypePlain,
     YangTypeString,
     YangTypeUnion,
-    YangWhen,
 )
-from xyang.xpath import parse_xpath, Expr
 import xyang.yang.parser.yang_token as yang_token
 from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.clone_utils import clone_yang_type_impl
@@ -305,38 +303,3 @@ def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) r
     if not has_type:
         parser._error("typedef '" + name + "' requires a type statement")
     parser._store_typedef(name, type_stmt, typedef_description^)
-
-
-def parse_when_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangWhen:
-    parser._expect(yang_token.YangToken.WHEN)
-    var expression = parser._consume_argument_value()
-    var description = ""
-
-    if parser._consume_if(yang_token.YangToken.LBRACE):
-        while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
-            var stmt = parser._peek()
-            if stmt == yang_token.YangToken.DESCRIPTION:
-                parser._consume()
-                description = parser._consume_argument_value()
-                parser._skip_if(yang_token.YangToken.SEMICOLON)
-            else:
-                parser._skip_statement()
-        parser._expect(yang_token.YangToken.RBRACE)
-    parser._skip_if(yang_token.YangToken.SEMICOLON)
-
-    var xpath_ast = Expr.ExprPointer()
-    try:
-        xpath_ast = parse_xpath(expression)
-        return YangWhen(
-            expression = expression,
-            description = description,
-            xpath_ast = xpath_ast,
-            parsed = True,
-        )
-    except:
-        return YangWhen(
-            expression = expression,
-            description = description,
-            xpath_ast = xpath_ast,
-            parsed = False,
-        )

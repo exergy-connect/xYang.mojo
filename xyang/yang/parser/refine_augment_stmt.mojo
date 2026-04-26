@@ -919,7 +919,7 @@ def refine_set_when_at_path_impl(
     mut containers: List[Arc[YangContainer]],
     mut lists: List[Arc[YangList]],
     mut choices: List[Arc[YangChoice]],
-) -> Bool:
+) raises -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False

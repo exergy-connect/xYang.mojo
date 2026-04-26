@@ -1,6 +1,6 @@
 from std.memory import ArcPointer
 import xyang.ast as ast
-from xyang.xpath import parse_xpath, Expr
+from xyang.xpath import parse_xpath
 from xyang.yang.parser.yang_token import YANG_TYPE_LEAFREF
 
 comptime Arc = ArcPointer
@@ -56,23 +56,13 @@ def clone_must_impl(read src: YangMust) raises -> YangMust:
     )
 
 
-def clone_when_impl(read src: YangWhen) -> YangWhen:
-    var xpath_ast = Expr.ExprPointer()
-    try:
-        xpath_ast = parse_xpath(src.expression)
-        return YangWhen(
-            expression = src.expression,
-            description = src.description,
-            xpath_ast = xpath_ast,
-            parsed = True,
-        )
-    except:
-        return YangWhen(
-            expression = src.expression,
-            description = src.description,
-            xpath_ast = xpath_ast,
-            parsed = False,
-        )
+def clone_when_impl(read src: YangWhen) raises -> YangWhen:
+    var xpath_ast = parse_xpath(src.expression)
+    return YangWhen(
+        expression = src.expression,
+        description = src.description,
+        xpath_ast = xpath_ast,
+    )
 
 
 def clone_yang_type_impl(read src: YangType) -> YangType:
@@ -210,7 +200,7 @@ def clone_leaf_list_arc_impl(read src: Arc[YangLeafList]) raises -> Arc[YangLeaf
     )
 
 
-def clone_choice_arc_impl(read src: Arc[YangChoice]) -> Arc[YangChoice]:
+def clone_choice_arc_impl(read src: Arc[YangChoice]) raises -> Arc[YangChoice]:
     var cases = List[Arc[YangChoiceCase]]()
     for i in range(len(src[].cases)):
         var case_when = Optional[YangWhen]()

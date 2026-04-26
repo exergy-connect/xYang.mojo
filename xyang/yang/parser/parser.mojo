@@ -16,6 +16,7 @@ import xyang.yang.parser.refine_augment_stmt as ra_stmt
 import xyang.yang.parser.node_stmt as node_stmt
 import xyang.yang.parser.must_stmt as must_stmt
 import xyang.yang.parser.type_constraint_stmt as tc_stmt
+import xyang.yang.parser.when_stmt as when_stmt
 import xyang.yang.parser.clone_utils as clone_utils
 import xyang.yang.parser.semantics_utils as sem_utils
 from xyang.yang.parser.parser_contract import ParserContract
@@ -569,7 +570,7 @@ struct _YangParser(Movable, ParserContract):
         mut containers: List[Arc[ast.YangContainer]],
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
-    ) -> Bool:
+    ) raises -> Bool:
         return ra_stmt.refine_set_when_at_path_impl(
             segments,
             seg_idx,
@@ -696,7 +697,7 @@ struct _YangParser(Movable, ParserContract):
     def _clone_must(ref self, read src: ast.YangMust) raises -> ast.YangMust:
         return clone_utils.clone_must_impl(src)
 
-    def _clone_when(ref self, read src: ast.YangWhen) -> ast.YangWhen:
+    def _clone_when(ref self, read src: ast.YangWhen) raises -> ast.YangWhen:
         return clone_utils.clone_when_impl(src)
 
     def _clone_yang_type(ref self, read src: ast.YangType) -> ast.YangType:
@@ -714,7 +715,7 @@ struct _YangParser(Movable, ParserContract):
 
     def _clone_choice_arc(
         ref self, read src: Arc[ast.YangChoice]
-    ) -> Arc[ast.YangChoice]:
+    ) raises -> Arc[ast.YangChoice]:
         return clone_utils.clone_choice_arc_impl(src)
 
     def _clone_anydata_arc(
@@ -744,7 +745,7 @@ struct _YangParser(Movable, ParserContract):
         return must_stmt.parse_must_statement_impl(self)
 
     def _parse_when_statement(mut self) raises -> ast.YangWhen:
-        return tc_stmt.parse_when_statement_impl(self)
+        return when_stmt.parse_when_statement_impl(self)
 
     def _parse_non_negative_int(mut self, label: String) raises -> Int:
         return sem_utils.parse_non_negative_int_impl(self, label)

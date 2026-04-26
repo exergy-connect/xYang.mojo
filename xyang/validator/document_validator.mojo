@@ -898,19 +898,7 @@ struct DocumentValidator:
                     ),
                 )
                 return
-            if simple_when == 1:
-                pass
-            elif not when_ref.parsed or not when_ref.xpath_ast:
-                self._errors.append(
-                    ValidationError(
-                        path=child_path,
-                        message="When expression could not be parsed",
-                        expression=when_ref.expression,
-                        severity=Severity("error"),
-                    ),
-                )
-                return
-            else:
+            if simple_when != 1:
                 try:
                     var root_node = XPathNode("/", "/")
                     var root_arc = Arc[XPathNode](root_node^)
@@ -1078,19 +1066,7 @@ struct DocumentValidator:
                     ),
                 )
                 return
-            if simple_when == 1:
-                pass
-            elif not when_ref.parsed or not when_ref.xpath_ast:
-                self._errors.append(
-                    ValidationError(
-                        path=child_path,
-                        message="When expression could not be parsed",
-                        expression=when_ref.expression,
-                        severity=Severity("error"),
-                    ),
-                )
-                return
-            else:
+            if simple_when != 1:
                 try:
                     var root_node = XPathNode("/", "/")
                     var root_arc = Arc[XPathNode](root_node^)
@@ -1208,16 +1184,6 @@ struct DocumentValidator:
             return 0
         if simple_when == 1:
             return 1
-        if not when_ref.parsed or not when_ref.xpath_ast:
-            self._errors.append(
-                ValidationError(
-                    path=when_path,
-                    message="When expression could not be parsed",
-                    expression=when_ref.expression,
-                    severity=Severity("error"),
-                ),
-            )
-            return -1
         try:
             var root_node = XPathNode("/", "/")
             var root_arc = Arc[XPathNode](root_node^)
@@ -1433,19 +1399,7 @@ struct DocumentValidator:
                     ),
                 )
                 return
-            if simple_when == 1:
-                pass
-            elif not when_ref.parsed or not when_ref.xpath_ast:
-                self._errors.append(
-                    ValidationError(
-                        path=child_path,
-                        message="When expression could not be parsed",
-                        expression=when_ref.expression,
-                        severity=Severity("error"),
-                    ),
-                )
-                return
-            else:
+            if simple_when != 1:
                 try:
                     var root_node = XPathNode("/", "/")
                     var root_arc = Arc[XPathNode](root_node^)

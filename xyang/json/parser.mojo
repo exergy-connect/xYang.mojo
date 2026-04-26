@@ -3,7 +3,7 @@
 from emberjson import parse, Value
 from std.collections import Dict
 from std.memory import ArcPointer
-from xyang.xpath import parse_xpath, Expr
+from xyang.xpath import parse_xpath
 import xyang.ast as ast
 import xyang.yang.parser.yang_token as yang_token
 import xyang.json.schema_keys as schema_keys
@@ -346,19 +346,12 @@ def _parse_yang_when(ref xy: Value) raises -> Optional[ast.YangWhen]:
             desc = wo[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     if len(expr) == 0:
         return Optional[ast.YangWhen]()
-    var ptr = Expr.ExprPointer()
-    var parsed = False
-    try:
-        ptr = parse_xpath(expr)
-        parsed = True
-    except e:
-        print("[x-yang when] parse_xpath failed for expression: ", expr, " error: ", String(e))
+    var ptr = parse_xpath(expr)
     return Optional(
         ast.YangWhen(
             expression = expr,
             description = desc,
             xpath_ast = ptr,
-            parsed = parsed,
         ),
     )
 

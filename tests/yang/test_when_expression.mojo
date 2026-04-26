@@ -4,6 +4,7 @@ from std.testing import assert_false, assert_true, TestSuite
 from emberjson import parse as parse_json, Value
 from xyang.ast import YangModule
 from xyang import parse_yang_file
+from xyang.json.parser import parse_yang_module
 from xyang.validator import YangValidator
 
 
@@ -59,6 +60,44 @@ def test_when_expression_invalid() raises:
     var validator = YangValidator()
     var result = validator.validate(data, _module())
     assert_false(result.is_valid)
+
+
+def test_unparseable_when_raises_at_schema_parse() raises:
+    # Invalid XPath in `when` fails when building the module from x-yang JSON.
+    var schema = """
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "urn:test:bad-when",
+      "x-yang": {
+        "module": "bad-when",
+        "yang-version": "1.1",
+        "namespace": "urn:test:bad-when",
+        "prefix": "w"
+      },
+      "type": "object",
+      "properties": {
+        "data-model": {
+          "type": "object",
+          "x-yang": { "type": "container" },
+          "properties": {
+            "name": {
+              "type": "string",
+              "x-yang": {
+                "type": "leaf",
+                "when": { "condition": "1 +", "description": "bad" }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    var failed = False
+    try:
+        _ = parse_yang_module(schema)
+    except:
+        failed = True
+    assert_true(failed)
 
 
 def main() raises:

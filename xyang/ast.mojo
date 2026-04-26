@@ -251,10 +251,10 @@ struct YangMust(Movable):
 @fieldwise_init
 struct YangWhen(Movable):
     ## Represents a YANG `when` expression attached to a statement.
+    ## - xpath_ast: from `parse_xpath(expression)`; construction implies parse succeeded.
     var expression: String
     var description: String
     var xpath_ast: Expr.ExprPointer
-    var parsed: Bool
 
     fn __del__(deinit self):
         if self.xpath_ast:
