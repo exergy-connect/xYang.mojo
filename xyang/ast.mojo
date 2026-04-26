@@ -9,6 +9,13 @@ from xyang.xpath import Expr
 comptime Arc = ArcPointer
 
 
+fn _typedef_ref_local_name(n: String) -> String:
+    var parts = n.split(":")
+    if len(parts) == 0:
+        return n
+    return String(String(parts[len(parts) - 1]).strip())
+
+
 ## --- YANG `type` statement: lexical name + constraint payload (mutually exclusive shapes). ---
 
 @fieldwise_init
@@ -254,6 +261,27 @@ struct YangType(Movable):
                 return tdef.resolved[].name
             return self.name
         return ""
+
+    ## Set only `YangTypeTypedef.resolved` (recurse into `union` member `Arc[YangType]`). No `YangType` cloning.
+    def link_typedef_resolved(mut self, read typedefs: Dict[String, Arc[YangTypedefStmt]]) raises:
+        if self.name == "union" and self.constraints.isa[YangTypeUnion]():
+            for i in range(self.union_members_len()):
+                var m = self.union_member_arc(i)
+                ref mty = m[]
+                mty.link_typedef_resolved(typedefs)
+            return
+        if not self.constraints.isa[YangTypeTypedef]():
+            return
+        if self.constraints[YangTypeTypedef].resolved:
+            return
+        var key = _typedef_ref_local_name(self.name)
+        var found = typedefs.get(key)
+        if not found:
+            raise Error("Unknown typedef '" + self.name + "'")
+        ref tds = found.value()[]
+        self.constraints[YangTypeTypedef].resolved = (
+            UnsafePointer(to=tds).unsafe_origin_cast[MutExternalOrigin]()
+        )
 
 
 

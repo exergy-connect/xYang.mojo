@@ -265,18 +265,14 @@ def parse_type_statement_impl[ParserT: ParserContract](
 def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises:
     parser._expect(yang_token.YangToken.TYPEDEF)
     var name = parser._consume_name()
-    var has_type = False
     var typedef_description = ""
-    var type_stmt = YangType(
-        name = "string",
-        constraints = YangTypeString(pattern = ""),
-    )
+    var type_opt = Optional[YangType]()
     if parser._consume_if(yang_token.YangToken.LBRACE):
         while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
             var stmt = parser._peek()
             if stmt == yang_token.YangToken.TYPE:
-                type_stmt = parser._parse_type_statement()
-                has_type = True
+                var t = parser._parse_type_statement()
+                type_opt = Optional(t^)
             elif stmt == yang_token.YangToken.DESCRIPTION:
                 parser._consume()
                 typedef_description = parser._consume_argument_value()
@@ -285,6 +281,6 @@ def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) r
                 parser._skip_statement()
         parser._expect(yang_token.YangToken.RBRACE)
     parser._skip_if(yang_token.YangToken.SEMICOLON)
-    if not has_type:
+    if not type_opt:
         parser._error("typedef '" + name + "' requires a type statement")
-    parser._store_typedef(name, type_stmt, typedef_description^)
+    parser._store_typedef(name, type_opt.value(), typedef_description^)
