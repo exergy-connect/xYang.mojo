@@ -24,7 +24,8 @@
           "description": "Consolidated validation flag. Set to true for Phase 2 (combined cross-file validation) or false for Phase 1 (individual file validation). When true, file-scoped constraints (field limits, name limits) are skipped as they were already validated per-file. Used by MUST constraints to conditionally apply file-scoped validations.",
           "x-yang": {
             "type": "leaf"
-          }
+          },
+          "default": "false"
         },
         "name": {
           "type": "string",
@@ -74,12 +75,13 @@
           "description": "Include x-* extension fields in generated JSON Schema. When true, entity-level:\n         x-primaryKey, x-created, x-modified, x-version, x-storage, x-validation.\n         Field-level: x-primaryKey, x-foreignKey, x-parents, x-computed, x-confidence,\n         x-source, x-minDate, x-maxDate.",
           "x-yang": {
             "type": "leaf"
-          }
+          },
+          "default": "true"
         },
         "allow_unlimited_fields": {
           "type": "object",
           "maxProperties": 0,
-          "description": "",
+          "description": "When present, allow entities to exceed the 7 non-array field limit. Omit when all entities have 7 or fewer non-array fields.",
           "x-yang": {
             "type": "leaf",
             "must": [
@@ -121,7 +123,14 @@
                 "maxProperties": 0,
                 "description": "When present, consolidation writes one JSON file per primary-key instance under\n           output/<entity-name>/ (readable, filesystem-safe form of the entity-store PK string,\n           .json).\n           Shards duplicate top-level nested instances after hierarchical nesting; the same\n           records remain in consolidated_data.json data. sharded_entities lists those type\n           names.",
                 "x-yang": {
-                  "type": "leaf"
+                  "type": "leaf",
+                  "must": [
+                    {
+                      "must": "count(../fields[type/foreignKeys[parent_array]]) = 0",
+                      "error-message": "index can only be set on top-level entities. Remove index or remove parent_array from this entity's foreignKeys.",
+                      "description": "Disallow index on entities that define parent relationships via foreignKeys/parent_array (nested child entities)."
+                    }
+                  ]
                 }
               },
               "name": {
@@ -308,7 +317,8 @@
                             "description": "A required field cannot have a default value."
                           }
                         ]
-                      }
+                      },
+                      "default": "false"
                     },
                     "default": {
                       "oneOf": [
@@ -346,7 +356,8 @@
                         "when": {
                           "condition": "not(../default)"
                         }
-                      }
+                      },
+                      "default": "false"
                     },
                     "validation": {
                       "$ref": "#/$defs/field-validation-mode",
@@ -676,7 +687,8 @@
                             "description": "A required field cannot have a default value."
                           }
                         ]
-                      }
+                      },
+                      "default": "false"
                     },
                     "default": {
                       "oneOf": [
@@ -714,7 +726,8 @@
                         "when": {
                           "condition": "not(../default)"
                         }
-                      }
+                      },
+                      "default": "false"
                     },
                     "validation": {
                       "$ref": "#/$defs/field-validation-mode",
