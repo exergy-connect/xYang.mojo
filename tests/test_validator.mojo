@@ -12,7 +12,7 @@ def main() raises:
         schema_text = f.read()
     var module = parse_yang_module(schema_text)
 
-    var data_json = '{"data-model": {"name": "test", "version": "1.0"}}'
+    var data_json = '{"data-model": {"name": "test", "version": "1.0", "description": "Test model."}}'
     var data: Value = parse(data_json)
 
     var validator = YangValidator()

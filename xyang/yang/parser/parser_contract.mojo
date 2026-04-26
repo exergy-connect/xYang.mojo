@@ -88,7 +88,9 @@ trait ParserContract:
     def _parse_typedef_statement(mut self) raises:
         ...
 
-    def _store_typedef(mut self, name: String, read type_stmt: YangType) raises:
+    def _store_typedef(
+        mut self, name: String, read type_stmt: YangType, description: String
+    ) raises:
         ...
 
     def _get_typedef_statements_snapshot(ref self) -> Dict[String, Arc[YangTypedefStmt]]:

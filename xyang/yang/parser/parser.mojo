@@ -168,7 +168,7 @@ struct _YangParser(Movable, ParserContract):
         tc_stmt.parse_typedef_statement_impl(self)
 
     def _store_typedef(
-        mut self, name: String, read type_stmt: ast.YangType
+        mut self, name: String, read type_stmt: ast.YangType, description: String
     ) raises:
         if self.typedefs.get(name):
             self._error("Duplicate typedef '" + name + "'")
@@ -179,7 +179,7 @@ struct _YangParser(Movable, ParserContract):
             ast.YangTypedefStmt(
                 name=name,
                 type_stmt=clone_utils.clone_yang_type_impl(type_stmt),
-                description="",
+                description=description,
             ),
         )
 

@@ -372,6 +372,7 @@ struct YangAnyxml(Movable, JsonDeserializable, YangHasWhen):
 @fieldwise_init
 struct YangChoiceCase(Movable, JsonDeserializable, YangHasWhen):
     var name: String
+    var description: String
     var node_names: List[String]
     var when: Optional[YangWhen]
 
@@ -385,6 +386,7 @@ struct YangChoiceCase(Movable, JsonDeserializable, YangHasWhen):
 @fieldwise_init
 struct YangChoice(Movable, JsonDeserializable, YangHasWhen):
     var name: String
+    var description: String
     var mandatory: Bool
     var default_case: String
     var case_names: List[String]

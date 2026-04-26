@@ -462,6 +462,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
 
     var mandatory = False
     var default_case = ""
+    var choice_description = ""
     var choice_when = Optional[YangWhen]()
     var case_names = List[String]()
     var cases = List[Arc[YangChoiceCase]]()
@@ -482,7 +483,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 choice_when = Optional(w^)
             elif stmt == YangToken.DESCRIPTION:
                 parser._consume()
-                _ = parser._consume_argument_value()
+                choice_description = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
             elif stmt == YangToken.CASE:
                 var c = parser._parse_case_statement()
@@ -498,6 +499,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 cases.append(Arc[YangChoiceCase](
                     YangChoiceCase(
                         name=node_name,
+                        description="",
                         node_names=implicit_names^,
                         when=Optional[YangWhen](),
                     ),
@@ -512,6 +514,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 cases.append(Arc[YangChoiceCase](
                     YangChoiceCase(
                         name=node_name,
+                        description="",
                         node_names=implicit_names^,
                         when=Optional[YangWhen](),
                     ),
@@ -526,6 +529,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 cases.append(Arc[YangChoiceCase](
                     YangChoiceCase(
                         name=node_name,
+                        description="",
                         node_names=implicit_names^,
                         when=Optional[YangWhen](),
                     ),
@@ -540,6 +544,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 cases.append(Arc[YangChoiceCase](
                     YangChoiceCase(
                         name=node_name,
+                        description="",
                         node_names=implicit_names^,
                         when=Optional[YangWhen](),
                     ),
@@ -554,6 +559,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 cases.append(Arc[YangChoiceCase](
                     YangChoiceCase(
                         name=node_name,
+                        description="",
                         node_names=implicit_names^,
                         when=Optional[YangWhen](),
                     ),
@@ -568,6 +574,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
                 cases.append(Arc[YangChoiceCase](
                     YangChoiceCase(
                         name=node_name,
+                        description="",
                         node_names=implicit_names^,
                         when=Optional[YangWhen](),
                     ),
@@ -580,6 +587,7 @@ def parse_choice_statement_impl[ParserT: ParserContract](mut parser: ParserT) ra
 
     var built = YangChoice(
         name = name,
+        description = choice_description^,
         mandatory = mandatory,
         default_case = default_case,
         case_names = case_names^,
@@ -596,6 +604,7 @@ def parse_case_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
     var case_name = parser._consume_name()
 
     var names = List[String]()
+    var case_description = ""
     var case_when = Optional[YangWhen]()
 
     if parser._consume_if(YangToken.LBRACE):
@@ -630,11 +639,16 @@ def parse_case_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 case_when = Optional(w^)
             elif stmt == YangToken.DESCRIPTION:
                 parser._consume()
-                _ = parser._consume_argument_value()
+                case_description = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
             else:
                 parser._skip_statement()
         parser._expect(YangToken.RBRACE)
     parser._skip_if(YangToken.SEMICOLON)
 
-    return YangChoiceCase(name=case_name, node_names=names^, when=case_when^)
+    return YangChoiceCase(
+        name=case_name,
+        description=case_description^,
+        node_names=names^,
+        when=case_when^,
+    )

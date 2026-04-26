@@ -223,6 +223,7 @@ def clone_choice_arc_impl(read src: Arc[YangChoice]) -> Arc[YangChoice]:
         cases.append(Arc[YangChoiceCase](
             YangChoiceCase(
                 name = src[].cases[i][].name,
+                description = src[].cases[i][].description,
                 node_names = src[].cases[i][].node_names.copy(),
                 when = case_when^,
             ),
@@ -235,6 +236,7 @@ def clone_choice_arc_impl(read src: Arc[YangChoice]) -> Arc[YangChoice]:
     return Arc[YangChoice](
         YangChoice(
             name = src[].name,
+            description = src[].description,
             mandatory = src[].mandatory,
             default_case = src[].default_case,
             case_names = src[].case_names.copy(),

@@ -362,7 +362,7 @@ def _choice_property(
 ) raises -> Object:
     var out = Object()
     out[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_OBJECT)
-    out[schema_keys.JSON_SCHEMA_DESCRIPTION] = Value("")
+    out[schema_keys.JSON_SCHEMA_DESCRIPTION] = Value(choice.description)
 
     var xy = Object()
     xy[schema_keys.XYANG_TYPE] = Value("choice")
@@ -402,7 +402,7 @@ def _choice_property(
             req.append(Value(nm))
         var branch = Object()
         branch[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_OBJECT)
-        branch[schema_keys.JSON_SCHEMA_DESCRIPTION] = Value("")
+        branch[schema_keys.JSON_SCHEMA_DESCRIPTION] = Value(case_node.description)
         branch[schema_keys.JSON_SCHEMA_PROPERTIES] = Value(props^)
         branch[schema_keys.JSON_SCHEMA_ADDITIONAL_PROPERTIES] = Value(False)
         branch[schema_keys.JSON_SCHEMA_REQUIRED] = Value(req^)

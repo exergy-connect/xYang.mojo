@@ -23,22 +23,24 @@ def parse_yang_module(source: String) raises -> ast.YangModule:
     var ns = ""
     var prefix = ""
 
-    if "x-yang" in root.object():
-        ref xyang = root.object()["x-yang"]
-        name = xyang.object()["module"].string()
-        ns = xyang.object()["namespace"].string()
-        prefix = xyang.object()["prefix"].string()
+    if schema_keys.JSON_SCHEMA_X_YANG in root.object():
+        ref xyang = root.object()[schema_keys.JSON_SCHEMA_X_YANG]
+        name = xyang.object()[schema_keys.XYANG_MODULE].string()
+        ns = xyang.object()[schema_keys.XYANG_NAMESPACE].string()
+        prefix = xyang.object()[schema_keys.XYANG_PREFIX].string()
 
     # Discover top-level YANG containers from root["properties"].
     var containers = List[Arc[ast.YangContainer]]()
-    ref props_obj = root.object()["properties"].object()
+    ref props_obj = root.object()[schema_keys.JSON_SCHEMA_PROPERTIES].object()
     for ref pair in props_obj.items():
         ref prop = pair.value
         if not prop.is_object():
             continue
         var kind = ""
-        if "x-yang" in prop.object():
-            kind = prop.object()["x-yang"]["type"].string()
+        if schema_keys.JSON_SCHEMA_X_YANG in prop.object():
+            kind = prop.object()[schema_keys.JSON_SCHEMA_X_YANG][
+                schema_keys.XYANG_TYPE
+            ].string()
         if kind == yang_token.YANG_STMT_CONTAINER:
             var yc = parse_yang_container(pair.key, prop)
             containers.append(Arc[ast.YangContainer](yc^))
@@ -69,16 +71,19 @@ def parse_yang_module(source: String) raises -> ast.YangModule:
 def _leaf_type_name_from_prop(prop: Value) raises -> String:
     """Derive a YANG/type name from a JSON Schema property (type or $ref)."""
     ref obj = prop.object()
-    if "type" in obj and obj["type"].is_string():
-        return obj["type"].string()
-    if "$ref" in obj and obj["$ref"].is_string():
-        var ref_val = obj["$ref"].string()
+    if schema_keys.JSON_SCHEMA_TYPE in obj and obj[schema_keys.JSON_SCHEMA_TYPE].is_string():
+        return obj[schema_keys.JSON_SCHEMA_TYPE].string()
+    if (
+        schema_keys.JSON_SCHEMA_REF in obj
+        and obj[schema_keys.JSON_SCHEMA_REF].is_string()
+    ):
+        var ref_val = obj[schema_keys.JSON_SCHEMA_REF].string()
         # Use last segment of ref, e.g. "#/$defs/version-string" -> "version-string"
         var parts = ref_val.split("/")
         if len(parts) > 0:
             return String(parts[len(parts) - 1])
         return ref_val
-    return "unknown"
+    return yang_token.YANG_TYPE_UNKNOWN
 
 
 def _empty_type(name: String) -> ast.YangType:
@@ -102,16 +107,22 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
     var bits_names = List[String]()
     var identityref_base = ""
 
-    if "enum" in obj and obj["enum"].is_array():
-        ref earr = obj["enum"].array()
+    if (
+        schema_keys.JSON_SCHEMA_ENUM in obj
+        and obj[schema_keys.JSON_SCHEMA_ENUM].is_array()
+    ):
+        ref earr = obj[schema_keys.JSON_SCHEMA_ENUM].array()
         if len(earr) > 0:
-            ty_name = "enumeration"
+            ty_name = yang_token.YANG_TYPE_ENUMERATION
             for ref enum_val in earr:
                 if enum_val.is_string():
                     enum_values.append(enum_val.string())
 
-    if "oneOf" in obj and obj["oneOf"].is_array():
-        ref one_of = obj["oneOf"].array()
+    if (
+        schema_keys.JSON_SCHEMA_ONE_OF in obj
+        and obj[schema_keys.JSON_SCHEMA_ONE_OF].is_array()
+    ):
+        ref one_of = obj[schema_keys.JSON_SCHEMA_ONE_OF].array()
         var members = List[Arc[ast.YangType]]()
         for ref one_of_item in one_of:
             if not one_of_item.is_object():
@@ -122,10 +133,16 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
             ty_name = yang_token.YANG_STMT_UNION
             union_members = members^
 
-    if "x-yang" in obj and obj["x-yang"].is_object():
-        ref xy = obj["x-yang"]
-        if "type" in xy.object() and xy.object()["type"].is_string():
-            var xyang_type = xy.object()["type"].string()
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in obj
+        and obj[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = obj[schema_keys.JSON_SCHEMA_X_YANG]
+        if (
+            schema_keys.XYANG_TYPE in xy.object()
+            and xy.object()[schema_keys.XYANG_TYPE].is_string()
+        ):
+            var xyang_type = xy.object()[schema_keys.XYANG_TYPE].string()
             if xyang_type == yang_token.YANG_TYPE_LEAFREF:
                 ty_name = xyang_type
             elif xyang_type == yang_token.YANG_STMT_UNION and len(union_members) > 0:
@@ -133,34 +150,50 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
             elif xyang_type == yang_token.YANG_STMT_ENUM and len(union_members) > 0:
                 ty_name = xyang_type
             elif (
-                xyang_type == "decimal64"
-                or xyang_type == "bits"
-                or xyang_type == "identityref"
+                xyang_type == yang_token.YANG_TYPE_DECIMAL64
+                or xyang_type == yang_token.YANG_TYPE_BITS
+                or xyang_type == yang_token.YANG_TYPE_IDENTITYREF
             ):
                 ty_name = xyang_type
         if ty_name == yang_token.YANG_TYPE_LEAFREF:
-            if "path" in xy.object() and xy.object()["path"].is_string():
-                lr_path = xy.object()["path"].string()
-            if "require-instance" in xy.object() and xy.object()["require-instance"].is_bool():
-                lr_require_inst = xy.object()["require-instance"].bool()
-        if ty_name == "decimal64":
-            if schema_keys.XYANG_FRACTION_DIGITS in xy.object() and xy.object()[schema_keys.XYANG_FRACTION_DIGITS].is_int():
-                fraction_digits = Int(xy.object()[schema_keys.XYANG_FRACTION_DIGITS].int())
-            if "minimum" in obj and "maximum" in obj:
-                ref minv = obj["minimum"]
-                ref maxv = obj["maximum"]
+            if (
+                schema_keys.XYANG_PATH in xy.object()
+                and xy.object()[schema_keys.XYANG_PATH].is_string()
+            ):
+                lr_path = xy.object()[schema_keys.XYANG_PATH].string()
+            if (
+                schema_keys.XYANG_REQUIRE_INSTANCE in xy.object()
+                and xy.object()[schema_keys.XYANG_REQUIRE_INSTANCE].is_bool()
+            ):
+                lr_require_inst = xy.object()[
+                    schema_keys.XYANG_REQUIRE_INSTANCE
+                ].bool()
+        if ty_name == yang_token.YANG_TYPE_DECIMAL64:
+            if (
+                schema_keys.XYANG_FRACTION_DIGITS in xy.object()
+                and xy.object()[schema_keys.XYANG_FRACTION_DIGITS].is_int()
+            ):
+                fraction_digits = Int(
+                    xy.object()[schema_keys.XYANG_FRACTION_DIGITS].int(),
+                )
+            if (
+                schema_keys.JSON_SCHEMA_MINIMUM in obj
+                and schema_keys.JSON_SCHEMA_MAXIMUM in obj
+            ):
+                ref minv = obj[schema_keys.JSON_SCHEMA_MINIMUM]
+                ref maxv = obj[schema_keys.JSON_SCHEMA_MAXIMUM]
                 if (minv.is_int() or minv.is_uint() or minv.is_float()) and (
                     maxv.is_int() or maxv.is_uint() or maxv.is_float()
                 ):
                     has_dec_range = True
                     dec_min = minv.float()
                     dec_max = maxv.float()
-        if ty_name == "bits" and schema_keys.XYANG_BITS in xy.object() and xy.object()[schema_keys.XYANG_BITS].is_array():
+        if ty_name == yang_token.YANG_TYPE_BITS and schema_keys.XYANG_BITS in xy.object() and xy.object()[schema_keys.XYANG_BITS].is_array():
             ref barr = xy.object()[schema_keys.XYANG_BITS].array()
             for ref bit_name in barr:
                 if bit_name.is_string():
                     bits_names.append(bit_name.string())
-        if ty_name == "identityref" and schema_keys.XYANG_BASE in xy.object() and xy.object()[schema_keys.XYANG_BASE].is_string():
+        if ty_name == yang_token.YANG_TYPE_IDENTITYREF and schema_keys.XYANG_BASE in xy.object() and xy.object()[schema_keys.XYANG_BASE].is_string():
             identityref_base = xy.object()[schema_keys.XYANG_BASE].string()
 
     var cons = _json_schema_yang_constraints(
@@ -195,7 +228,7 @@ def _json_schema_yang_constraints(
     var bits_names: List[String],
     var identityref_base: String,
 ) -> ast.YangType.Constraints:
-    if ty_name == "enumeration":
+    if ty_name == yang_token.YANG_TYPE_ENUMERATION:
         return ast.YangTypeEnumeration(enum_values^)
     if ty_name == yang_token.YANG_TYPE_LEAFREF:
         if len(lr_path) == 0:
@@ -204,16 +237,16 @@ def _json_schema_yang_constraints(
             lr_path^,
             lr_require_inst,
         )
-    if ty_name == "decimal64":
+    if ty_name == yang_token.YANG_TYPE_DECIMAL64:
         return ast.YangTypeDecimal64(
             fraction_digits,
             has_dec_range,
             dec_min,
             dec_max,
         )
-    if ty_name == "bits":
+    if ty_name == yang_token.YANG_TYPE_BITS:
         return ast.YangTypeBits(bits_names^)
-    if ty_name == "identityref":
+    if ty_name == yang_token.YANG_TYPE_IDENTITYREF:
         return ast.YangTypeIdentityref(identityref_base^)
     return ast.YangTypePlain(_pad=0)
 
@@ -221,9 +254,12 @@ def _json_schema_yang_constraints(
 def _is_required(prop_key: String, container_prop: Value) raises -> Bool:
     """True if prop_key is in the container's required array."""
     ref obj = container_prop.object()
-    if "required" not in obj or not obj["required"].is_array():
+    if (
+        schema_keys.JSON_SCHEMA_REQUIRED not in obj
+        or not obj[schema_keys.JSON_SCHEMA_REQUIRED].is_array()
+    ):
         return False
-    ref arr = obj["required"].array()
+    ref arr = obj[schema_keys.JSON_SCHEMA_REQUIRED].array()
     for ref required_item in arr:
         if required_item.is_string() and required_item.string() == prop_key:
             return True
@@ -233,10 +269,13 @@ def _is_required(prop_key: String, container_prop: Value) raises -> Bool:
 def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[ast.YangMust]]:
     """Extract a list of YangMust constraints from an x-yang object."""
     var must_list = List[Arc[ast.YangMust]]()
-    if "must" not in xy.object() or not xy.object()["must"].is_array():
+    if (
+        schema_keys.XYANG_MUST not in xy.object()
+        or not xy.object()[schema_keys.XYANG_MUST].is_array()
+    ):
         return must_list^
 
-    ref marr = xy.object()["must"].array()
+    ref marr = xy.object()[schema_keys.XYANG_MUST].array()
     for ref must_item in marr:
         if not must_item.is_object():
             continue
@@ -244,12 +283,21 @@ def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[ast.YangMust]]:
         var expr = ""
         var errmsg = ""
         var desc = ""
-        if "must" in mobj and mobj["must"].is_string():
-            expr = mobj["must"].string()
-        if "error-message" in mobj and mobj["error-message"].is_string():
-            errmsg = mobj["error-message"].string()
-        if "description" in mobj and mobj["description"].is_string():
-            desc = mobj["description"].string()
+        if (
+            schema_keys.XYANG_MUST_EXPR in mobj
+            and mobj[schema_keys.XYANG_MUST_EXPR].is_string()
+        ):
+            expr = mobj[schema_keys.XYANG_MUST_EXPR].string()
+        if (
+            schema_keys.XYANG_ERROR_MESSAGE in mobj
+            and mobj[schema_keys.XYANG_ERROR_MESSAGE].is_string()
+        ):
+            errmsg = mobj[schema_keys.XYANG_ERROR_MESSAGE].string()
+        if (
+            schema_keys.JSON_SCHEMA_DESCRIPTION in mobj
+            and mobj[schema_keys.JSON_SCHEMA_DESCRIPTION].is_string()
+        ):
+            desc = mobj[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
 
         # Parse the must expression via the XPath parser when possible; store AST in YangMust (it owns and frees).
         # If parsing fails (e.g. unsupported syntax like ('a','b')), xpath_ast is empty and parsed=False.
@@ -273,19 +321,25 @@ def _parse_yang_must_list(ref xy: Value) raises -> List[Arc[ast.YangMust]]:
 
 
 def _parse_yang_when(ref xy: Value) raises -> Optional[ast.YangWhen]:
-    if "when" not in xy.object():
+    if schema_keys.XYANG_WHEN not in xy.object():
         return Optional[ast.YangWhen]()
-    ref when_val = xy.object()["when"]
+    ref when_val = xy.object()[schema_keys.XYANG_WHEN]
     var expr = ""
     var desc = ""
     if when_val.is_string():
         expr = when_val.string()
     elif when_val.is_object():
         ref wo = when_val.object()
-        if "condition" in wo and wo["condition"].is_string():
-            expr = wo["condition"].string()
-        if "description" in wo and wo["description"].is_string():
-            desc = wo["description"].string()
+        if (
+            schema_keys.XYANG_WHEN_CONDITION in wo
+            and wo[schema_keys.XYANG_WHEN_CONDITION].is_string()
+        ):
+            expr = wo[schema_keys.XYANG_WHEN_CONDITION].string()
+        if (
+            schema_keys.JSON_SCHEMA_DESCRIPTION in wo
+            and wo[schema_keys.JSON_SCHEMA_DESCRIPTION].is_string()
+        ):
+            desc = wo[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     if len(expr) == 0:
         return Optional[ast.YangWhen]()
     var ptr = Expr.ExprPointer()
@@ -309,7 +363,11 @@ def _default_scalar_to_string(v: Value) -> String:
     if v.is_string():
         return v.string()
     if v.is_bool():
-        return "true" if v.bool() else "false"
+        return (
+            yang_token.YANG_BOOL_TRUE
+            if v.bool()
+            else yang_token.YANG_BOOL_FALSE
+        )
     if v.is_int():
         return String(v.int())
     if v.is_uint():
@@ -323,18 +381,24 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> ast.Ya
     """Parse a leaf definition from a JSON Schema property."""
     var type_stmt = _parse_type_from_schema_property(prop)
     var desc = ""
-    if "description" in prop.object() and prop.object()["description"].is_string():
-        desc = prop.object()["description"].string()
+    if (
+        schema_keys.JSON_SCHEMA_DESCRIPTION in prop.object()
+        and prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].is_string()
+    ):
+        desc = prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     var must_list = List[Arc[ast.YangMust]]()
     var when = Optional[ast.YangWhen]()
     var has_default = False
     var default_value = ""
-    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
-        ref xy = prop.object()["x-yang"]
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in prop.object()
+        and prop.object()[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = prop.object()[schema_keys.JSON_SCHEMA_X_YANG]
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
-    if "default" in prop.object():
-        ref dv = prop.object()["default"]
+    if schema_keys.JSON_SCHEMA_DEFAULT in prop.object():
+        ref dv = prop.object()[schema_keys.JSON_SCHEMA_DEFAULT]
         default_value = _default_scalar_to_string(dv)
         has_default = len(default_value) > 0
     return ast.YangLeaf(
@@ -352,8 +416,11 @@ def parse_yang_leaf(name: String, prop: Value, mandatory: Bool) raises -> ast.Ya
 def parse_yang_leaf_list(name: String, prop: Value) raises -> ast.YangLeafList:
     var type_stmt = _parse_type_from_schema_property(prop)
     var desc = ""
-    if "description" in prop.object() and prop.object()["description"].is_string():
-        desc = prop.object()["description"].string()
+    if (
+        schema_keys.JSON_SCHEMA_DESCRIPTION in prop.object()
+        and prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].is_string()
+    ):
+        desc = prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     var must_list = List[Arc[ast.YangMust]]()
     var when = Optional[ast.YangWhen]()
     var default_values = List[String]()
@@ -365,13 +432,19 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> ast.YangLeafList:
         min_e = Int(po[schema_keys.JSON_SCHEMA_MIN_ITEMS].int())
     if schema_keys.JSON_SCHEMA_MAX_ITEMS in po:
         max_e = Int(po[schema_keys.JSON_SCHEMA_MAX_ITEMS].int())
-    if "x-yang" in po and po["x-yang"].is_object():
-        ref xy = po["x-yang"]
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in po
+        and po[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = po[schema_keys.JSON_SCHEMA_X_YANG]
         must_list = _parse_yang_must_list(xy)
-        if schema_keys.XYANG_ORDERED_BY in xy.object() and xy[schema_keys.XYANG_ORDERED_BY].is_string():
+        if (
+            schema_keys.XYANG_ORDERED_BY in xy.object()
+            and xy[schema_keys.XYANG_ORDERED_BY].is_string()
+        ):
             ob = xy[schema_keys.XYANG_ORDERED_BY].string()
-    if "default" in prop.object():
-        ref default_val = prop.object()["default"]
+    if schema_keys.JSON_SCHEMA_DEFAULT in prop.object():
+        ref default_val = prop.object()[schema_keys.JSON_SCHEMA_DEFAULT]
         if default_val.is_array():
             ref default_arr = default_val.array()
             for ref default_item in default_arr:
@@ -397,12 +470,15 @@ def parse_yang_leaf_list(name: String, prop: Value) raises -> ast.YangLeafList:
 
 def parse_yang_anydata(name: String, prop: Value, mandatory: Bool) raises -> ast.YangAnydata:
     var desc = ""
-    if "description" in prop.object():
-        desc = prop.object()["description"].string()
+    if schema_keys.JSON_SCHEMA_DESCRIPTION in prop.object():
+        desc = prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     var must_list = List[Arc[ast.YangMust]]()
     var when = Optional[ast.YangWhen]()
-    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
-        ref xy = prop.object()["x-yang"]
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in prop.object()
+        and prop.object()[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = prop.object()[schema_keys.JSON_SCHEMA_X_YANG]
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
     return ast.YangAnydata(
@@ -416,12 +492,15 @@ def parse_yang_anydata(name: String, prop: Value, mandatory: Bool) raises -> ast
 
 def parse_yang_anyxml(name: String, prop: Value, mandatory: Bool) raises -> ast.YangAnyxml:
     var desc = ""
-    if "description" in prop.object():
-        desc = prop.object()["description"].string()
+    if schema_keys.JSON_SCHEMA_DESCRIPTION in prop.object():
+        desc = prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     var must_list = List[Arc[ast.YangMust]]()
     var when = Optional[ast.YangWhen]()
-    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
-        ref xy = prop.object()["x-yang"]
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in prop.object()
+        and prop.object()[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = prop.object()[schema_keys.JSON_SCHEMA_X_YANG]
         must_list = _parse_yang_must_list(xy)
         when = _parse_yang_when(xy)
     return ast.YangAnyxml(
@@ -436,8 +515,11 @@ def parse_yang_anyxml(name: String, prop: Value, mandatory: Bool) raises -> ast.
 def _mandatory_from_schema(prop_key: String, child: Value, parent_prop: Value) raises -> Bool:
     if _is_required(prop_key, parent_prop):
         return True
-    if "x-yang" in child.object() and child.object()["x-yang"].is_object():
-        ref xy = child.object()["x-yang"]
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in child.object()
+        and child.object()[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = child.object()[schema_keys.JSON_SCHEMA_X_YANG]
         if schema_keys.XYANG_MANDATORY in xy.object() and xy.object()[schema_keys.XYANG_MANDATORY].is_bool():
             return xy.object()[schema_keys.XYANG_MANDATORY].bool()
     return False
@@ -453,15 +535,17 @@ def _parse_node_children(
     mut choices: List[Arc[ast.YangChoice]],
 ) raises:
     """Parse properties of a container or list-items schema; appends into the given lists."""
-    if "properties" not in parent_prop.object():
+    if schema_keys.JSON_SCHEMA_PROPERTIES not in parent_prop.object():
         return
 
-    ref props_obj = parent_prop.object()["properties"].object()
+    ref props_obj = parent_prop.object()[schema_keys.JSON_SCHEMA_PROPERTIES].object()
     for ref pair in props_obj.items():
         ref child = pair.value
         var kind = ""
-        if "x-yang" in child.object():
-            kind = child.object()["x-yang"]["type"].string()
+        if schema_keys.JSON_SCHEMA_X_YANG in child.object():
+            kind = child.object()[schema_keys.JSON_SCHEMA_X_YANG][
+                schema_keys.XYANG_TYPE
+            ].string()
 
         if kind == yang_token.YANG_STMT_CONTAINER:
             var yc = parse_yang_container(pair.key, child)
@@ -493,30 +577,61 @@ def parse_yang_choice(name: String, prop: Value) raises -> ast.YangChoice:
     """Parse a choice definition from a JSON Schema property (oneOf)."""
     var mandatory = False
     var default_case = ""
+    var choice_description = ""
     var ch_when = Optional[ast.YangWhen]()
     ref po = prop.object()
-    if "x-yang" in po and po["x-yang"].is_object():
-        ref xy = po["x-yang"]
-        if "mandatory" in xy:
-            mandatory = xy["mandatory"].bool()
-        if "default" in xy and xy["default"].is_string():
-            default_case = xy["default"].string()
-        ch_when = _parse_yang_when(po["x-yang"])
+    if (
+        schema_keys.JSON_SCHEMA_DESCRIPTION in po
+        and po[schema_keys.JSON_SCHEMA_DESCRIPTION].is_string()
+    ):
+        choice_description = po[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in po
+        and po[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = po[schema_keys.JSON_SCHEMA_X_YANG]
+        if schema_keys.XYANG_MANDATORY in xy:
+            mandatory = xy[schema_keys.XYANG_MANDATORY].bool()
+        if (
+            schema_keys.XYANG_DEFAULT in xy
+            and xy[schema_keys.XYANG_DEFAULT].is_string()
+        ):
+            default_case = xy[schema_keys.XYANG_DEFAULT].string()
+        ch_when = _parse_yang_when(po[schema_keys.JSON_SCHEMA_X_YANG])
 
     var case_names = List[String]()
     var cases = List[Arc[ast.YangChoiceCase]]()
-    if "oneOf" in po and po["oneOf"].is_array():
-        ref one_of = po["oneOf"].array()
+    if (
+        schema_keys.JSON_SCHEMA_ONE_OF in po
+        and po[schema_keys.JSON_SCHEMA_ONE_OF].is_array()
+    ):
+        ref one_of = po[schema_keys.JSON_SCHEMA_ONE_OF].array()
         var case_idx = 0
         for ref one_of_branch in one_of:
             ref branch = one_of_branch.object()
             var case_name = "case-" + String(case_idx)
             var node_names = List[String]()
             var case_when = Optional[ast.YangWhen]()
-            if "x-yang" in branch and branch["x-yang"].is_object():
-                case_when = _parse_yang_when(branch["x-yang"])
-            if "required" in branch and branch["required"].is_array():
-                ref req = branch["required"].array()
+            var case_description = ""
+            if (
+                schema_keys.JSON_SCHEMA_DESCRIPTION in branch
+                and branch[schema_keys.JSON_SCHEMA_DESCRIPTION].is_string()
+            ):
+                case_description = branch[
+                    schema_keys.JSON_SCHEMA_DESCRIPTION
+                ].string()
+            if (
+                schema_keys.JSON_SCHEMA_X_YANG in branch
+                and branch[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+            ):
+                case_when = _parse_yang_when(
+                    branch[schema_keys.JSON_SCHEMA_X_YANG],
+                )
+            if (
+                schema_keys.JSON_SCHEMA_REQUIRED in branch
+                and branch[schema_keys.JSON_SCHEMA_REQUIRED].is_array()
+            ):
+                ref req = branch[schema_keys.JSON_SCHEMA_REQUIRED].array()
                 if len(req) > 0:
                     for ref req_item in req:
                         if req_item.is_string():
@@ -525,8 +640,8 @@ def parse_yang_choice(name: String, prop: Value) raises -> ast.YangChoice:
                             case_names.append(n)
                     if len(node_names) > 0:
                         case_name = node_names[0]
-            elif "properties" in branch:
-                ref branch_props = branch["properties"].object()
+            elif schema_keys.JSON_SCHEMA_PROPERTIES in branch:
+                ref branch_props = branch[schema_keys.JSON_SCHEMA_PROPERTIES].object()
                 for ref p in branch_props.items():
                     node_names.append(p.key)
                     case_names.append(p.key)
@@ -534,12 +649,18 @@ def parse_yang_choice(name: String, prop: Value) raises -> ast.YangChoice:
                     case_name = node_names[0]
             cases.append(
                 Arc[ast.YangChoiceCase](
-                    ast.YangChoiceCase(name=case_name, node_names=node_names^, when=case_when^),
+                    ast.YangChoiceCase(
+                        name=case_name,
+                        description=case_description^,
+                        node_names=node_names^,
+                        when=case_when^,
+                    ),
                 ),
             )
             case_idx += 1
     return ast.YangChoice(
         name=name,
+        description=choice_description^,
         mandatory=mandatory,
         default_case=default_case,
         case_names=case_names^,
@@ -551,8 +672,8 @@ def parse_yang_choice(name: String, prop: Value) raises -> ast.YangChoice:
 def parse_yang_list(name: String, prop: Value) raises -> ast.YangList:
     """Parse a list definition from a JSON Schema property (array with items)."""
     var description = ""
-    if "description" in prop.object():
-        description = prop.object()["description"].string()
+    if schema_keys.JSON_SCHEMA_DESCRIPTION in prop.object():
+        description = prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
 
     var key = ""
     var min_e = -1
@@ -561,12 +682,18 @@ def parse_yang_list(name: String, prop: Value) raises -> ast.YangList:
     var unique_specs = List[List[String]]()
     var must_list = List[Arc[ast.YangMust]]()
     ref po = prop.object()
-    if "x-yang" in po and po["x-yang"].is_object():
-        ref xy = po["x-yang"]
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in po
+        and po[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        ref xy = po[schema_keys.JSON_SCHEMA_X_YANG]
         must_list = _parse_yang_must_list(xy)
-        if "key" in xy:
-            key = xy["key"].string()
-        if schema_keys.XYANG_ORDERED_BY in xy and xy[schema_keys.XYANG_ORDERED_BY].is_string():
+        if schema_keys.XYANG_KEY in xy:
+            key = xy[schema_keys.XYANG_KEY].string()
+        if (
+            schema_keys.XYANG_ORDERED_BY in xy
+            and xy[schema_keys.XYANG_ORDERED_BY].is_string()
+        ):
             ob = xy[schema_keys.XYANG_ORDERED_BY].string()
         if schema_keys.XYANG_UNIQUE in xy and xy[schema_keys.XYANG_UNIQUE].is_array():
             ref uarr = xy[schema_keys.XYANG_UNIQUE].array()
@@ -597,8 +724,20 @@ def parse_yang_list(name: String, prop: Value) raises -> ast.YangList:
     var lists = List[Arc[ast.YangList]]()
     var choices = List[Arc[ast.YangChoice]]()
 
-    if "items" in po and po["items"].is_object():
-        _parse_node_children(po["items"], leaves, leaf_lists, anydatas_real, anyxmls, containers, lists, choices)
+    if (
+        schema_keys.JSON_SCHEMA_ITEMS in po
+        and po[schema_keys.JSON_SCHEMA_ITEMS].is_object()
+    ):
+        _parse_node_children(
+            po[schema_keys.JSON_SCHEMA_ITEMS],
+            leaves,
+            leaf_lists,
+            anydatas_real,
+            anyxmls,
+            containers,
+            lists,
+            choices,
+        )
     return ast.YangList(
         name = name,
         key = key,
@@ -625,11 +764,16 @@ def parse_yang_list(name: String, prop: Value) raises -> ast.YangList:
 def parse_yang_container(name: String, prop: Value) raises -> ast.YangContainer:
     """Parse a container definition from a JSON Schema property, including its properties."""
     var description = ""
-    if "description" in prop.object():
-        description = prop.object()["description"].string()
+    if schema_keys.JSON_SCHEMA_DESCRIPTION in prop.object():
+        description = prop.object()[schema_keys.JSON_SCHEMA_DESCRIPTION].string()
     var must_list = List[Arc[ast.YangMust]]()
-    if "x-yang" in prop.object() and prop.object()["x-yang"].is_object():
-        must_list = _parse_yang_must_list(prop.object()["x-yang"])
+    if (
+        schema_keys.JSON_SCHEMA_X_YANG in prop.object()
+        and prop.object()[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+    ):
+        must_list = _parse_yang_must_list(
+            prop.object()[schema_keys.JSON_SCHEMA_X_YANG],
+        )
 
     var leaves = List[Arc[ast.YangLeaf]]()
     var leaf_lists = List[Arc[ast.YangLeafList]]()
