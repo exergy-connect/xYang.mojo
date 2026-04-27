@@ -2,34 +2,43 @@ from std.memory import ArcPointer
 import xyang.ast as ast
 from xyang.xpath.path_parser import local_names_from_slashed_path_parts, parse_path
 from xyang.yang.parser.yang_token import YangToken
-from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.parser_contract import ParserContract
 import xyang.yang.parser.clone_utils as clone_utils
 import xyang.yang.parser.grouping_uses_stmt as gu_stmt
 
 comptime Arc = ArcPointer
-comptime YangRefineStmt = ast.YangRefineStmt
-comptime YangContainer = ast.YangContainer
-comptime YangList = ast.YangList
-comptime YangChoice = ast.YangChoice
-comptime YangLeaf = ast.YangLeaf
-comptime YangLeafList = ast.YangLeafList
-comptime YangAnydata = ast.YangAnydata
-comptime YangAnyxml = ast.YangAnyxml
-comptime YangType = ast.YangType
-comptime YangMust = ast.YangMust
-comptime YangWhen = ast.YangWhen
-comptime ident_local_name_impl = clone_utils.ident_local_name_impl
-comptime clone_must_impl = clone_utils.clone_must_impl
-comptime clone_when_impl = clone_utils.clone_when_impl
-comptime clone_yang_type_impl = clone_utils.clone_yang_type_impl
-comptime clone_leaf_arc_impl = clone_utils.clone_leaf_arc_impl
-comptime clone_leaf_list_arc_impl = clone_utils.clone_leaf_list_arc_impl
-comptime clone_choice_arc_impl = clone_utils.clone_choice_arc_impl
-comptime clone_anydata_arc_impl = clone_utils.clone_anydata_arc_impl
-comptime clone_anyxml_arc_impl = clone_utils.clone_anyxml_arc_impl
-comptime clone_container_arc_impl = clone_utils.clone_container_arc_impl
-comptime clone_list_arc_impl = clone_utils.clone_list_arc_impl
+
+
+def append_cloned_augment_statement_children(
+    read aug: ast.YangAugmentStmt,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut anydatas: List[Arc[ast.YangAnydata]],
+    mut anyxmls: List[Arc[ast.YangAnyxml]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+) raises:
+    for i in range(len(aug.statements)):
+        var st = aug.statements[i]
+        if st.isa[Arc[ast.YangLeaf]]():
+            leaves.append(clone_utils.clone_leaf_arc_impl(st[Arc[ast.YangLeaf]]))
+        elif st.isa[Arc[ast.YangLeafList]]():
+            leaf_lists.append(
+                clone_utils.clone_leaf_list_arc_impl(st[Arc[ast.YangLeafList]])
+            )
+        elif st.isa[Arc[ast.YangAnydata]]():
+            anydatas.append(clone_utils.clone_anydata_arc_impl(st[Arc[ast.YangAnydata]]))
+        elif st.isa[Arc[ast.YangAnyxml]]():
+            anyxmls.append(clone_utils.clone_anyxml_arc_impl(st[Arc[ast.YangAnyxml]]))
+        elif st.isa[Arc[ast.YangContainer]]():
+            containers.append(
+                clone_utils.clone_container_arc_impl(st[Arc[ast.YangContainer]])
+            )
+        elif st.isa[Arc[ast.YangList]]():
+            lists.append(clone_utils.clone_list_arc_impl(st[Arc[ast.YangList]]))
+        elif st.isa[Arc[ast.YangChoice]]():
+            choices.append(clone_utils.clone_choice_arc_impl(st[Arc[ast.YangChoice]]))
 
 
 def _join_slashed_path_parts(read parts: List[String]) -> String:
@@ -85,12 +94,12 @@ def _consume_refine_slashed_path_parts[ParserT: ParserContract](mut parser: Pars
 def _parse_refine_mandatory_substmt_at_path[ParserT: ParserContract](
     mut parser: ParserT,
     read segments: List[String],
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
-    mut refine: YangRefineStmt,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+    mut refine: ast.YangRefineStmt,
 ) raises:
     parser._consume()
     var mandatory = parser._parse_boolean_value()
@@ -112,12 +121,12 @@ def _parse_refine_mandatory_substmt_at_path[ParserT: ParserContract](
 def _parse_refine_default_substmt_at_path[ParserT: ParserContract](
     mut parser: ParserT,
     read segments: List[String],
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
-    mut refine: YangRefineStmt,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+    mut refine: ast.YangRefineStmt,
 ) raises:
     parser._consume()
     var default_value = parser._consume_argument_value()
@@ -143,14 +152,14 @@ def _parse_refine_default_substmt_at_path[ParserT: ParserContract](
 def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
     mut parser: ParserT,
     read segments: List[String],
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut anydatas: List[Arc[YangAnydata]],
-    mut anyxmls: List[Arc[YangAnyxml]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
-    mut refine: YangRefineStmt,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut anydatas: List[Arc[ast.YangAnydata]],
+    mut anyxmls: List[Arc[ast.YangAnyxml]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+    mut refine: ast.YangRefineStmt,
 ) raises:
     _ = anydatas
     _ = anyxmls
@@ -168,7 +177,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             choices,
         ):
             parser._error("Unknown refine target path '" + refine.target_path + "'")
-        refine.must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+        refine.must.must_statements.append(Arc[ast.YangMust](clone_utils.clone_must_impl(must_stmt)))
     elif tt == YangToken.DESCRIPTION:
         parser._consume()
         var desc = parser._consume_argument_value()
@@ -284,7 +293,7 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
             choices,
         ):
             parser._error("Unknown refine target path '" + refine.target_path + "'")
-        refine.set_when(Optional[YangWhen](when_stmt^))
+        refine.set_when(Optional[ast.YangWhen](when_stmt^))
     elif tt == YangToken.KEY:
         parser._consume()
         var key = parser._consume_argument_value()
@@ -316,14 +325,14 @@ def _parse_refine_substatement_at_path_impl[ParserT: ParserContract](
 
 def parse_refine_statement_impl[ParserT: ParserContract](
     mut parser: ParserT,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut anydatas: List[Arc[YangAnydata]],
-    mut anyxmls: List[Arc[YangAnyxml]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
-) raises -> YangRefineStmt:
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut anydatas: List[Arc[ast.YangAnydata]],
+    mut anyxmls: List[Arc[ast.YangAnyxml]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+) raises -> ast.YangRefineStmt:
     _ = anydatas
     _ = anyxmls
     parser._expect(YangToken.REFINE)
@@ -333,7 +342,7 @@ def parse_refine_statement_impl[ParserT: ParserContract](
     if len(segments) == 0:
         parser._error("refine requires a descendant schema-node identifier")
         parser._skip_statement_tail()
-        return YangRefineStmt(
+        return ast.YangRefineStmt(
             target_path = "",
             mandatory = Optional[Bool](),
             min_elements = Optional[Int](),
@@ -342,11 +351,11 @@ def parse_refine_statement_impl[ParserT: ParserContract](
             default_values = List[String](),
             description = Optional[String](),
             if_features = List[String](),
-            must = ast.YangMustStatements(must_statements = List[Arc[YangMust]]()),
-            when = Optional[YangWhen](),
+            must = ast.YangMustStatements(must_statements = List[Arc[ast.YangMust]]()),
+            when = Optional[ast.YangWhen](),
         )
 
-    var refine = YangRefineStmt(
+    var refine = ast.YangRefineStmt(
         target_path = refine_path^,
         mandatory = Optional[Bool](),
         min_elements = Optional[Int](),
@@ -355,8 +364,8 @@ def parse_refine_statement_impl[ParserT: ParserContract](
         default_values = List[String](),
         description = Optional[String](),
         if_features = List[String](),
-        must = ast.YangMustStatements(must_statements = List[Arc[YangMust]]()),
-        when = Optional[YangWhen](),
+        must = ast.YangMustStatements(must_statements = List[Arc[ast.YangMust]]()),
+        when = Optional[ast.YangWhen](),
     )
 
     if parser._consume_if(YangToken.LBRACE):
@@ -380,20 +389,26 @@ def parse_refine_statement_impl[ParserT: ParserContract](
 
 def parse_relative_augment_statement_impl[ParserT: ParserContract](
     mut parser: ParserT,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut anydatas: List[Arc[YangAnydata]],
-    mut anyxmls: List[Arc[YangAnyxml]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut anydatas: List[Arc[ast.YangAnydata]],
+    mut anyxmls: List[Arc[ast.YangAnyxml]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) raises:
-    var parsed = parse_augment_statement_body_impl(parser)
-    if len(parsed.path) > 0 and String(parsed.path[byte=0 : 1]) == "/":
-        parser._queue_pending_module_augment(parsed^)
+    var stmt = parse_augment_statement_body_impl(parser)
+    var ap = stmt.augment_path
+    var is_abs = len(ap) > 0 and String(ap[byte=0:1]) == "/"
+    if is_abs:
+        var arc = Arc[ast.YangAugmentStmt](stmt^)
+        parser._queue_pending_module_augment(arc.copy())
+        parser._record_module_statement(
+            ast.YangModuleStatement(arc^),
+        )
         return
     if not apply_augment_to_path_impl(
-        parsed.path,
+        stmt.augment_path,
         leaves,
         leaf_lists,
         anydatas,
@@ -401,27 +416,36 @@ def parse_relative_augment_statement_impl[ParserT: ParserContract](
         containers,
         lists,
         choices,
-        parsed,
+        stmt,
     ):
-        parser._error("Unknown augment target path '" + parsed.path + "'")
+        parser._error("Unknown augment target path '" + stmt.augment_path + "'")
+    parser._record_module_statement(
+        ast.YangModuleStatement(Arc[ast.YangAugmentStmt](stmt^)),
+    )
 
 
 def parse_module_augment_statement_impl[ParserT: ParserContract](
     mut parser: ParserT,
-    mut top_containers: List[Arc[YangContainer]],
+    mut top_containers: List[Arc[ast.YangContainer]],
 ) raises:
-    var parsed = parse_augment_statement_body_impl(parser)
-    if len(parsed.path) > 0 and String(parsed.path[byte=0 : 1]) == "/":
-        parser._queue_pending_module_augment(parsed^)
+    var stmt = parse_augment_statement_body_impl(parser)
+    var ap = stmt.augment_path
+    var is_abs = len(ap) > 0 and String(ap[byte=0:1]) == "/"
+    if is_abs:
+        var arc = Arc[ast.YangAugmentStmt](stmt^)
+        parser._queue_pending_module_augment(arc.copy())
+        parser._record_module_statement(
+            ast.YangModuleStatement(arc^),
+        )
         return
-    var root_leaves = List[Arc[YangLeaf]]()
-    var root_leaf_lists = List[Arc[YangLeafList]]()
-    var root_anydatas = List[Arc[YangAnydata]]()
-    var root_anyxmls = List[Arc[YangAnyxml]]()
-    var root_lists = List[Arc[YangList]]()
-    var root_choices = List[Arc[YangChoice]]()
+    var root_leaves = List[Arc[ast.YangLeaf]]()
+    var root_leaf_lists = List[Arc[ast.YangLeafList]]()
+    var root_anydatas = List[Arc[ast.YangAnydata]]()
+    var root_anyxmls = List[Arc[ast.YangAnyxml]]()
+    var root_lists = List[Arc[ast.YangList]]()
+    var root_choices = List[Arc[ast.YangChoice]]()
     if not apply_augment_to_path_impl(
-        parsed.path,
+        stmt.augment_path,
         root_leaves,
         root_leaf_lists,
         root_anydatas,
@@ -429,26 +453,29 @@ def parse_module_augment_statement_impl[ParserT: ParserContract](
         top_containers,
         root_lists,
         root_choices,
-        parsed,
+        stmt,
     ):
-        parser._error("Unknown augment target path '" + parsed.path + "'")
+        parser._error("Unknown augment target path '" + stmt.augment_path + "'")
+    parser._record_module_statement(
+        ast.YangModuleStatement(Arc[ast.YangAugmentStmt](stmt^)),
+    )
 
 
 def apply_pending_module_augments_impl(
-    read pending_module_augments: List[Arc[ParsedAugment]],
-    mut top_containers: List[Arc[YangContainer]],
+    read pending_module_augments: List[Arc[ast.YangAugmentStmt]],
+    mut top_containers: List[Arc[ast.YangContainer]],
 ) raises -> String:
-    var root_leaves = List[Arc[YangLeaf]]()
-    var root_leaf_lists = List[Arc[YangLeafList]]()
-    var root_anydatas = List[Arc[YangAnydata]]()
-    var root_anyxmls = List[Arc[YangAnyxml]]()
-    var root_lists = List[Arc[YangList]]()
-    var root_choices = List[Arc[YangChoice]]()
+    var root_leaves = List[Arc[ast.YangLeaf]]()
+    var root_leaf_lists = List[Arc[ast.YangLeafList]]()
+    var root_anydatas = List[Arc[ast.YangAnydata]]()
+    var root_anyxmls = List[Arc[ast.YangAnyxml]]()
+    var root_lists = List[Arc[ast.YangList]]()
+    var root_choices = List[Arc[ast.YangChoice]]()
     for i in range(len(pending_module_augments)):
         var aug_arc = pending_module_augments[i].copy()
         ref aug = aug_arc[]
         if not apply_augment_to_path_impl(
-            aug.path,
+            aug.augment_path,
             root_leaves,
             root_leaf_lists,
             root_anydatas,
@@ -458,46 +485,48 @@ def apply_pending_module_augments_impl(
             root_choices,
             aug,
         ):
-            return aug.path
+            return aug.augment_path
     return ""
 
 
-def parse_augment_statement_body_impl[ParserT: ParserContract](mut parser: ParserT) raises -> ParsedAugment:
+def parse_augment_statement_body_impl[ParserT: ParserContract](
+    mut parser: ParserT,
+) raises -> ast.YangAugmentStmt:
     parser._expect(YangToken.AUGMENT)
     var target_path = parser._consume_argument_value()
 
-    var leaves = List[Arc[YangLeaf]]()
-    var leaf_lists = List[Arc[YangLeafList]]()
-    var anydatas = List[Arc[YangAnydata]]()
-    var anyxmls = List[Arc[YangAnyxml]]()
-    var containers = List[Arc[YangContainer]]()
-    var lists = List[Arc[YangList]]()
-    var choices = List[Arc[YangChoice]]()
+    var leaves = List[Arc[ast.YangLeaf]]()
+    var leaf_lists = List[Arc[ast.YangLeafList]]()
+    var anydatas = List[Arc[ast.YangAnydata]]()
+    var anyxmls = List[Arc[ast.YangAnyxml]]()
+    var containers = List[Arc[ast.YangContainer]]()
+    var lists = List[Arc[ast.YangList]]()
+    var choices = List[Arc[ast.YangChoice]]()
 
     if parser._consume_if(YangToken.LBRACE):
         while parser._has_more() and parser._peek() != YangToken.RBRACE:
             var stmt = parser._peek()
             if stmt == YangToken.LEAF:
                 var leaf = parser._parse_leaf_statement()
-                leaves.append(Arc[YangLeaf](leaf^))
+                leaves.append(Arc[ast.YangLeaf](leaf^))
             elif stmt == YangToken.LEAF_LIST:
                 var leaf_list = parser._parse_leaf_list_statement()
-                leaf_lists.append(Arc[YangLeafList](leaf_list^))
+                leaf_lists.append(Arc[ast.YangLeafList](leaf_list^))
             elif stmt == YangToken.ANYDATA:
                 var ad = parser._parse_anydata_statement()
-                anydatas.append(Arc[YangAnydata](ad^))
+                anydatas.append(Arc[ast.YangAnydata](ad^))
             elif stmt == YangToken.ANYXML:
                 var ax = parser._parse_anyxml_statement()
-                anyxmls.append(Arc[YangAnyxml](ax^))
+                anyxmls.append(Arc[ast.YangAnyxml](ax^))
             elif stmt == YangToken.CONTAINER:
                 var child_container = parser._parse_container_statement()
-                containers.append(Arc[YangContainer](child_container^))
+                containers.append(Arc[ast.YangContainer](child_container^))
             elif stmt == YangToken.LIST:
                 var child_list = parser._parse_list_statement()
-                lists.append(Arc[YangList](child_list^))
+                lists.append(Arc[ast.YangList](child_list^))
             elif stmt == YangToken.CHOICE:
                 var choice = parser._parse_choice_statement()
-                choices.append(Arc[YangChoice](choice^))
+                choices.append(Arc[ast.YangChoice](choice^))
             elif stmt == YangToken.USES:
                 parser._parse_uses_statement(
                     leaves,
@@ -525,28 +554,40 @@ def parse_augment_statement_body_impl[ParserT: ParserContract](mut parser: Parse
         parser._expect(YangToken.RBRACE)
     parser._skip_if(YangToken.SEMICOLON)
 
-    return ParsedAugment(
-        target_path,
-        leaves^,
-        leaf_lists^,
-        anydatas^,
-        anyxmls^,
-        containers^,
-        lists^,
-        choices^,
+    var statements = List[ast.YangAugmentStmt.ChildStatement]()
+    for i in range(len(leaves)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(leaves[i].copy()))
+    for i in range(len(leaf_lists)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(leaf_lists[i].copy()))
+    for i in range(len(anydatas)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(anydatas[i].copy()))
+    for i in range(len(anyxmls)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(anyxmls[i].copy()))
+    for i in range(len(containers)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(containers[i].copy()))
+    for i in range(len(lists)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(lists[i].copy()))
+    for i in range(len(choices)):
+        statements.append(ast.YangAugmentStmt.ChildStatement(choices[i].copy()))
+
+    return ast.YangAugmentStmt(
+        augment_path = target_path^,
+        if_features = List[String](),
+        when = Optional[ast.YangWhen](),
+        statements = statements^,
     )
 
 
 def apply_augment_to_path_impl(
     path: String,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut anydatas: List[Arc[YangAnydata]],
-    mut anyxmls: List[Arc[YangAnyxml]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
-    read aug: ParsedAugment,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut anydatas: List[Arc[ast.YangAnydata]],
+    mut anyxmls: List[Arc[ast.YangAnyxml]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+    read aug: ast.YangAugmentStmt,
 ) raises -> Bool:
     var segments = _local_segments_from_schema_path_string(path)
     if len(segments) == 0:
@@ -568,59 +609,51 @@ def apply_augment_to_path_impl(
 def apply_augment_segments_impl(
     read segments: List[String],
     seg_idx: Int,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut anydatas: List[Arc[YangAnydata]],
-    mut anyxmls: List[Arc[YangAnyxml]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
-    read aug: ParsedAugment,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut anydatas: List[Arc[ast.YangAnydata]],
+    mut anyxmls: List[Arc[ast.YangAnyxml]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
+    read aug: ast.YangAugmentStmt,
 ) raises -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(containers)):
-            if ident_local_name_impl(containers[i][].name) == seg:
-                for j in range(len(aug.leaves)):
-                    containers[i][].leaves.append(clone_leaf_arc_impl(aug.leaves[j]))
-                for j in range(len(aug.leaf_lists)):
-                    containers[i][].leaf_lists.append(clone_leaf_list_arc_impl(aug.leaf_lists[j]))
-                for j in range(len(aug.anydatas)):
-                    containers[i][].anydatas.append(clone_anydata_arc_impl(aug.anydatas[j]))
-                for j in range(len(aug.anyxmls)):
-                    containers[i][].anyxmls.append(clone_anyxml_arc_impl(aug.anyxmls[j]))
-                for j in range(len(aug.containers)):
-                    containers[i][].containers.append(clone_container_arc_impl(aug.containers[j]))
-                for j in range(len(aug.lists)):
-                    containers[i][].lists.append(clone_list_arc_impl(aug.lists[j]))
-                for j in range(len(aug.choices)):
-                    containers[i][].choices.append(clone_choice_arc_impl(aug.choices[j]))
+            if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
+                append_cloned_augment_statement_children(
+                    aug,
+                    containers[i][].leaves,
+                    containers[i][].leaf_lists,
+                    containers[i][].anydatas,
+                    containers[i][].anyxmls,
+                    containers[i][].containers,
+                    containers[i][].lists,
+                    containers[i][].choices,
+                )
                 applied = True
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 var b_aug = ast.decompose_yang_list_children(lists[i][].children)
-                for j in range(len(aug.leaves)):
-                    b_aug.leaves.append(clone_leaf_arc_impl(aug.leaves[j]))
-                for j in range(len(aug.leaf_lists)):
-                    b_aug.leaf_lists.append(clone_leaf_list_arc_impl(aug.leaf_lists[j]))
-                for j in range(len(aug.anydatas)):
-                    b_aug.anydatas.append(clone_anydata_arc_impl(aug.anydatas[j]))
-                for j in range(len(aug.anyxmls)):
-                    b_aug.anyxmls.append(clone_anyxml_arc_impl(aug.anyxmls[j]))
-                for j in range(len(aug.containers)):
-                    b_aug.containers.append(clone_container_arc_impl(aug.containers[j]))
-                for j in range(len(aug.lists)):
-                    b_aug.lists.append(clone_list_arc_impl(aug.lists[j]))
-                for j in range(len(aug.choices)):
-                    b_aug.choices.append(clone_choice_arc_impl(aug.choices[j]))
+                append_cloned_augment_statement_children(
+                    aug,
+                    b_aug.leaves,
+                    b_aug.leaf_lists,
+                    b_aug.anydatas,
+                    b_aug.anyxmls,
+                    b_aug.containers,
+                    b_aug.lists,
+                    b_aug.choices,
+                )
                 lists[i][].children = ast.pack_yang_list_child_buckets(b_aug)
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if apply_augment_segments_impl(
                 segments,
                 seg_idx + 1,
@@ -635,7 +668,7 @@ def apply_augment_segments_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_seg = ast.decompose_yang_list_children(lists[i][].children)
             if apply_augment_segments_impl(
                 segments,
@@ -658,43 +691,43 @@ def refine_set_description_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     description: String,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaves)):
-            if ident_local_name_impl(leaves[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaves[i][].name) == seg:
                 # Leaf description is not modeled in the current AST; treat as recognized no-op.
                 applied = True
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
                 # Leaf-list description is not modeled in the current AST; treat as recognized no-op.
                 applied = True
         for i in range(len(containers)):
-            if ident_local_name_impl(containers[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
                 containers[i][].description = description
                 applied = True
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].description = description
                 applied = True
         for i in range(len(choices)):
-            if ident_local_name_impl(choices[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(choices[i][].name) == seg:
                 # Choice/case descriptions are not modeled in the current AST; treat as recognized no-op.
                 applied = True
             for j in range(len(choices[i][].cases)):
-                if ident_local_name_impl(choices[i][].cases[j][].name) == seg:
+                if clone_utils.ident_local_name_impl(choices[i][].cases[j][].name) == seg:
                     applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_description_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -707,7 +740,7 @@ def refine_set_description_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_d = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_description_at_path_impl(
                 segments,
@@ -728,28 +761,28 @@ def refine_set_mandatory_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     mandatory: Bool,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaves)):
-            if ident_local_name_impl(leaves[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaves[i][].name) == seg:
                 leaves[i][].mandatory = mandatory
                 applied = True
         for i in range(len(choices)):
-            if ident_local_name_impl(choices[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(choices[i][].name) == seg:
                 choices[i][].mandatory = mandatory
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_mandatory_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -762,7 +795,7 @@ def refine_set_mandatory_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_m = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_mandatory_at_path_impl(
                 segments,
@@ -783,33 +816,33 @@ def refine_set_default_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     default_value: String,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaves)):
-            if ident_local_name_impl(leaves[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaves[i][].name) == seg:
                 leaves[i][].default_value = default_value
                 leaves[i][].has_default = True
                 applied = True
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
                 leaf_lists[i][].default_values.append(default_value)
                 applied = True
         for i in range(len(choices)):
-            if ident_local_name_impl(choices[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(choices[i][].name) == seg:
                 choices[i][].default_case = default_value
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_default_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -822,7 +855,7 @@ def refine_set_default_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_def = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_default_at_path_impl(
                 segments,
@@ -842,45 +875,45 @@ def refine_set_default_at_path_impl(
 def refine_add_must_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
-    read must_stmt: YangMust,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    read must_stmt: ast.YangMust,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) raises -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaves)):
-            if ident_local_name_impl(leaves[i][].name) == seg:
-                leaves[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+            if clone_utils.ident_local_name_impl(leaves[i][].name) == seg:
+                leaves[i][].must.must_statements.append(Arc[ast.YangMust](clone_utils.clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
-                leaf_lists[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
+                leaf_lists[i][].must.must_statements.append(Arc[ast.YangMust](clone_utils.clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(containers)):
-            if ident_local_name_impl(containers[i][].name) == seg:
-                containers[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+            if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
+                containers[i][].must.must_statements.append(Arc[ast.YangMust](clone_utils.clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
-                lists[i][].must.must_statements.append(Arc[YangMust](clone_must_impl(must_stmt)))
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
+                lists[i][].must.must_statements.append(Arc[ast.YangMust](clone_utils.clone_must_impl(must_stmt)))
                 applied = True
         for i in range(len(choices)):
-            if ident_local_name_impl(choices[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(choices[i][].name) == seg:
                 # Container/list/choice/case `must` is not modeled in current AST; treat as recognized no-op.
                 applied = True
             for j in range(len(choices[i][].cases)):
-                if ident_local_name_impl(choices[i][].cases[j][].name) == seg:
+                if clone_utils.ident_local_name_impl(choices[i][].cases[j][].name) == seg:
                     # Container/list/choice/case `must` is not modeled in current AST; treat as recognized no-op.
                     applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_add_must_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -893,7 +926,7 @@ def refine_add_must_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_mu = ast.decompose_yang_list_children(lists[i][].children)
             if refine_add_must_at_path_impl(
                 segments,
@@ -913,37 +946,37 @@ def refine_add_must_at_path_impl(
 def refine_set_when_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
-    read when_stmt: YangWhen,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    read when_stmt: ast.YangWhen,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) raises -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaves)):
-            if ident_local_name_impl(leaves[i][].name) == seg:
-                leaves[i][].when = Optional(clone_when_impl(when_stmt))
+            if clone_utils.ident_local_name_impl(leaves[i][].name) == seg:
+                leaves[i][].when = Optional(clone_utils.clone_when_impl(when_stmt))
                 applied = True
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
-                leaf_lists[i][].when = Optional(clone_when_impl(when_stmt))
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
+                leaf_lists[i][].when = Optional(clone_utils.clone_when_impl(when_stmt))
                 applied = True
         for i in range(len(choices)):
-            if ident_local_name_impl(choices[i][].name) == seg:
-                choices[i][].when = Optional(clone_when_impl(when_stmt))
+            if clone_utils.ident_local_name_impl(choices[i][].name) == seg:
+                choices[i][].when = Optional(clone_utils.clone_when_impl(when_stmt))
                 applied = True
             for j in range(len(choices[i][].cases)):
-                if ident_local_name_impl(choices[i][].cases[j][].name) == seg:
-                    choices[i][].cases[j][].when = Optional(clone_when_impl(when_stmt))
+                if clone_utils.ident_local_name_impl(choices[i][].cases[j][].name) == seg:
+                    choices[i][].cases[j][].when = Optional(clone_utils.clone_when_impl(when_stmt))
                     applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_when_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -956,7 +989,7 @@ def refine_set_when_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_w = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_when_at_path_impl(
                 segments,
@@ -976,29 +1009,29 @@ def refine_set_when_at_path_impl(
 def refine_set_type_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
-    read type_stmt: YangType,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
-    mut choices: List[Arc[YangChoice]],
+    read type_stmt: ast.YangType,
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
+    mut choices: List[Arc[ast.YangChoice]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaves)):
-            if ident_local_name_impl(leaves[i][].name) == seg:
-                leaves[i][].type = clone_yang_type_impl(type_stmt)
+            if clone_utils.ident_local_name_impl(leaves[i][].name) == seg:
+                leaves[i][].type = clone_utils.clone_yang_type_impl(type_stmt)
                 applied = True
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
-                leaf_lists[i][].type = clone_yang_type_impl(type_stmt)
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
+                leaf_lists[i][].type = clone_utils.clone_yang_type_impl(type_stmt)
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_type_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -1011,7 +1044,7 @@ def refine_set_type_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_t = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_type_at_path_impl(
                 segments,
@@ -1032,27 +1065,27 @@ def refine_set_min_elements_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     value: Int,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
                 leaf_lists[i][].min_elements = value
                 applied = True
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].min_elements = value
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_min_elements_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -1064,7 +1097,7 @@ def refine_set_min_elements_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_min = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_min_elements_at_path_impl(
                 segments,
@@ -1084,27 +1117,27 @@ def refine_set_max_elements_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     value: Int,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
                 leaf_lists[i][].max_elements = value
                 applied = True
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].max_elements = value
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_max_elements_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -1116,7 +1149,7 @@ def refine_set_max_elements_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_max = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_max_elements_at_path_impl(
                 segments,
@@ -1136,27 +1169,27 @@ def refine_set_ordered_by_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     value: String,
-    mut leaves: List[Arc[YangLeaf]],
-    mut leaf_lists: List[Arc[YangLeafList]],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
+    mut leaves: List[Arc[ast.YangLeaf]],
+    mut leaf_lists: List[Arc[ast.YangLeafList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(leaf_lists)):
-            if ident_local_name_impl(leaf_lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(leaf_lists[i][].name) == seg:
                 leaf_lists[i][].ordered_by = value
                 applied = True
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].ordered_by = value
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_ordered_by_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -1168,7 +1201,7 @@ def refine_set_ordered_by_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_ob = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_ordered_by_at_path_impl(
                 segments,
@@ -1188,21 +1221,21 @@ def refine_set_key_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     key: String,
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].key = key
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_set_key_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -1212,7 +1245,7 @@ def refine_set_key_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_key = ast.decompose_yang_list_children(lists[i][].children)
             if refine_set_key_at_path_impl(
                 segments,
@@ -1230,21 +1263,21 @@ def refine_add_unique_at_path_impl(
     read segments: List[String],
     seg_idx: Int,
     read unique_spec: List[String],
-    mut containers: List[Arc[YangContainer]],
-    mut lists: List[Arc[YangList]],
+    mut containers: List[Arc[ast.YangContainer]],
+    mut lists: List[Arc[ast.YangList]],
 ) -> Bool:
     var seg = segments[seg_idx]
     if seg_idx == len(segments) - 1:
         var applied = False
         for i in range(len(lists)):
-            if ident_local_name_impl(lists[i][].name) == seg:
+            if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
                 lists[i][].unique_specs.append(unique_spec.copy())
                 applied = True
         return applied
 
     var applied = False
     for i in range(len(containers)):
-        if ident_local_name_impl(containers[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(containers[i][].name) == seg:
             if refine_add_unique_at_path_impl(
                 segments,
                 seg_idx + 1,
@@ -1254,7 +1287,7 @@ def refine_add_unique_at_path_impl(
             ):
                 applied = True
     for i in range(len(lists)):
-        if ident_local_name_impl(lists[i][].name) == seg:
+        if clone_utils.ident_local_name_impl(lists[i][].name) == seg:
             var b_uq = ast.decompose_yang_list_children(lists[i][].children)
             if refine_add_unique_at_path_impl(
                 segments,

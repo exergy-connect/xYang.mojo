@@ -1,7 +1,6 @@
 from std.collections import Dict
 from std.memory import ArcPointer
 import xyang.ast as ast
-from xyang.yang.parser.parsed_augment import ParsedAugment
 from xyang.yang.parser.yang_token import YangToken
 
 comptime Arc = ArcPointer
@@ -117,7 +116,7 @@ trait ParserContract:
     ) raises:
         ...
 
-    def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
+    def _queue_pending_module_augment(mut self, aug: Arc[ast.YangAugmentStmt]):
         ...
 
     def _parse_leaf_statement(mut self) raises -> ast.YangLeaf:

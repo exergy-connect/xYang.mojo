@@ -36,7 +36,7 @@
         },
         "version": {
           "$ref": "#/$defs/version-string",
-          "description": "",
+          "description": "Version string",
           "x-yang": {
             "type": "leaf"
           }
@@ -68,7 +68,8 @@
           "description": "Default change history retention policy for all entities.\n         Can be overridden per entity. Default: 3 (keep last 3 change ids)",
           "x-yang": {
             "type": "leaf"
-          }
+          },
+          "default": "3"
         },
         "include_x_fields": {
           "type": "boolean",
@@ -144,7 +145,8 @@
                       "error-message": "Entity name exceeds the maximum underscore limit configured in max_name_underscores (default: 2). Deep names suggest missing entity boundaries - create proper entities instead.",
                       "description": "Validates that entity name has at most max_name_underscores underscores (default: 2) to constrain hierarchical depth and reduce parsing complexity."
                     }
-                  ]
+                  ],
+                  "mandatory": true
                 }
               },
               "brief": {
@@ -181,14 +183,14 @@
               },
               "change_history": {
                 "$ref": "#/$defs/change-history-policy",
-                "description": "",
+                "description": "Change history retention policy for this entity. Overrides model-level default.",
                 "x-yang": {
                   "type": "leaf"
                 }
               },
               "v": {
                 "$ref": "#/$defs/version-string",
-                "description": "",
+                "description": "Model version of this entity, added during consolidation. NOTE: This field is automatically added during consolidation and should NOT be included in source YAML files.",
                 "x-yang": {
                   "type": "leaf"
                 }
@@ -209,7 +211,7 @@
               },
               "rate_of_change": {
                 "$ref": "#/$defs/rate-of-change",
-                "description": "",
+                "description": "Expected rate of change for this entity type, indicating what is considered 'normal' change frequency (e.g., hourly, daily, quarterly)",
                 "x-yang": {
                   "type": "leaf"
                 }
@@ -219,11 +221,12 @@
                 "description": "Data validation mode for this entity",
                 "x-yang": {
                   "type": "leaf"
-                }
+                },
+                "default": "strict"
               },
               "storage": {
                 "$ref": "#/$defs/storage-type",
-                "description": "",
+                "description": "Storage type for entity data. INDEXED_KV uses CloudFlare Key-Value store with an index key (entityname:index) containing the primary key values of value keys (entityname:primary_key_1, ...). GITHUB_PR uses GitHub pull request storage.",
                 "x-yang": {
                   "type": "leaf"
                 }
@@ -366,7 +369,8 @@
                       "description": "Per-field validation: enforce constraints or filter invalid values from consolidated output.",
                       "x-yang": {
                         "type": "leaf"
-                      }
+                      },
+                      "default": "enforce"
                     },
                     "type": {
                       "type": "object",
@@ -586,7 +590,8 @@
                                       "error-message": "Computed field reference must exist in the specified entity (or current entity if not specified)",
                                       "description": "Validates that the field exists: in current entity when entity is omitted, or in referenced entity when entity is specified. Only enforced during consolidated validation (Phase 2) when cross-file references can be resolved."
                                     }
-                                  ]
+                                  ],
+                                  "mandatory": true
                                 }
                               },
                               "entity": {
@@ -606,7 +611,10 @@
                                 }
                               }
                             },
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "required": [
+                              "field"
+                            ]
                           },
                           "description": "Field references for the computation (same entity or cross-entity with entity leaf).",
                           "x-yang": {
@@ -738,7 +746,8 @@
                       "description": "Per-field validation: enforce constraints or filter invalid values from consolidated output.",
                       "x-yang": {
                         "type": "leaf"
-                      }
+                      },
+                      "default": "enforce"
                     },
                     "type": {
                       "type": "object",
@@ -951,7 +960,8 @@
                                       "error-message": "Computed field reference must exist in the specified entity (or current entity if not specified)",
                                       "description": "Validates that the field exists: in current entity when entity is omitted, or in referenced entity when entity is specified. Only enforced during consolidated validation (Phase 2) when cross-file references can be resolved."
                                     }
-                                  ]
+                                  ],
+                                  "mandatory": true
                                 }
                               },
                               "entity": {
@@ -971,7 +981,10 @@
                                 }
                               }
                             },
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "required": [
+                              "field"
+                            ]
                           },
                           "description": "Field references for the computation (same entity or cross-entity with entity leaf).",
                           "x-yang": {
@@ -1018,6 +1031,7 @@
             },
             "additionalProperties": false,
             "required": [
+              "name",
               "description",
               "primary_key"
             ]
@@ -1053,7 +1067,8 @@
                 "$ref": "#/$defs/date-and-time",
                 "description": "ISO 8601 timestamp of the change",
                 "x-yang": {
-                  "type": "leaf"
+                  "type": "leaf",
+                  "mandatory": true
                 }
               },
               "author": {
@@ -1080,7 +1095,8 @@
             },
             "additionalProperties": false,
             "required": [
-              "id"
+              "id",
+              "timestamp"
             ]
           },
           "description": "Change tracking records. NOTE: This list is automatically generated during consolidation and should NOT be included in source YAML files.",

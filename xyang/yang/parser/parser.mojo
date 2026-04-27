@@ -22,7 +22,6 @@ import xyang.yang.parser.semantics_utils as sem_utils
 from xyang.yang.parser.parser_contract import ParserContract
 import xyang.yang.parser.yang_token as yang_token
 from xyang.yang.parser.yang_token import YangToken
-from xyang.yang.parser.parsed_augment import ParsedAugment
 
 comptime Arc = ArcPointer
 
@@ -38,7 +37,7 @@ struct _YangParser(Movable, ParserContract):
     var import_prefixes: Dict[String, Arc[ast.YangModuleImport]]
     var module_statements: List[ast.YangModuleStatement]
     var feature_if_features: Dict[String, List[String]]
-    var pending_module_augments: List[Arc[ParsedAugment]]
+    var pending_module_augments: List[Arc[ast.YangAugmentStmt]]
     ## Built-in `type` keyword → parse function (`tc_stmt.new_builtin_type_parser_table`).
     var _builtin_type_parsers: Dict[
         String, fn (mut _YangParser, String) raises -> ast.YangType
@@ -55,11 +54,11 @@ struct _YangParser(Movable, ParserContract):
         self.import_prefixes = Dict[String, Arc[ast.YangModuleImport]]()
         self.module_statements = List[ast.YangModuleStatement]()
         self.feature_if_features = Dict[String, List[String]]()
-        self.pending_module_augments = List[Arc[ParsedAugment]]()
+        self.pending_module_augments = List[Arc[ast.YangAugmentStmt]]()
         self._builtin_type_parsers = tc_stmt.new_builtin_type_parser_table[_YangParser]()
 
-    def _queue_pending_module_augment(mut self, var aug: ParsedAugment):
-        self.pending_module_augments.append(Arc[ParsedAugment](aug^))
+    def _queue_pending_module_augment(mut self, aug: Arc[ast.YangAugmentStmt]):
+        self.pending_module_augments.append(aug)
 
     def parse_module(mut self) raises -> ast.YangModule:
         return parse_module_impl(self)
@@ -373,19 +372,6 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
     ) raises:
-        var augment_path = self._peek_value_n(1)
-        self._record_module_statement(
-            ast.YangModuleStatement(
-                Arc[ast.YangAugmentStmt](
-                    ast.YangAugmentStmt(
-                        augment_path=augment_path,
-                        if_features=List[String](),
-                        has_when=False,
-                        when=Optional[ast.YangWhen](),
-                    ),
-                ),
-            ),
-        )
         ra_stmt.parse_relative_augment_statement_impl(
             self,
             leaves,
@@ -401,19 +387,6 @@ struct _YangParser(Movable, ParserContract):
         mut self,
         mut top_containers: List[Arc[ast.YangContainer]],
     ) raises:
-        var augment_path = self._peek_value_n(1)
-        self._record_module_statement(
-            ast.YangModuleStatement(
-                Arc[ast.YangAugmentStmt](
-                    ast.YangAugmentStmt(
-                        augment_path=augment_path,
-                        if_features=List[String](),
-                        has_when=False,
-                        when=Optional[ast.YangWhen](),
-                    ),
-                ),
-            ),
-        )
         ra_stmt.parse_module_augment_statement_impl(self, top_containers)
 
     def _apply_pending_module_augments(
@@ -426,59 +399,6 @@ struct _YangParser(Movable, ParserContract):
         )
         if len(failed_path) > 0:
             self._error("Unknown augment target path '" + failed_path + "'")
-
-    def _parse_augment_statement_body(mut self) raises -> ParsedAugment:
-        return ra_stmt.parse_augment_statement_body_impl(self)
-
-    def _apply_augment_to_path(
-        ref self,
-        path: String,
-        mut leaves: List[Arc[ast.YangLeaf]],
-        mut leaf_lists: List[Arc[ast.YangLeafList]],
-        mut anydatas: List[Arc[ast.YangAnydata]],
-        mut anyxmls: List[Arc[ast.YangAnyxml]],
-        mut containers: List[Arc[ast.YangContainer]],
-        mut lists: List[Arc[ast.YangList]],
-        mut choices: List[Arc[ast.YangChoice]],
-        read aug: ParsedAugment,
-    ) raises -> Bool:
-        return ra_stmt.apply_augment_to_path_impl(
-            path,
-            leaves,
-            leaf_lists,
-            anydatas,
-            anyxmls,
-            containers,
-            lists,
-            choices,
-            aug,
-        )
-
-    def _apply_augment_segments(
-        ref self,
-        read segments: List[String],
-        seg_idx: Int,
-        mut leaves: List[Arc[ast.YangLeaf]],
-        mut leaf_lists: List[Arc[ast.YangLeafList]],
-        mut anydatas: List[Arc[ast.YangAnydata]],
-        mut anyxmls: List[Arc[ast.YangAnyxml]],
-        mut containers: List[Arc[ast.YangContainer]],
-        mut lists: List[Arc[ast.YangList]],
-        mut choices: List[Arc[ast.YangChoice]],
-        read aug: ParsedAugment,
-    ) raises -> Bool:
-        return ra_stmt.apply_augment_segments_impl(
-            segments,
-            seg_idx,
-            leaves,
-            leaf_lists,
-            anydatas,
-            anyxmls,
-            containers,
-            lists,
-            choices,
-            aug,
-        )
 
     def _refine_set_description_at_path(
         ref self,

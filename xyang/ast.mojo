@@ -786,10 +786,23 @@ struct YangRefineStmt(Movable, YangHasWhen):
 
 @fieldwise_init
 struct YangAugmentStmt(Movable):
+    ## Data nodes allowed under `augment` (RFC 7950); `uses` is expanded during parse.
+    comptime ChildStatement = Variant[
+        Arc[YangLeaf],
+        Arc[YangLeafList],
+        Arc[YangAnydata],
+        Arc[YangAnyxml],
+        Arc[YangContainer],
+        Arc[YangList],
+        Arc[YangChoice],
+    ]
     var augment_path: String
     var if_features: List[String]
-    var has_when: Bool
     var when: Optional[YangWhen]
+    var statements: List[Self.ChildStatement]
+
+    def has_when(self) -> Bool:
+        return Bool(self.when)
 
 
 @fieldwise_init
