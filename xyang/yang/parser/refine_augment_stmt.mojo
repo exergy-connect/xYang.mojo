@@ -493,7 +493,7 @@ def parse_augment_statement_body_impl[ParserT: ParserContract](
     mut parser: ParserT,
 ) raises -> ast.YangAugmentStmt:
     parser._expect(YangToken.AUGMENT)
-    var target_path = parser._consume_argument_value()
+    var target_path = parser._consume_augment_path_argument()
 
     var leaves = List[Arc[ast.YangLeaf]]()
     var leaf_lists = List[Arc[ast.YangLeafList]]()

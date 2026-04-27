@@ -216,6 +216,83 @@ module refine-leaf-description {
     assert_true(not root.leaves[0][].mandatory)
 
 
+def test_refine_under_uses() raises:
+    ## Dedicated coverage for `refine` inside `uses`: multi-segment paths (`c/d`), schema
+    ## effects (`mandatory`, `default`, `must`), and `YangRefineStmt` on the module parse tree
+    ## (RFC 7950 §7.13).
+    var module = parse_yang_string(
+        """
+module refine-under-uses {
+  yang-version 1.1;
+  namespace "urn:example:refine-under-uses";
+  prefix ru;
+
+  grouping g {
+    leaf a {
+      type string;
+    }
+    container c {
+      leaf d {
+        type string;
+      }
+    }
+  }
+
+  container root {
+    uses g {
+      refine a {
+        description "refined top leaf";
+        mandatory true;
+        default "fallback";
+      }
+      refine c/d {
+        description "refined nested leaf";
+        must "string-length(.) > 0";
+      }
+    }
+  }
+}
+""",
+    )
+
+    ref root = module.top_level_containers[0][]
+    assert_equal(root.name, "root")
+
+    assert_true(len(root.leaves) == 1)
+    ref leaf_a = root.leaves[0][]
+    assert_equal(leaf_a.name, "a")
+    ## Leaf `description` via refine is accepted but not copied onto `YangLeaf` yet (no-op in
+    ## `refine_set_description_at_path_impl`); see parse-tree assertions below.
+    assert_true(leaf_a.mandatory)
+    assert_true(leaf_a.has_default)
+    assert_equal(leaf_a.default_value, "fallback")
+
+    assert_true(len(root.containers) == 1)
+    ref ctn_c = root.containers[0][]
+    assert_equal(ctn_c.name, "c")
+    assert_true(len(ctn_c.leaves) == 1)
+    ref leaf_d = ctn_c.leaves[0][]
+    assert_equal(leaf_d.name, "d")
+    assert_true(len(leaf_d.must.must_statements) == 1)
+    assert_equal(leaf_d.must.must_statements[0][].expression, "string-length(.) > 0")
+
+    var saw_refine_a = False
+    var saw_refine_c_d = False
+    for i in range(len(module.statements)):
+        var stmt = module.statements[i]
+        if stmt.isa[ArcPointer[YangRefineStmt]]():
+            ref rf = stmt[ArcPointer[YangRefineStmt]][]
+            if rf.target_path == "a":
+                saw_refine_a = True
+                assert_equal(rf.description.value(), "refined top leaf")
+            if rf.target_path == "c/d":
+                saw_refine_c_d = True
+                assert_equal(rf.description.value(), "refined nested leaf")
+                assert_true(len(rf.must.must_statements) == 1)
+    assert_true(saw_refine_a)
+    assert_true(saw_refine_c_d)
+
+
 def test_parse_single_quoted_regex_with_backslashes() raises:
     var module = parse_yang_string(
         """

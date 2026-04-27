@@ -46,6 +46,11 @@ trait ParserContract:
     def _consume_argument_value(mut self) raises -> String:
         ...
 
+    ## Unquoted schema paths tokenize as `/` + segments; a single `_consume_value()` would
+    ## only read the leading slash (see `augment /foo`, `deviation /a/b`).
+    def _consume_augment_path_argument(mut self) raises -> String:
+        ...
+
     def _skip_block_body(mut self) raises:
         ...
 

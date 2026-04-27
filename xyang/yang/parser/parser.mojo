@@ -707,6 +707,24 @@ struct _YangParser(Movable, ParserContract):
 
         return value
 
+    def _consume_augment_path_argument(mut self) raises -> String:
+        if not self._has_more():
+            self._error("Expected augment path")
+            return ""
+        if self._peek() == YangToken.STRING:
+            return self._consume_argument_value()
+        var path = String("")
+        if self._peek() == YangToken.SLASH:
+            _ = self._consume_value()
+            path = "/"
+        path += self._consume_name()
+        while self._consume_if(YangToken.SLASH):
+            path += "/"
+            path += self._consume_name()
+        while self._consume_if(YangToken.PLUS):
+            path += self._consume_value()
+        return path
+
     def _consume_name(mut self) raises -> String:
         var first_type = self._peek()
         var first = self._consume_value()

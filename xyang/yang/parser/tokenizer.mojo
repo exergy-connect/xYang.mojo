@@ -94,6 +94,19 @@ def tokenize_yang_impl(source: String) -> List[YangToken]:
                     i += 1
                 continue
 
+        ## Path separators (`refine a/b`, `augment /x/y`): lone `/` is not `//` or `/*`.
+        if ch == CP_SLASH:
+            tokens.append(
+                YangToken(
+                    type=YangToken.SLASH,
+                    start=i,
+                    length=1,
+                    line=line,
+                ),
+            )
+            i += 1
+            continue
+
         if _is_symbol(ch):
             tokens.append(
                 YangToken(
@@ -129,10 +142,9 @@ def tokenize_yang_impl(source: String) -> List[YangToken]:
             var c = _codepoint_at_ascii_byte(source, i)
             if _is_space(c) or _is_symbol(c) or c == CP_DQUOTE or c == CP_SQUOTE:
                 break
-            if c == CP_SLASH and i + 1 < n:
-                var n2 = _codepoint_at_ascii_byte(source, i + 1)
-                if n2 == CP_SLASH or n2 == CP_STAR:
-                    break
+            ## `/` starts a path step (`foo/bar`); `//` / `/*` are handled at top of loop.
+            if c == CP_SLASH:
+                break
             i += 1
         if i > t_start:
             tokens.append(
