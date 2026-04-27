@@ -350,7 +350,11 @@ def parse_type_statement_impl[ParserT: ParserContract](
 ) raises -> YangType:
     parser._expect(yang_token.YangToken.TYPE)
     ref type_name = parser._consume_name()
-    return parser._parse_yang_type(type_name)
+    var out = parser._parse_yang_type(type_name)
+    ## Built-in type parsers already skip `;`; typedef references do not — consume it here
+    ## so the leaf/list body does not see a lone `;` and mis-handle the next substatement.
+    parser._skip_if(yang_token.YangToken.SEMICOLON)
+    return out^
 
 
 def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises:

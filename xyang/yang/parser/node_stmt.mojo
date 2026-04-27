@@ -274,6 +274,11 @@ def parse_leaf_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
                 parser._consume()
                 description = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.SEMICOLON:
+                ## `type <typedef-name>` does not consume `;` inside `_parse_yang_type` (built-ins
+                ## do). Skip it here so we do not fall through to `_skip_statement`, which would
+                ## swallow the next `description` keyword.
+                parser._consume()
             else:
                 parser._skip_statement()
         parser._expect(YangToken.RBRACE)
@@ -340,6 +345,8 @@ def parse_leaf_list_statement_impl[ParserT: ParserContract](mut parser: ParserT)
                 parser._consume()
                 description = parser._consume_argument_value()
                 parser._skip_if(YangToken.SEMICOLON)
+            elif stmt == YangToken.SEMICOLON:
+                parser._consume()
             else:
                 parser._skip_statement()
         parser._expect(YangToken.RBRACE)

@@ -438,6 +438,39 @@ module string-pattern-mod {
     assert_equal(tp.string_pattern_regex_at(0), "[x]+")
 
 
+def test_parse_leaf_description_after_typedef_ref_type() raises:
+    ## Regression: `type <typedef-name>;` leaves `;` unconsumed (built-in types consume it in
+    ## their parsers). A bare `;` must not use `_skip_statement()` or the next `description`
+    ## keyword is swallowed and the leaf description stays empty.
+    var m_typedef = parse_yang_string(
+        """
+module typedef-desc-after-type {
+  namespace "urn:example:tdat"; prefix tda;
+  typedef my-custom-type { type string; description "td"; }
+  container c {
+    leaf x { type my-custom-type; description "leaf desc"; }
+  }
+}
+""",
+    )
+    ref c_typedef = m_typedef.top_level_containers[0][]
+    assert_equal(c_typedef.leaves[0][].description, "leaf desc")
+    assert_equal(c_typedef.leaves[0][].type.name, "my-custom-type")
+
+    var m_builtin = parse_yang_string(
+        """
+module builtin-desc-after-type {
+  namespace "urn:example:bdat"; prefix bda;
+  container c {
+    leaf x { type string; description "leaf desc"; }
+  }
+}
+""",
+    )
+    ref c_builtin = m_builtin.top_level_containers[0][]
+    assert_equal(c_builtin.leaves[0][].description, "leaf desc")
+
+
 def test_parse_must_on_container_and_list() raises:
     var module = parse_yang_string(
         """
