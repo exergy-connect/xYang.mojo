@@ -1,10 +1,13 @@
+import xyang.ast as ast
 from xyang.ast import YangMust
 from xyang.xpath import parse_xpath
 import xyang.yang.parser.yang_token as yang_token
 from xyang.yang.parser.parser_contract import ParserContract
 
 
-def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) raises -> YangMust:
+def parse_must[ParserT: ParserContract](
+    mut parser: ParserT,
+) raises -> ast.YangAstNode:
     parser._expect(yang_token.YangToken.MUST)
     var expression = parser._consume_argument_value()
     var error_message = ""
@@ -27,9 +30,10 @@ def parse_must_statement_impl[ParserT: ParserContract](mut parser: ParserT) rais
     parser._skip_if(yang_token.YangToken.SEMICOLON)
 
     var xpath_ast = parse_xpath(expression)
-    return YangMust(
+    var m = YangMust(
         expression = expression,
         error_message = error_message,
         description = description,
         xpath_ast = xpath_ast,
     )
+    return ast.YangAstNode(m^)

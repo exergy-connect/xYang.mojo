@@ -185,6 +185,11 @@ trait ParserContract:
     def _parse_if_feature_statement(mut self) raises:
         ...
 
+    def _refine_substatements(
+        read self,
+    ) -> Dict[YangToken.Type, ast.ParserMethod[Self]]:
+        ...
+
     def _parse_refine_statement(
         mut self,
         mut leaves: List[Arc[ast.YangLeaf]],

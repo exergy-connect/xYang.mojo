@@ -5,6 +5,7 @@ from std.memory import ArcPointer, UnsafePointer
 from std.utils import Variant
 from emberjson import JsonDeserializable
 from xyang.xpath import Expr
+from xyang.yang.parser.parser_contract import ParserContract
 
 comptime Arc = ArcPointer
 
@@ -628,7 +629,7 @@ struct YangList(Movable, JsonDeserializable):
 
 ## Typed buckets for the seven allowed child node kinds; same merge order as `YangGrouping` packing.
 @fieldwise_init
-struct YangListChildBuckets:
+struct YangListChildBuckets(Movable):
     var leaves: List[Arc[YangLeaf]]
     var leaf_lists: List[Arc[YangLeafList]]
     var anydatas: List[Arc[YangAnydata]]
@@ -909,3 +910,51 @@ struct YangModule(Movable, JsonDeserializable):
 
     def __str__(self) -> String:
         return "YangModule(" + self.name + ", namespace=" + self.namespace + ", prefix=" + self.prefix + ", containers=" + String(len(self.top_level_containers)) + ")"
+
+
+## Every `@fieldwise_init` AST `struct` in this module (for generic parse hooks returning one node).
+comptime YangAstNode = Variant[
+    YangTypeTypedef,
+    YangTypeIntegerRange,
+    YangTypeDecimal64,
+    YangTypeEnumeration,
+    YangTypeLeafref,
+    YangTypeBits,
+    YangTypeIdentityref,
+    YangStringPatternSpec,
+    YangTypeString,
+    YangTypeBasic,
+    YangTypeUnion,
+    YangType,
+    YangMust,
+    YangWhen,
+    YangLeaf,
+    YangLeafList,
+    YangAnydata,
+    YangAnyxml,
+    YangChoiceCase,
+    YangChoice,
+    YangContainer,
+    YangList,
+    YangListChildBuckets,
+    YangGrouping,
+    YangTypedefStmt,
+    YangIdentityStmt,
+    YangExtensionStmt,
+    YangExtensionInvocationStmt,
+    YangUsesStmt,
+    YangRefineStmt,
+    YangAugmentStmt,
+    YangUnknownStatement,
+    YangModuleImport,
+    YangRevisionStmt,
+    YangFeatureStmt,
+    YangModule,
+]
+
+## Function pointer type for YANG statement / substatement parsing: a parser implementation
+## (`ParserT` satisfies `ParserContract`) mutates the lexer and produces exactly one `YangAstNode`.
+## Used for `refine` (`parse_refine` in `refine_stmt.mojo`) and for `refine` substatement dispatch
+## tables exposed via `ParserContract._refine_substatements`, so handlers share a uniform signature
+## without embedding statement-specific `ParserT` in each AST `struct`.
+comptime ParserMethod[ParserT: ParserContract] = fn (mut ParserT) raises -> YangAstNode

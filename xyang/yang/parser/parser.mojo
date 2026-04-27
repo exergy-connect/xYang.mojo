@@ -13,6 +13,7 @@ from xyang.yang.parser.tokenizer import tokenize_yang_impl
 from xyang.yang.parser.module_stmt import parse_module_impl
 import xyang.yang.parser.grouping_uses_stmt as gu_stmt
 import xyang.yang.parser.refine_augment_stmt as ra_stmt
+import xyang.yang.parser.refine_stmt as refine_stmt
 import xyang.yang.parser.node_stmt as node_stmt
 import xyang.yang.parser.must_stmt as must_stmt
 import xyang.yang.parser.type_constraint_stmt as tc_stmt
@@ -42,6 +43,7 @@ struct _YangParser(Movable, ParserContract):
     var _builtin_type_parsers: Dict[
         String, fn (mut _YangParser, String) raises -> ast.YangType
     ]
+    var refine_parser: refine_stmt.RefineParser[Self]
 
     def __init__(out self, source: String):
         self.tokens = tokenize_yang_impl(source)
@@ -56,6 +58,7 @@ struct _YangParser(Movable, ParserContract):
         self.feature_if_features = Dict[String, List[String]]()
         self.pending_module_augments = List[Arc[ast.YangAugmentStmt]]()
         self._builtin_type_parsers = tc_stmt.new_builtin_type_parser_table[_YangParser]()
+        self.refine_parser = refine_stmt.RefineParser[Self]()
 
     def _queue_pending_module_augment(mut self, aug: Arc[ast.YangAugmentStmt]):
         self.pending_module_augments.append(aug)
@@ -336,6 +339,11 @@ struct _YangParser(Movable, ParserContract):
         self._record_feature_if_feature("__module__", if_feature)
         gu_stmt.parse_if_feature_statement_impl(self)
 
+    def _refine_substatements(
+        read self,
+    ) -> Dict[YangToken.Type, ast.ParserMethod[Self]]:
+        return self.refine_parser.substatements.copy()
+
     def _parse_refine_statement(
         mut self,
         mut leaves: List[Arc[ast.YangLeaf]],
@@ -346,19 +354,20 @@ struct _YangParser(Movable, ParserContract):
         mut lists: List[Arc[ast.YangList]],
         mut choices: List[Arc[ast.YangChoice]],
     ) raises:
-        var refine_stmt = ra_stmt.parse_refine_statement_impl(
-            self,
-            leaves,
-            leaf_lists,
-            anydatas,
-            anyxmls,
-            containers,
-            lists,
-            choices,
-        )
+        _ = leaves
+        _ = leaf_lists
+        _ = anydatas
+        _ = anyxmls
+        _ = containers
+        _ = lists
+        _ = choices
+        var n = refine_stmt.parse_refine(self)
+        if not n.isa[ast.YangRefineStmt]():
+            self._error("internal: parse_refine must return YangRefineStmt")
+        var body = n.take[ast.YangRefineStmt]()
         self._record_module_statement(
             ast.YangModuleStatement(
-                Arc[ast.YangRefineStmt](refine_stmt^),
+                Arc[ast.YangRefineStmt](body^),
             ),
         )
 
@@ -670,7 +679,10 @@ struct _YangParser(Movable, ParserContract):
         return tc_stmt.parse_type_statement_impl(self)
 
     def _parse_must_statement(mut self) raises -> ast.YangMust:
-        return must_stmt.parse_must_statement_impl(self)
+        var n = must_stmt.parse_must(self)
+        if not n.isa[ast.YangMust]():
+            self._error("internal: parse_must must return YangMust")
+        return n.take[ast.YangMust]()
 
     def _parse_when_statement(mut self) raises -> ast.YangWhen:
         return when_stmt.parse_when_statement_impl(self)
