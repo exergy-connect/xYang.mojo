@@ -37,6 +37,68 @@ def test_string_type_emits_json_schema_pattern() raises:
     )
 
 
+def test_string_type_length_emits_minlength_maxlength() raises:
+    var module = parse_yang_string(
+        """
+        module test-string-length {
+          yang-version 1.1;
+          namespace "urn:test:string-length";
+          prefix tsl;
+
+          container c {
+            leaf label {
+              type string {
+                length "1..128";
+              }
+            }
+          }
+        }
+        """
+    )
+    var root = generate_json_schema(module)
+    ref c_props = (
+        root.object()["properties"]["c"].object()["properties"].object()
+    )
+    ref label_prop = c_props["label"].object()
+    assert_equal(label_prop["minLength"].int(), 1)
+    assert_equal(label_prop["maxLength"].int(), 128)
+
+
+def test_string_invert_pattern_emits_allof_and_string_patterns() raises:
+    var module = parse_yang_string(
+        """
+        module test-inv-inline {
+          yang-version 1.1;
+          namespace "urn:test:inv-inline";
+          prefix tii;
+
+          container c {
+            leaf x {
+              type string {
+                pattern 'nope' {
+                  modifier invert-match;
+                }
+              }
+            }
+          }
+        }
+        """
+    )
+    var root = generate_json_schema(module)
+    ref c_props = (
+        root.object()["properties"]["c"].object()["properties"].object()
+    )
+    ref xp = c_props["x"].object()
+    assert_true("allOf" in xp)
+    ref xy = xp["x-yang"].object()
+    assert_equal(xy["type"].string(), "leaf")
+    assert_true("string-patterns" in xy)
+    ref parr = xy["string-patterns"].array()
+    assert_equal(len(parr), 1)
+    assert_true(parr[0].object()["invert-match"].bool())
+    assert_equal(parr[0].object()["pattern"].string(), "nope")
+
+
 def test_schema_roundtrip_basic_device() raises:
     var path = "examples/basic_yang/basic-device.yang"
     var module = parse_yang_file(path)

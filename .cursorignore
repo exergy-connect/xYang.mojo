@@ -12,6 +12,8 @@
 # 3. Specifically allow code files
 !*.mojo
 !*.py
+!*.json
+!*.yang
 !pixi.toml
 
 # 4. Re-ignore common massive folders (optional but safer)

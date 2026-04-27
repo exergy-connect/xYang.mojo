@@ -72,7 +72,7 @@ trait ParserContract:
         ...
 
     def _store_typedef(
-        mut self, name: String, read type_stmt: ast.YangType, description: String
+        mut self, name: String, var type_stmt: ast.YangType, description: String
     ) raises:
         ...
 
@@ -98,9 +98,6 @@ trait ParserContract:
         ...
 
     def _import_prefixes_snapshot(ref self) -> Dict[String, Arc[ast.YangModuleImport]]:
-        ...
-
-    def _resolve_typedef_type(ref self, name: String) -> Optional[Arc[ast.YangType]]:
         ...
 
     def _parse_yang_type(

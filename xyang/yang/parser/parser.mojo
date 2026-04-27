@@ -32,7 +32,6 @@ struct _YangParser(Movable, ParserContract):
     var source: String
     var index: Int
     var groupings: Dict[String, Arc[ast.YangGrouping]]
-    var typedefs: Dict[String, Arc[ast.YangType]]
     var typedef_statements: Dict[String, Arc[ast.YangTypedefStmt]]
     var identities: Dict[String, Arc[ast.YangIdentityStmt]]
     var extensions: Dict[String, Arc[ast.YangExtensionStmt]]
@@ -50,7 +49,6 @@ struct _YangParser(Movable, ParserContract):
         self.source = source
         self.index = 0
         self.groupings = Dict[String, Arc[ast.YangGrouping]]()
-        self.typedefs = Dict[String, Arc[ast.YangType]]()
         self.typedef_statements = Dict[String, Arc[ast.YangTypedefStmt]]()
         self.identities = Dict[String, Arc[ast.YangIdentityStmt]]()
         self.extensions = Dict[String, Arc[ast.YangExtensionStmt]]()
@@ -176,25 +174,17 @@ struct _YangParser(Movable, ParserContract):
         tc_stmt.parse_typedef_statement_impl(self)
 
     def _store_typedef(
-        mut self, name: String, read type_stmt: ast.YangType, description: String
+        mut self, name: String, var type_stmt: ast.YangType, description: String
     ) raises:
-        if self.typedefs.get(name):
+        if self.typedef_statements.get(name):
             self._error("Duplicate typedef '" + name + "'")
-        self.typedefs[name] = Arc[ast.YangType](
-            clone_utils.clone_yang_type_impl(type_stmt)
-        )
         self.typedef_statements[name] = Arc[ast.YangTypedefStmt](
             ast.YangTypedefStmt(
                 name=name,
-                type_stmt=clone_utils.clone_yang_type_impl(type_stmt),
+                type_stmt=type_stmt^,
                 description=description,
             ),
         )
-
-    def _resolve_typedef_type(
-        ref self, name: String
-    ) -> Optional[Arc[ast.YangType]]:
-        return self.typedefs.get(name)
 
     def _parse_yang_type(
         mut self, read type_name: String
@@ -984,6 +974,12 @@ def _token_type_name(t: YangToken.Type) -> String:
         return "'case'"
     if t == YangToken.TYPE:
         return "'type'"
+    if t == YangToken.PATTERN:
+        return "'pattern'"
+    if t == YangToken.LENGTH:
+        return "'length'"
+    if t == YangToken.MODIFIER:
+        return "'modifier'"
     if t == YangToken.STRING:
         return "string"
     if t == YangToken.IDENTIFIER:

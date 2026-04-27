@@ -95,6 +95,37 @@ def _empty_type(name: String) -> ast.YangType:
     )
 
 
+def _parse_string_patterns_from_xyang(read xyv: Value) raises -> List[ast.YangStringPatternSpec]:
+    var out = List[ast.YangStringPatternSpec]()
+    if not xyv.is_object():
+        return out^
+    ref xo = xyv.object()
+    if (
+        schema_keys.XYANG_STRING_PATTERNS not in xo
+        or not xo[schema_keys.XYANG_STRING_PATTERNS].is_array()
+    ):
+        return out^
+    ref arr = xo[schema_keys.XYANG_STRING_PATTERNS].array()
+    for ref el in arr:
+        if not el.is_object():
+            continue
+        ref eo = el.object()
+        var ps = ""
+        var inv = False
+        if (
+            schema_keys.XYANG_STRING_PATTERN_ENTRY_PATTERN in eo
+            and eo[schema_keys.XYANG_STRING_PATTERN_ENTRY_PATTERN].is_string()
+        ):
+            ps = eo[schema_keys.XYANG_STRING_PATTERN_ENTRY_PATTERN].string()
+        if (
+            schema_keys.XYANG_STRING_PATTERN_ENTRY_INVERT in eo
+            and eo[schema_keys.XYANG_STRING_PATTERN_ENTRY_INVERT].is_bool()
+        ):
+            inv = eo[schema_keys.XYANG_STRING_PATTERN_ENTRY_INVERT].bool()
+        out.append(ast.YangStringPatternSpec(pattern = ps^, invert_match = inv))
+    return out^
+
+
 def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
     ref obj = prop.object()
     var ty_name = _leaf_type_name_from_prop(prop)
@@ -108,7 +139,9 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
     var dec_max = Float64(0.0)
     var bits_names = List[String]()
     var identityref_base = ""
-    var string_pattern = ""
+    var string_pattern_specs = List[ast.YangStringPatternSpec]()
+    var str_len_min = -1
+    var str_len_max = -1
 
     if (
         schema_keys.JSON_SCHEMA_ENUM in obj
@@ -199,12 +232,34 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
         if ty_name == yang_token.YANG_TYPE_IDENTITYREF and schema_keys.XYANG_BASE in xy.object() and xy.object()[schema_keys.XYANG_BASE].is_string():
             identityref_base = xy.object()[schema_keys.XYANG_BASE].string()
 
-    if (
-        ty_name == "string"
-        and schema_keys.JSON_SCHEMA_PATTERN in obj
-        and obj[schema_keys.JSON_SCHEMA_PATTERN].is_string()
-    ):
-        string_pattern = obj[schema_keys.JSON_SCHEMA_PATTERN].string()
+    if ty_name == "string":
+        if (
+            schema_keys.JSON_SCHEMA_X_YANG in obj
+            and obj[schema_keys.JSON_SCHEMA_X_YANG].is_object()
+        ):
+            string_pattern_specs = _parse_string_patterns_from_xyang(
+                obj[schema_keys.JSON_SCHEMA_X_YANG],
+            )
+        if len(string_pattern_specs) == 0 and (
+            schema_keys.JSON_SCHEMA_PATTERN in obj
+            and obj[schema_keys.JSON_SCHEMA_PATTERN].is_string()
+        ):
+            var single_pat = obj[schema_keys.JSON_SCHEMA_PATTERN].string()
+            string_pattern_specs.append(
+                ast.YangStringPatternSpec(
+                    pattern = single_pat^, invert_match = False
+                )
+            )
+        if (
+            schema_keys.JSON_SCHEMA_MIN_LENGTH in obj
+            and obj[schema_keys.JSON_SCHEMA_MIN_LENGTH].is_int()
+        ):
+            str_len_min = Int(obj[schema_keys.JSON_SCHEMA_MIN_LENGTH].int())
+        if (
+            schema_keys.JSON_SCHEMA_MAX_LENGTH in obj
+            and obj[schema_keys.JSON_SCHEMA_MAX_LENGTH].is_int()
+        ):
+            str_len_max = Int(obj[schema_keys.JSON_SCHEMA_MAX_LENGTH].int())
 
     var cons = _json_schema_yang_constraints(
         ty_name,
@@ -217,7 +272,9 @@ def _parse_type_from_schema_property(prop: Value) raises -> ast.YangType:
         dec_max,
         bits_names^,
         identityref_base,
-        string_pattern^,
+        string_pattern_specs^,
+        str_len_min,
+        str_len_max,
     )
     if ty_name == yang_token.YANG_STMT_UNION:
         return ast.YangType(
@@ -238,7 +295,9 @@ def _json_schema_yang_constraints(
     dec_max: Float64,
     var bits_names: List[String],
     var identityref_base: String,
-    var string_pattern: String,
+    var string_pattern_specs: List[ast.YangStringPatternSpec],
+    str_len_min: Int,
+    str_len_max: Int,
 ) -> ast.YangType.Constraints:
     if ty_name == yang_token.YANG_TYPE_ENUMERATION:
         return ast.YangTypeEnumeration(enum_values^)
@@ -263,7 +322,11 @@ def _json_schema_yang_constraints(
     if ty_name == yang_token.YANG_TYPE_IDENTITYREF:
         return ast.YangTypeIdentityref(identityref_base^)
     if ty_name == "string":
-        return ast.YangTypeString(string_pattern^)
+        return ast.YangTypeString(
+            patterns=string_pattern_specs^,
+            length_min=str_len_min,
+            length_max=str_len_max,
+        )
     if ty_name == yang_token.YANG_TYPE_BOOLEAN:
         return ast.YangTypeBasic(kind = ast.YangTypeBasic.boolean)
     if ty_name == yang_token.YANG_TYPE_EMPTY:

@@ -277,6 +277,8 @@
                   "properties": {
                     "name": {
                       "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
                       "description": "Field name.",
                       "x-yang": {
                         "type": "leaf",
@@ -647,6 +649,8 @@
                   "properties": {
                     "name": {
                       "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
                       "description": "Field name.",
                       "x-yang": {
                         "type": "leaf",
@@ -1124,6 +1128,8 @@
     },
     "entity-name": {
       "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
       "pattern": "^[a-z_][a-z0-9_]*$",
       "description": "Entity name (letters, digits, underscores only, lowercase). The underscore count limit is configurable via max_name_underscores property (default: 2)."
     },
@@ -1177,6 +1183,8 @@
     },
     "field-name": {
       "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
       "pattern": "^[a-z_][a-z0-9_]*$",
       "description": "Field name for computed references and leafrefs (same rules as entity fields)."
     },

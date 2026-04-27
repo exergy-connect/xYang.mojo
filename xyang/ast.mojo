@@ -61,9 +61,20 @@ struct YangTypeIdentityref(Movable):
 
 
 @fieldwise_init
-## Built-in `string` (YANG) constraints: regex pattern, empty = unconstrained.
-struct YangTypeString(Movable):
+## One `pattern` substatement under `type string` (RFC 7950 Sec. 9.4.5), including
+## optional `modifier invert-match` in the pattern's substatement block.
+struct YangStringPatternSpec(Movable, Copyable):
     var pattern: String
+    var invert_match: Bool
+
+
+@fieldwise_init
+## Built-in `string` (YANG) constraints. `patterns` preserves RFC AND order.
+## `length_min` / `length_max` are JSON Schema `minLength` / `maxLength`; `-1` = unset.
+struct YangTypeString(Movable):
+    var patterns: List[YangStringPatternSpec]
+    var length_min: Int
+    var length_max: Int
 
 
 @fieldwise_init
@@ -247,13 +258,55 @@ struct YangType(Movable):
         if self.name != "string":
             return False
         if self.constraints.isa[YangTypeString]():
-            return len(self.constraints[YangTypeString].pattern) > 0
+            return len(self.constraints[YangTypeString].patterns) > 0
+        return False
+
+    def string_patterns_len(read self) -> Int:
+        if self.name == "string" and self.constraints.isa[YangTypeString]():
+            return len(self.constraints[YangTypeString].patterns)
+        return 0
+
+    def string_pattern_regex_at(read self, i: Int) -> String:
+        if self.name == "string" and self.constraints.isa[YangTypeString]():
+            ref ps = self.constraints[YangTypeString].patterns
+            if i >= 0 and i < len(ps):
+                return ps[i].pattern
+        return ""
+
+    def string_pattern_invert_at(read self, i: Int) -> Bool:
+        if self.name == "string" and self.constraints.isa[YangTypeString]():
+            ref ps = self.constraints[YangTypeString].patterns
+            if i >= 0 and i < len(ps):
+                return ps[i].invert_match
         return False
 
     def string_pattern(read self) -> String:
+        ## First pattern regex (backward compatible); empty if none.
+        return self.string_pattern_regex_at(0)
+
+    def has_string_length_min(read self) -> Bool:
+        if self.name != "string":
+            return False
+        if not self.constraints.isa[YangTypeString]():
+            return False
+        return self.constraints[YangTypeString].length_min >= 0
+
+    def has_string_length_max(read self) -> Bool:
+        if self.name != "string":
+            return False
+        if not self.constraints.isa[YangTypeString]():
+            return False
+        return self.constraints[YangTypeString].length_max >= 0
+
+    def string_length_min(read self) -> Int:
         if self.name == "string" and self.constraints.isa[YangTypeString]():
-            return self.constraints[YangTypeString].pattern
-        return ""
+            return self.constraints[YangTypeString].length_min
+        return -1
+
+    def string_length_max(read self) -> Int:
+        if self.name == "string" and self.constraints.isa[YangTypeString]():
+            return self.constraints[YangTypeString].length_max
+        return -1
 
     # --- optional resolved `typedef` (see `YangTypeTypedef`) ---
 

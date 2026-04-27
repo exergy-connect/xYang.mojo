@@ -11,6 +11,7 @@ from xyang.ast import (
     YangTypedefStmt,
     YangTypeTypedef,
     YangTypeBasic,
+    YangStringPatternSpec,
     YangTypeString,
     YangTypeUnion,
 )
@@ -19,6 +20,48 @@ from xyang.yang.parser.parser_contract import ParserContract
 from xyang.yang.parser.clone_utils import clone_yang_type_impl
 
 comptime Arc = ArcPointer
+
+
+@fieldwise_init
+struct _YangStringLengthBounds(Movable, Copyable):
+    var min_len: Int
+    var max_len: Int
+
+
+def _string_length_bounds_from_yang_arg(read arg: String) -> _YangStringLengthBounds:
+    ## YANG `length` argument: single value, or `min` / `max` / `N..M` (RFC 7950).
+    var trimmed = arg.strip()
+    if len(trimmed) == 0:
+        return _YangStringLengthBounds(-1, -1)
+    var parts = trimmed.split("..")
+    if len(parts) == 1:
+        try:
+            var v = Int(atol(parts[0].strip()))
+            return _YangStringLengthBounds(v, v)
+        except:
+            return _YangStringLengthBounds(-1, -1)
+    if len(parts) == 2:
+        var ls = String(parts[0].strip())
+        var rs = String(parts[1].strip())
+        var lmin: Int
+        if ls == "min":
+            lmin = -1
+        else:
+            try:
+                lmin = Int(atol(ls))
+            except:
+                return _YangStringLengthBounds(-1, -1)
+        var hmax: Int
+        if rs == "max":
+            hmax = -1
+        else:
+            try:
+                hmax = Int(atol(rs))
+            except:
+                return _YangStringLengthBounds(-1, -1)
+        return _YangStringLengthBounds(lmin, hmax)
+    return _YangStringLengthBounds(-1, -1)
+
 
 def new_builtin_type_parser_table[ParserT: ParserContract](
     out m: Dict[String, fn (mut ParserT, String) raises -> YangType]
@@ -254,19 +297,51 @@ def _parse_identityref[ParserT: ParserContract](
 def _parse_string[ParserT: ParserContract](
     mut parser: ParserT, n: String
 ) raises -> YangType:
-    var pat = ""
+    var patterns = List[YangStringPatternSpec]()
+    var lo = -1
+    var hi = -1
     if parser._consume_if(yang_token.YangToken.LBRACE):
         while parser._has_more() and parser._peek() != yang_token.YangToken.RBRACE:
             if parser._peek() == yang_token.YangToken.PATTERN:
                 parser._consume()
-                pat = parser._consume_argument_value()
+                var pat_arg = parser._consume_argument_value()
+                var inv = False
+                if parser._consume_if(yang_token.YangToken.LBRACE):
+                    while (
+                        parser._has_more()
+                        and parser._peek() != yang_token.YangToken.RBRACE
+                    ):
+                        if parser._peek() == yang_token.YangToken.MODIFIER:
+                            parser._consume()
+                            var mod_arg = parser._consume_name()
+                            if mod_arg == "invert-match":
+                                inv = True
+                            parser._skip_if(yang_token.YangToken.SEMICOLON)
+                        else:
+                            parser._skip_statement()
+                    parser._expect(yang_token.YangToken.RBRACE)
+                    parser._skip_if(yang_token.YangToken.SEMICOLON)
+                else:
+                    parser._skip_if(yang_token.YangToken.SEMICOLON)
+                patterns.append(
+                    YangStringPatternSpec(pattern = pat_arg^, invert_match = inv)
+                )
+            elif parser._peek() == yang_token.YangToken.LENGTH:
+                parser._consume()
+                var l_ex = parser._consume_argument_value()
+                var b = _string_length_bounds_from_yang_arg(l_ex)
+                lo = b.min_len
+                hi = b.max_len
                 parser._skip_statement_tail()
             else:
                 parser._skip_statement()
         parser._expect(yang_token.YangToken.RBRACE)
     parser._skip_if(yang_token.YangToken.SEMICOLON)
     return YangType(
-        name = n, constraints = YangTypeString(pat^)
+        name = n,
+        constraints = YangTypeString(
+            patterns = patterns^, length_min = lo, length_max = hi
+        ),
     )
 
 
@@ -299,4 +374,4 @@ def parse_typedef_statement_impl[ParserT: ParserContract](mut parser: ParserT) r
     parser._skip_if(yang_token.YangToken.SEMICOLON)
     if not type_opt:
         parser._error("typedef '" + name + "' requires a type statement")
-    parser._store_typedef(name, type_opt.value(), typedef_description^)
+    parser._store_typedef(name, type_opt.take(), typedef_description^)

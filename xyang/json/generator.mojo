@@ -123,6 +123,63 @@ def _leaf_list_xyang(read ll: ast.YangLeafList) raises -> Object:
     return xy^
 
 
+def _merge_leaf_x_yang_into_schema(mut schema_prop: Object, read leaf_xy: Object) raises:
+    ## Preserve `x-yang` from `_type_schema` (e.g. `decimal64`, `string-patterns`) while
+    ## attaching leaf metadata (`type`, `must`, `when`, …).
+    if schema_keys.JSON_SCHEMA_X_YANG in schema_prop:
+        ref tgt = schema_prop[schema_keys.JSON_SCHEMA_X_YANG].object()
+        for ref pair in leaf_xy.items():
+            tgt[pair.key] = pair.value.copy()
+    else:
+        var xy_copy = Object()
+        for ref pair in leaf_xy.items():
+            xy_copy[pair.key] = pair.value.copy()
+        schema_prop[schema_keys.JSON_SCHEMA_X_YANG] = Value(xy_copy^)
+
+
+def _apply_string_patterns_json_schema(mut st: Object, read t: ast.YangType) raises:
+    ## RFC 7950: multiple `pattern` and `invert-match` need JSON Schema `allOf` / `not`.
+    var n = t.string_patterns_len()
+    if n == 0:
+        return
+    var complex_patterns = (n > 1) or t.string_pattern_invert_at(0)
+    if not complex_patterns:
+        st[schema_keys.JSON_SCHEMA_PATTERN] = Value(
+            _json_schema_pattern_from_yang_str(t.string_pattern_regex_at(0))
+        )
+        return
+    var allof = Array()
+    for i in range(n):
+        var anchored = _json_schema_pattern_from_yang_str(t.string_pattern_regex_at(i))
+        if t.string_pattern_invert_at(i):
+            var inner = Object()
+            inner[schema_keys.JSON_SCHEMA_TYPE] = Value(
+                schema_keys.JSON_SCHEMA_TYPE_STRING
+            )
+            inner[schema_keys.JSON_SCHEMA_PATTERN] = Value(anchored)
+            var noto = Object()
+            noto[schema_keys.JSON_SCHEMA_NOT] = Value(inner^)
+            allof.append(Value(noto^))
+        else:
+            var po = Object()
+            po[schema_keys.JSON_SCHEMA_PATTERN] = Value(anchored)
+            allof.append(Value(po^))
+    st[schema_keys.JSON_SCHEMA_ALL_OF] = Value(allof^)
+    var xy = Object()
+    var parr = Array()
+    for i in range(n):
+        var pe = Object()
+        pe[schema_keys.XYANG_STRING_PATTERN_ENTRY_PATTERN] = Value(
+            t.string_pattern_regex_at(i)
+        )
+        pe[schema_keys.XYANG_STRING_PATTERN_ENTRY_INVERT] = Value(
+            t.string_pattern_invert_at(i)
+        )
+        parr.append(Value(pe^))
+    xy[schema_keys.XYANG_STRING_PATTERNS] = Value(parr^)
+    st[schema_keys.JSON_SCHEMA_X_YANG] = Value(xy^)
+
+
 def _json_schema_pattern_from_yang_str(read p: String) -> String:
     ## RFC 7950 patterns are XSD regexes; align with Python xYang by anchoring
     ## as full JSON Schema pattern when the model is not already anchored.
@@ -238,10 +295,15 @@ def _type_schema(
     if tn == "string":
         var st = Object()
         st[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_STRING)
-        if t.has_string_pattern():
-            st[schema_keys.JSON_SCHEMA_PATTERN] = Value(
-                _json_schema_pattern_from_yang_str(t.string_pattern())
+        if t.has_string_length_min():
+            st[schema_keys.JSON_SCHEMA_MIN_LENGTH] = Value(
+                Int64(t.string_length_min())
             )
+        if t.has_string_length_max():
+            st[schema_keys.JSON_SCHEMA_MAX_LENGTH] = Value(
+                Int64(t.string_length_max())
+            )
+        _apply_string_patterns_json_schema(st, t)
         return st^
     var s = Object()
     s[schema_keys.JSON_SCHEMA_TYPE] = Value(schema_keys.JSON_SCHEMA_TYPE_STRING)
@@ -293,7 +355,8 @@ def _leaf_property(
     else:
         out = _type_schema(leaf.type, typedefs)
     out[schema_keys.JSON_SCHEMA_DESCRIPTION] = Value(leaf.description)
-    out[schema_keys.JSON_SCHEMA_X_YANG] = Value(_leaf_xyang(leaf))
+    var leaf_xy = _leaf_xyang(leaf)
+    _merge_leaf_x_yang_into_schema(out, leaf_xy)
     if leaf.has_default:
         var dv = _default_json_value_for_type(leaf.default_value, leaf.type)
         if dv:

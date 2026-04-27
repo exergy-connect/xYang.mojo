@@ -22,6 +22,7 @@ comptime YangTypeBits = ast.YangTypeBits
 comptime YangTypeIdentityref = ast.YangTypeIdentityref
 comptime YangTypeUnion = ast.YangTypeUnion
 comptime YangTypeString = ast.YangTypeString
+comptime YangStringPatternSpec = ast.YangStringPatternSpec
 comptime YangTypeBasic = ast.YangTypeBasic
 comptime YangMust = ast.YangMust
 comptime YangMustStatements = ast.YangMustStatements
@@ -143,9 +144,21 @@ def clone_yang_type_impl(read src: YangType) -> YangType:
         )
 
     if src.name == "string" and src.constraints.isa[YangTypeString]():
+        var specs = List[YangStringPatternSpec]()
+        for i in range(src.string_patterns_len()):
+            specs.append(
+                YangStringPatternSpec(
+                    pattern = src.string_pattern_regex_at(i),
+                    invert_match = src.string_pattern_invert_at(i),
+                )
+            )
         return YangType(
             name = "string",
-            constraints = YangTypeString(src.string_pattern()),
+            constraints = YangTypeString(
+                patterns = specs^,
+                length_min = src.string_length_min(),
+                length_max = src.string_length_max(),
+            ),
         )
 
     if (
