@@ -81,16 +81,16 @@ struct FieldDefinition[
 
     comptime ArgumentType = Self.ValueType
 
-    var data: Self.ValueType
+    var data: Optional[Self.ValueType]
 
     def __init__(out self):
-        self.data = Self.ValueType()
+        self.data = Optional[Self.ValueType]()
 
     def name(self) -> String:
         return Self.field_name
     
     def __str__(ref self) -> String:
-        return Self.field_name + ": " + self.data.__str__()
+        return Self.field_name + ": " + self.data.value().__str__() + "\n" if self.data else ""
 
     @staticmethod
     def from_lexer(mut lexer: Lexer) raises -> Self:
@@ -134,7 +134,7 @@ struct RepeatedField[
     def __str__(ref self) -> String:
         var result = String()
         for field in self.data:
-            result += field[].__str__() + "\n"
+            result += field[].__str__()
         return result
 
     def parse(mut self, mut lexer: Lexer) raises:
@@ -162,10 +162,12 @@ struct CompositeFieldDefinition[
         return Self.field_name
 
     def __str__(ref self) -> String:
-        var result = String()
+        var result = String(Self.field_name)
+        if Self.has_argument:
+            result += "(" + self.argument.value() + ") "
         comptime for i in range(len(Self.FieldDefs)):
             ref field = self.data[i]
-            result += field.__str__() + "\n"
+            result += field.__str__()
         return result
 
     @staticmethod
@@ -175,18 +177,30 @@ struct CompositeFieldDefinition[
         return newField^
 
     def parse(mut self, mut lexer: Lexer) raises:
-        var input = lexer.expect_ident()
         if Self.has_argument:
             self.argument = Optional[String](lexer.expect_string())
+        lexer.skip_ws()
         if lexer.skip_if("{"):
-            while not lexer.skip_if("}"):
+            while True:
+                lexer.skip_ws()
+                if lexer.skip_if("}"):
+                    return
+
+                var stmt_name = lexer.expect_ident()
+                var matched = False
                 comptime for i in range(len(Self.FieldDefs)):
                     ref field = self.data[i]
-                    # later: route real parsed substatement tokens here
-                    if field.name() == input:
+                    if field.name() == stmt_name:
                         field.parse(lexer)
+                        lexer.skip_ws()
                         _ = lexer.skip_if(";")
+                        matched = True
                         break
+
+                if not matched:
+                    raise Error(
+                        "Unknown substatement `" + stmt_name + "` in `" + Self.field_name + "`"
+                    )
         
         raise Error("Error parsing " + Self.field_name + ": " + lexer.peek())
 
@@ -196,11 +210,9 @@ comptime FIELD_REFERENCE = FieldDefinition["reference", YangString]
 
 
 ## Substatements of `must { ... }` (see `must_stmt.mojo` / `YangMust` in `ast.mojo`).
-comptime FIELD_MUST_EXPRESSION = FieldDefinition["expression", YangString]
 comptime FIELD_MUST_ERROR_MESSAGE = FieldDefinition["error-message", YangString]
 
 comptime MustCompositeFields = CompositeFieldDefinition[ "must", True,
-    FIELD_MUST_EXPRESSION,
     FIELD_DESCRIPTION,
     FIELD_MUST_ERROR_MESSAGE,
 ]
@@ -226,7 +238,8 @@ comptime YangRefineASTNode = CompositeFieldDefinition[ "refine", True,
 ]
 
 def main() raises:
-    var lexer = Lexer("refine a/b/c { must \"x>0\" { description \"x must be greater than 0\" } }")
+    var lexer = Lexer("refine a/b/c { must \"x>0\" { description \"x must be greater than 0\"; } }")
+    var _refine = lexer.expect_ident()
     var node = YangRefineASTNode()
     node.parse(lexer)
     print(node.__str__())
