@@ -36,7 +36,7 @@ def _scan_quoted_string_body(
         var rest = String(source[byte=i:n])
         for cp_slice in rest.codepoint_slices():
             var c = Codepoint.ord(cp_slice)
-            var w = len(cp_slice)
+            var w = cp_slice.count_codepoints()
             if c == quote:
                 return Tuple[Int, Int](i + w, line)
             if c == CP_BACKSLASH:
@@ -234,17 +234,9 @@ def _starts_numeric_lexeme(lexeme: String) -> Bool:
 
 
 def _starts_identifier_lexeme(lexeme: String) -> Bool:
-    var c0 = Optional[Codepoint]()
     for cp in lexeme.codepoints():
-        c0 = Optional(cp)
-        break
-    if not c0:
-        return False
-    return (
-        c0.value().is_ascii_upper()
-        or c0.value().is_ascii_lower()
-        or c0.value() == CP_UNDERSCORE
-    )
+        return cp.is_ascii_upper() or cp.is_ascii_lower() or cp == CP_UNDERSCORE
+    return False
 
 
 def _is_integer_lexeme(lexeme: String) -> Bool:

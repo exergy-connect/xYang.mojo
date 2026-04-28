@@ -7,39 +7,40 @@ from std.iter import Iterable, Iterator
 from std.builtin.variadics import TypeList
 from std.memory import ArcPointer
 
+from must_tokenizer import Lexer
+
 from std.reflection import (
     struct_field_count, struct_field_names,
     get_type_name, struct_field_types
 )
 
-trait CreateFromString:
+trait ParseFromLexer:
     @staticmethod
-    def from_string(input: String) raises -> Self:
+    def from_lexer(mut Lexer: Lexer) raises -> Self:
         ...
     
     def __str__(ref self) -> String:
         ...
 
-trait ParseFromString:
-    def parse(mut self, input: String) raises:
+trait Parseable:
+    def parse(mut self, mut lexer: Lexer) raises:
         ...
 
-comptime YangScalarTraits = CreateFromString & Copyable & Movable & ImplicitlyDestructible & Defaultable
+comptime YangScalarTraits = ParseFromLexer & Copyable & Movable & ImplicitlyDestructible & Defaultable
 
-def parse_yang_string(input: String) raises -> String:
-    return input
+def parse_yang_string(mut lexer: Lexer) raises -> String:
+    return lexer.expect_string()
 
-def parse_yang_int(input: String) raises -> Int:
-    # TODO replace with actual int parser
-    return atol(input)
+def parse_yang_int(mut lexer: Lexer) raises -> Int:
+    return lexer.expect_int()
 
-def parse_yang_bool(input: String) raises -> Bool:
-    return input == "true"
+def parse_yang_bool(mut lexer: Lexer) raises -> Bool:
+    return lexer.expect_bool()
 
 @fieldwise_init
 struct YangScalar[
     ValueType: Writable & Copyable & Movable & ImplicitlyDestructible,
-    parse_method: def(String) raises thin -> ValueType,
+    parse_method: def(mut Lexer) raises thin -> ValueType,
 ](YangScalarTraits):
     var value: Optional[Self.ValueType]
 
@@ -47,8 +48,8 @@ struct YangScalar[
         self.value = Optional[Self.ValueType]()
 
     @staticmethod
-    def from_string(input: String) raises -> Self:
-        return Self(value=Optional[Self.ValueType](Self.parse_method(input)))
+    def from_lexer(mut lexer: Lexer) raises -> Self:
+        return Self(value=Optional[Self.ValueType](Self.parse_method(lexer)))
 
     def __str__(ref self) -> String:
         var output = String()
@@ -64,7 +65,7 @@ trait YANGField:
     def name(self) -> String:
         ...  
 
-comptime FieldTraits = YANGField & Defaultable & CreateFromString & ParseFromString & \
+comptime FieldTraits = YANGField & Defaultable & ParseFromLexer & Parseable & \
                        Movable & ImplicitlyDestructible
 
 @fieldwise_init
@@ -92,11 +93,11 @@ struct FieldDefinition[
         return Self.field_name + ": " + self.data.__str__()
 
     @staticmethod
-    def from_string(input: String) raises -> Self:
-        return Self(data = Self.ValueType.from_string(input))
+    def from_lexer(mut lexer: Lexer) raises -> Self:
+        return Self(data = Self.ValueType.from_lexer(lexer))
     
-    def parse(mut self, input: String) raises:
-        self.data = Self.ValueType.from_string(input)
+    def parse(mut self, mut lexer: Lexer) raises:
+        self.data = Self.ValueType.from_lexer(lexer)
 
 @fieldwise_init
 struct RepeatedField[
@@ -125,9 +126,9 @@ struct RepeatedField[
         return Self.field_name
 
     @staticmethod
-    def from_string(input: String) raises -> Self:
+    def from_lexer(mut lexer: Lexer) raises -> Self:
         var newField = Self(data = List[ArcPointer[Self.FieldType]]())
-        newField.parse(input)
+        newField.parse(lexer)
         return newField^
 
     def __str__(ref self) -> String:
@@ -136,8 +137,8 @@ struct RepeatedField[
             result += field[].__str__() + "\n"
         return result
 
-    def parse(mut self, input: String) raises:
-        var newField = Self.FieldType.from_string(input)
+    def parse(mut self, mut lexer: Lexer) raises:
+        var newField = Self.FieldType.from_lexer(lexer)
         self.data.append(ArcPointer[Self.FieldType](newField^))
 
     def __iter__(ref self) -> Self.IteratorType[origin_of(self)]:
@@ -146,12 +147,15 @@ struct RepeatedField[
 @fieldwise_init
 struct CompositeFieldDefinition[
     field_name: StringLiteral,
+    has_argument: Bool,
     *FieldDefs: FieldTraits ] (
     FieldTraits
 ):
+    var argument: Optional[String]
     var data: Tuple[*Self.FieldDefs]
 
     def __init__(out self):
+        self.argument = Optional[String]()
         self.data = Tuple[*Self.FieldDefs]()
 
     def name(self) -> String:
@@ -165,20 +169,26 @@ struct CompositeFieldDefinition[
         return result
 
     @staticmethod
-    def from_string(input: String) raises -> Self:
-        var newField = Self(data = Tuple[*Self.FieldDefs]())
-        newField.parse(input)
+    def from_lexer(mut lexer: Lexer) raises -> Self:
+        var newField = Self(argument = Optional[String](), data = Tuple[*Self.FieldDefs]())
+        newField.parse(lexer)
         return newField^
 
-    def parse(mut self, input: String) raises:
-        comptime for i in range(len(Self.FieldDefs)):
-            ref field = self.data[i]
-            # later: route real parsed substatement tokens here
-            if field.name() == input:
-                _ = field.parse(input)
-                return
+    def parse(mut self, mut lexer: Lexer) raises:
+        var input = lexer.expect_ident()
+        if Self.has_argument:
+            self.argument = Optional[String](lexer.expect_string())
+        if lexer.skip_if("{"):
+            while not lexer.skip_if("}"):
+                comptime for i in range(len(Self.FieldDefs)):
+                    ref field = self.data[i]
+                    # later: route real parsed substatement tokens here
+                    if field.name() == input:
+                        field.parse(lexer)
+                        _ = lexer.skip_if(";")
+                        break
         
-        raise Error("Unknown field: " + input)
+        raise Error("Error parsing " + Self.field_name + ": " + lexer.peek())
 
 ## One comptime binding per field keyword (string appears only here).
 comptime FIELD_DESCRIPTION = FieldDefinition["description", YangString]
@@ -189,7 +199,7 @@ comptime FIELD_REFERENCE = FieldDefinition["reference", YangString]
 comptime FIELD_MUST_EXPRESSION = FieldDefinition["expression", YangString]
 comptime FIELD_MUST_ERROR_MESSAGE = FieldDefinition["error-message", YangString]
 
-comptime MustCompositeFields = CompositeFieldDefinition[ "must",
+comptime MustCompositeFields = CompositeFieldDefinition[ "must", True,
     FIELD_MUST_EXPRESSION,
     FIELD_DESCRIPTION,
     FIELD_MUST_ERROR_MESSAGE,
@@ -203,36 +213,7 @@ comptime FIELD_DEFAULT = FieldDefinition["default", YangString]
 comptime FIELD_IF_FEATURE = FieldDefinition["if-feature", YangString]
 comptime FIELD_TYPE = FieldDefinition["type", YangString]
 
-
-## Abstract AST node: `fields` is a comptime tuple of `FieldDefinition`,
-## `IterableFieldDefinition`, and/or `CompositeFieldDefinition` values.
-@fieldwise_init
-struct YangASTNode[*FieldDefs: FieldTraits]():
-
-    var data: Tuple[*Self.FieldDefs]
-
-    def __init__(out self):
-        self.data = Tuple[*Self.FieldDefs]()
-
-    @staticmethod
-    def field_count() -> Int:
-        return Self.FieldDefs.size
-    
-    def parse(mut self, input: String) raises:
-        comptime for f in range(Self.field_count()):
-            ref field = self.data[f]
-            if field.name() == input:
-                field.parse(input)
-                return
-        raise Error("Unknown field: " + input)
-
-    def __str__(ref self) -> String:
-        var result = String()
-        comptime for f in range(Self.field_count()):
-            result += self.data[f].__str__() + "\n"
-        return result
-
-comptime YangRefineASTNode = YangASTNode[
+comptime YangRefineASTNode = CompositeFieldDefinition[ "refine", True,
     FIELD_MUST,
     FIELD_DESCRIPTION,
     FIELD_MIN_ELEMENTS,
@@ -245,10 +226,7 @@ comptime YangRefineASTNode = YangASTNode[
 ]
 
 def main() raises:
-    print(
-        "example node fields: "
-        + String(YangRefineASTNode.field_count()),
-    )
+    var lexer = Lexer("refine a/b/c { must \"x>0\" { description \"x must be greater than 0\" } }")
     var node = YangRefineASTNode()
-    node.parse("must expression description")
+    node.parse(lexer)
     print(node.__str__())
