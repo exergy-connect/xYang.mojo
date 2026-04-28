@@ -24,50 +24,41 @@ trait ParseFromString:
     def parse(mut self, input: String) raises:
         ...
 
-comptime YangTypeTraits = CreateFromString & Copyable & Movable & ImplicitlyDestructible & Defaultable
+comptime YangScalarTraits = CreateFromString & Copyable & Movable & ImplicitlyDestructible & Defaultable
+
+def parse_yang_string(input: String) raises -> String:
+    return input
+
+def parse_yang_int(input: String) raises -> Int:
+    # TODO replace with actual int parser
+    return atol(input)
+
+def parse_yang_bool(input: String) raises -> Bool:
+    return input == "true"
 
 @fieldwise_init
-struct YangString(YangTypeTraits):
-    var value: String
+struct YangScalar[
+    ValueType: Writable & Copyable & Movable & ImplicitlyDestructible,
+    parse_method: def(String) raises thin -> ValueType,
+](YangScalarTraits):
+    var value: Optional[Self.ValueType]
 
     def __init__(out self):
-        self.value = String()
+        self.value = Optional[Self.ValueType]()
 
     @staticmethod
     def from_string(input: String) raises -> Self:
-        return Self(value=input)
+        return Self(value=Optional[Self.ValueType](Self.parse_method(input)))
 
     def __str__(ref self) -> String:
-        return self.value
+        var output = String()
+        if self.value:
+            output.write(self.value.value())
+        return output
 
-@fieldwise_init
-struct YangInt(YangTypeTraits):
-    var value: Int
-
-    def __init__(out self):
-        self.value = 0
-
-    @staticmethod
-    def from_string(input: String) raises -> Self:
-        # TODO replace with actual int parser
-        return Self(value=atol(input))
-
-    def __str__(ref self) -> String:
-        return String(self.value)
-
-@fieldwise_init
-struct YangBool(YangTypeTraits):
-    var value: Bool
-
-    def __init__(out self):
-        self.value = False
-
-    @staticmethod
-    def from_string(input: String) raises -> Self:
-        return Self(value=input == "true")
-
-    def __str__(ref self) -> String:
-        return String(self.value)
+comptime YangString = YangScalar[String, parse_yang_string]
+comptime YangInt = YangScalar[Int, parse_yang_int]
+comptime YangBool = YangScalar[Bool, parse_yang_bool]
 
 trait YANGField:
     def name(self) -> String:
@@ -79,7 +70,7 @@ comptime FieldTraits = YANGField & Defaultable & CreateFromString & ParseFromStr
 @fieldwise_init
 struct FieldDefinition[
     field_name: StringLiteral,
-    ValueType: YangTypeTraits,
+    ValueType: YangScalarTraits,
 ](FieldTraits):
     ## `field_name`: YANG keyword for this substatement.
     ## `ValueType`: type of its argument after parsing (here: plain string → `String`).
