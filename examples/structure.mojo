@@ -108,7 +108,7 @@ struct FieldDefinition[
         self.data = Self.ValueType.from_string(input)
 
 @fieldwise_init
-struct FieldListDefinition[
+struct RepeatedField[
     field_name: StringLiteral,
     FieldType: FieldTraits,
 ](FieldTraits & Iterable):
@@ -203,7 +203,7 @@ comptime MustCompositeFields = CompositeFieldDefinition[ "must",
     FIELD_DESCRIPTION,
     FIELD_MUST_ERROR_MESSAGE,
 ]
-comptime FIELD_MUST = FieldListDefinition["must", MustCompositeFields]
+comptime FIELD_MUST = RepeatedField["must", MustCompositeFields]
 comptime FIELD_MIN_ELEMENTS = FieldDefinition["min-elements", YangInt]
 comptime FIELD_MAX_ELEMENTS = FieldDefinition["max-elements", YangInt]
 comptime FIELD_ORDERED_BY = FieldDefinition["ordered-by", YangString]
@@ -216,7 +216,7 @@ comptime FIELD_TYPE = FieldDefinition["type", YangString]
 ## Abstract AST node: `fields` is a comptime tuple of `FieldDefinition`,
 ## `IterableFieldDefinition`, and/or `CompositeFieldDefinition` values.
 @fieldwise_init
-struct YangASTNode[*FieldDefs: FieldTraits & CreateFromString]():
+struct YangASTNode[*FieldDefs: FieldTraits]():
 
     var data: Tuple[*Self.FieldDefs]
 
@@ -231,14 +231,14 @@ struct YangASTNode[*FieldDefs: FieldTraits & CreateFromString]():
         comptime for f in range(Self.field_count()):
             ref field = self.data[f]
             if field.name() == input:
-                _ = field.parse(input)
+                field.parse(input)
                 return
+        raise Error("Unknown field: " + input)
 
     def __str__(ref self) -> String:
         var result = String()
         comptime for f in range(Self.field_count()):
-            ref field = self.data[f]
-            result += field.__str__() + "\n"
+            result += self.data[f].__str__() + "\n"
         return result
 
 comptime YangRefineASTNode = YangASTNode[
