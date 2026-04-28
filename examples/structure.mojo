@@ -16,6 +16,9 @@ trait CreateFromString:
     @staticmethod
     def from_string(input: String) raises -> Self:
         ...
+    
+    def __str__(ref self) -> String:
+        ...
 
 trait ParseFromString:
     def parse(mut self, input: String) raises:
@@ -34,6 +37,8 @@ struct YangString(YangTypeTraits):
     def from_string(input: String) raises -> Self:
         return Self(value=input)
 
+    def __str__(ref self) -> String:
+        return self.value
 
 @fieldwise_init
 struct YangInt(YangTypeTraits):
@@ -47,6 +52,8 @@ struct YangInt(YangTypeTraits):
         # TODO replace with actual int parser
         return Self(value=atol(input))
 
+    def __str__(ref self) -> String:
+        return String(self.value)
 
 @fieldwise_init
 struct YangBool(YangTypeTraits):
@@ -59,17 +66,21 @@ struct YangBool(YangTypeTraits):
     def from_string(input: String) raises -> Self:
         return Self(value=input == "true")
 
+    def __str__(ref self) -> String:
+        return String(self.value)
+
 trait YANGField:
     def name(self) -> String:
-        ...
+        ...  
 
-comptime FieldTraits = YANGField & ParseFromString & Movable & ImplicitlyDestructible
+comptime FieldTraits = YANGField & Defaultable & CreateFromString & ParseFromString & \
+                       Movable & ImplicitlyDestructible
 
 @fieldwise_init
 struct FieldDefinition[
     field_name: StringLiteral,
-    ValueType: CreateFromString & Copyable & Movable & ImplicitlyDestructible,
-](FieldTraits & CreateFromString):
+    ValueType: YangTypeTraits,
+](FieldTraits):
     ## `field_name`: YANG keyword for this substatement.
     ## `ValueType`: type of its argument after parsing (here: plain string → `String`).
     ## `data`: stored argument value for this field instance.
@@ -80,9 +91,15 @@ struct FieldDefinition[
 
     var data: Self.ValueType
 
+    def __init__(out self):
+        self.data = Self.ValueType()
+
     def name(self) -> String:
         return Self.field_name
     
+    def __str__(ref self) -> String:
+        return Self.field_name + ": " + self.data.__str__()
+
     @staticmethod
     def from_string(input: String) raises -> Self:
         return Self(data = Self.ValueType.from_string(input))
@@ -93,8 +110,8 @@ struct FieldDefinition[
 @fieldwise_init
 struct FieldListDefinition[
     field_name: StringLiteral,
-    FieldType: FieldTraits & CreateFromString,
-](FieldTraits, Iterable):
+    FieldType: FieldTraits,
+](FieldTraits & Iterable):
 
     ## Like `FieldDefinition`, but the payload type is `Iterable` and this struct
     ## is iterable (delegates to `data`).
@@ -110,8 +127,23 @@ struct FieldListDefinition[
 
     var data: Self.ListType
 
+    def __init__(out self):
+        self.data = Self.ListType()
+
     def name(self) -> String:
         return Self.field_name
+
+    @staticmethod
+    def from_string(input: String) raises -> Self:
+        var newField = Self(data = List[ArcPointer[Self.FieldType]]())
+        newField.parse(input)
+        return newField^
+
+    def __str__(ref self) -> String:
+        var result = String()
+        for field in self.data:
+            result += field[].__str__() + "\n"
+        return result
 
     def parse(mut self, input: String) raises:
         var newField = Self.FieldType.from_string(input)
@@ -124,12 +156,22 @@ struct FieldListDefinition[
 struct CompositeFieldDefinition[
     field_name: StringLiteral,
     *FieldDefs: FieldTraits ] (
-    FieldTraits & CreateFromString
+    FieldTraits
 ):
     var data: Tuple[*Self.FieldDefs]
 
+    def __init__(out self):
+        self.data = Tuple[*Self.FieldDefs]()
+
     def name(self) -> String:
         return Self.field_name
+
+    def __str__(ref self) -> String:
+        var result = String()
+        comptime for i in range(len(Self.FieldDefs)):
+            ref field = self.data[i]
+            result += field.__str__() + "\n"
+        return result
 
     @staticmethod
     def from_string(input: String) raises -> Self:
@@ -161,7 +203,7 @@ comptime MustCompositeFields = CompositeFieldDefinition[ "must",
     FIELD_DESCRIPTION,
     FIELD_MUST_ERROR_MESSAGE,
 ]
-comptime FIELD_MUST = FieldListDefinition["must", MustCompositeFields] # XXX does not work
+comptime FIELD_MUST = FieldListDefinition["must", MustCompositeFields]
 comptime FIELD_MIN_ELEMENTS = FieldDefinition["min-elements", YangInt]
 comptime FIELD_MAX_ELEMENTS = FieldDefinition["max-elements", YangInt]
 comptime FIELD_ORDERED_BY = FieldDefinition["ordered-by", YangString]
@@ -174,7 +216,7 @@ comptime FIELD_TYPE = FieldDefinition["type", YangString]
 ## Abstract AST node: `fields` is a comptime tuple of `FieldDefinition`,
 ## `IterableFieldDefinition`, and/or `CompositeFieldDefinition` values.
 @fieldwise_init
-struct YangASTNode[*FieldDefs: FieldTraits]():
+struct YangASTNode[*FieldDefs: FieldTraits & CreateFromString]():
 
     var data: Tuple[*Self.FieldDefs]
 
@@ -191,6 +233,13 @@ struct YangASTNode[*FieldDefs: FieldTraits]():
             if field.name() == input:
                 _ = field.parse(input)
                 return
+
+    def __str__(ref self) -> String:
+        var result = String()
+        comptime for f in range(Self.field_count()):
+            ref field = self.data[f]
+            result += field.__str__() + "\n"
+        return result
 
 comptime YangRefineASTNode = YangASTNode[
     FIELD_MUST,
@@ -210,4 +259,5 @@ def main() raises:
         + String(YangRefineASTNode.field_count()),
     )
     var node = YangRefineASTNode()
-    _ = node.parse("must expression description")
+    node.parse("must expression description")
+    print(node.__str__())

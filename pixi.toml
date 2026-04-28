@@ -1,13 +1,13 @@
 [workspace]
 authors = ["Jeroen van Bemmel <jvb127@gmail.com>"]
-channels = ["conda-forge", "https://repo.prefix.dev/modular", "https://conda.modular.com/max", "https://conda.modular.com/max-nightly", "https://repo.prefix.dev/modular-community"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge", "https://repo.prefix.dev/modular", "https://conda.modular.com/max", "https://repo.prefix.dev/modular-community"]
 name = "xYang.mojo"
 platforms = ["linux-64"]
 version = "0.1.0"
 
 [dependencies]
-mblack = "==26.2.0"
-mojo = "0.26.2.0.*"
+mblack = ">=26.2.0"
+mojo = "0.26.3.0.*"
 emberjson = ">=0.3.1,<0.4"
 
 [tasks.build-lib]
