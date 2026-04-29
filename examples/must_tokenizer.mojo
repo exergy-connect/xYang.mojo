@@ -1,3 +1,6 @@
+from std.collections import Dict
+
+
 @fieldwise_init
 struct Token:
     var kind: String
@@ -12,10 +15,32 @@ comptime CP_MINUS = Codepoint.ord("-")
 struct Lexer:
     var input: String
     var pos: Int
+    var field_index_tables: Dict[String, Dict[String, Int]]
 
     def __init__(out self, input: String):
         self.input = input
         self.pos = 0
+        self.field_index_tables = Dict[String, Dict[String, Int]]()
+
+    def __init__(out self, *, file_path: String) raises:
+        with open(file_path, "r") as f:
+            self.input = f.read()
+        self.pos = 0
+        self.field_index_tables = Dict[String, Dict[String, Int]]()
+
+    @staticmethod
+    def from_file(file_path: String) raises -> Self:
+        return Self(file_path=file_path)
+
+    def get_field_index_table(
+        mut self,
+        field_name: String,
+        populate_method: def(out Dict[String, Int]) thin,
+    ) raises -> Dict[String, Int]:
+        if field_name not in self.field_index_tables:
+            var field_table = populate_method()
+            self.field_index_tables[field_name] = field_table^
+        return self.field_index_tables[field_name].copy()
 
     def eof(ref self) -> Bool:
         return self.pos >= self.input.byte_length()
@@ -35,10 +60,39 @@ struct Lexer:
             var ch = String(self.input[byte=self.pos : self.pos + 1])
             if ch == " " or ch == "\n" or ch == "\t" or ch == "\r":
                 self.pos += 1
+            elif (
+                ch == "/"
+                and self.pos + 1 < self.input.byte_length()
+                and String(self.input[byte=self.pos + 1 : self.pos + 2]) == "/"
+            ):
+                self.pos += 2
+                while not self.eof():
+                    var line_ch = String(self.input[byte=self.pos : self.pos + 1])
+                    if line_ch == "\n" or line_ch == "\r":
+                        break
+                    self.pos += 1
+            elif (
+                ch == "/"
+                and self.pos + 1 < self.input.byte_length()
+                and String(self.input[byte=self.pos + 1 : self.pos + 2]) == "*"
+            ):
+                self.pos += 2
+                while not self.eof():
+                    if (
+                        String(self.input[byte=self.pos : self.pos + 1]) == "*"
+                        and self.pos + 1 < self.input.byte_length()
+                        and String(self.input[byte=self.pos + 1 : self.pos + 2]) == "/"
+                    ):
+                        self.pos += 2
+                        break
+                    self.pos += 1
             else:
                 return
     
     def skip_if(mut self, ch: String) raises -> Bool:
+        self.skip_ws()
+        if self.eof():
+            return False
         if self.peek() == ch:
             _ = self.bump()
             return True
@@ -90,28 +144,46 @@ struct Lexer:
         var result = String()
 
         while not self.eof():
-            var ch = self.bump()
+            var rest = String(self.input[byte=self.pos:])
+            var consumed_codepoint = False
+            for cp_slice in rest.codepoint_slices():
+                var ch = String(cp_slice)
+                self.pos += cp_slice.byte_length()
+                consumed_codepoint = True
 
-            if ch == quote:
-                return result
+                if ch == quote:
+                    return result
 
-            # Minimal escape handling.
-            if ch == "\\":
-                if self.eof():
-                    raise Error("Trailing escape in string literal")
+                # Minimal escape handling, consuming one full UTF-8 codepoint.
+                if ch == "\\":
+                    if self.eof():
+                        raise Error("Trailing escape in string literal")
 
-                var escaped = self.bump()
+                    var escape_rest = String(self.input[byte=self.pos:])
+                    var consumed_escape = False
+                    for escaped_slice in escape_rest.codepoint_slices():
+                        var escaped = String(escaped_slice)
+                        self.pos += escaped_slice.byte_length()
+                        consumed_escape = True
 
-                if escaped == "n":
-                    result += "\n"
-                elif escaped == "t":
-                    result += "\t"
-                elif escaped == "r":
-                    result += "\r"
+                        if escaped == "n":
+                            result += "\n"
+                        elif escaped == "t":
+                            result += "\t"
+                        elif escaped == "r":
+                            result += "\r"
+                        else:
+                            result += escaped
+                        break
+
+                    if not consumed_escape:
+                        raise Error("Trailing escape in string literal")
                 else:
-                    result += escaped
-            else:
-                result += ch
+                    result += ch
+                break
+
+            if not consumed_codepoint:
+                break
 
         raise Error("Unterminated string literal")
 
@@ -134,6 +206,10 @@ struct Lexer:
         if ch == ";":
             _ = self.bump()
             return Token(kind=";", text=";")
+
+        if ch == "+":
+            _ = self.bump()
+            return Token(kind="+", text="+")
 
         if ch == "\"" or ch == "'":
             return Token(kind="string", text=self.read_quoted_string())
@@ -183,3 +259,27 @@ struct Lexer:
         if tok.kind == "bool":
             return tok.text == "true"
         raise Error("Expected boolean argument, got `" + tok.text + "`")
+
+    def skip_statement_tail(mut self) raises:
+        var depth = 0
+
+        while True:
+            var tok = self.next_token()
+
+            if tok.kind == "eof":
+                raise Error("Unexpected end of input while skipping statement")
+
+            if tok.kind == "{":
+                depth += 1
+                continue
+
+            if tok.kind == "}":
+                if depth == 0:
+                    return
+                depth -= 1
+                if depth == 0:
+                    return
+                continue
+
+            if tok.kind == ";" and depth == 0:
+                return

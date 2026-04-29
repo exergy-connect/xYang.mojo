@@ -2,7 +2,7 @@
 ##
 ##   pixi run mojo examples/structure.mojo
 
-from std.collections import List
+from std.collections import Dict, List
 from std.iter import Iterable, Iterator
 from std.builtin.variadics import TypeList
 from std.memory import ArcPointer
@@ -62,7 +62,8 @@ comptime YangInt = YangScalar[Int, parse_yang_int]
 comptime YangBool = YangScalar[Bool, parse_yang_bool]
 
 trait YANGField:
-    def name(self) -> String:
+    @staticmethod
+    def name() -> String:
         ...  
 
 comptime FieldTraits = YANGField & Defaultable & ParseFromLexer & Parseable & \
@@ -86,7 +87,8 @@ struct FieldDefinition[
     def __init__(out self):
         self.data = Optional[Self.ValueType]()
 
-    def name(self) -> String:
+    @staticmethod
+    def name() -> String:
         return Self.field_name
     
     def __str__(ref self) -> String:
@@ -101,7 +103,6 @@ struct FieldDefinition[
 
 @fieldwise_init
 struct RepeatedField[
-    field_name: StringLiteral,
     FieldType: FieldTraits,
 ](FieldTraits & Iterable):
 
@@ -122,8 +123,9 @@ struct RepeatedField[
     def __init__(out self):
         self.data = Self.ListType()
 
-    def name(self) -> String:
-        return Self.field_name
+    @staticmethod
+    def name() -> String:
+        return Self.FieldType.name()
 
     @staticmethod
     def from_lexer(mut lexer: Lexer) raises -> Self:
@@ -158,17 +160,24 @@ struct CompositeFieldDefinition[
         self.argument = Optional[String]()
         self.data = Tuple[*Self.FieldDefs]()
 
-    def name(self) -> String:
+    @staticmethod
+    def name() -> String:
         return Self.field_name
 
     def __str__(ref self) -> String:
         var result = String(Self.field_name)
-        if Self.has_argument:
+        if self.argument:
             result += "(" + self.argument.value() + ") "
         comptime for i in range(len(Self.FieldDefs)):
             ref field = self.data[i]
             result += field.__str__()
         return result
+
+    @staticmethod
+    def populate_field_index_table(out field_table: Dict[String, Int]):
+        field_table = Dict[String, Int]()
+        comptime for i in range(len(Self.FieldDefs)):
+            field_table[Self.FieldDefs[i].name()] = i
 
     @staticmethod
     def from_lexer(mut lexer: Lexer) raises -> Self:
@@ -179,25 +188,23 @@ struct CompositeFieldDefinition[
     def parse(mut self, mut lexer: Lexer) raises:
         if Self.has_argument:
             self.argument = Optional[String](lexer.expect_string())
-        lexer.skip_ws()
         if lexer.skip_if("{"):
+            var field_table = lexer.get_field_index_table(
+                Self.field_name, Self.populate_field_index_table
+            )
             while True:
-                lexer.skip_ws()
                 if lexer.skip_if("}"):
                     return
 
                 var stmt_name = lexer.expect_ident()
-                var matched = False
-                comptime for i in range(len(Self.FieldDefs)):
-                    ref field = self.data[i]
-                    if field.name() == stmt_name:
-                        field.parse(lexer)
-                        lexer.skip_ws()
-                        _ = lexer.skip_if(";")
-                        matched = True
-                        break
-
-                if not matched:
+                if stmt_name in field_table:
+                    var field_index = field_table[stmt_name]
+                    comptime for i in range(len(Self.FieldDefs)):
+                        if field_index == i:
+                            self.data[i].parse(lexer)
+                            break
+                    _ = lexer.skip_if(";")
+                else:
                     raise Error(
                         "Unknown substatement `" + stmt_name + "` in `" + Self.field_name + "`"
                     )
@@ -216,7 +223,7 @@ comptime MustCompositeFields = CompositeFieldDefinition[ "must", True,
     FIELD_DESCRIPTION,
     FIELD_MUST_ERROR_MESSAGE,
 ]
-comptime FIELD_MUST = RepeatedField["must", MustCompositeFields]
+comptime FIELD_MUST = RepeatedField[MustCompositeFields]
 comptime FIELD_MIN_ELEMENTS = FieldDefinition["min-elements", YangInt]
 comptime FIELD_MAX_ELEMENTS = FieldDefinition["max-elements", YangInt]
 comptime FIELD_ORDERED_BY = FieldDefinition["ordered-by", YangString]
