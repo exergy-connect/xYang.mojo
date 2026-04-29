@@ -58,25 +58,31 @@ def is_name_token(tok: AstToken) -> Bool:
     return tok.type == AstToken.ATOM or tok.type == AstToken.QNAME
 
 
-def parse_document[
-    origin: ImmutOrigin
-](mut lexer: AstLexer[origin]) raises -> YangConstruct.StatementList:
-    var statements = YangConstruct.StatementList()
-    while True:
-        var tok = lexer.next_token()
-        if tok.type == AstToken.EOF:
-            return statements^
-        if not is_name_token(tok):
-            raise Error(
-                "Expected statement keyword, got `"
-                + tok.text(lexer.input)
-                + "`"
-            )
-        statements.append(
-            Arc[YangConstruct](
-                parse_statement_after_keyword(lexer, tok.text(lexer.input)),
-            ),
+def parse_module[origin: ImmutOrigin](
+    mut lexer: AstLexer[origin]
+) raises -> YangConstruct:
+    var tok = lexer.next_token()
+    if tok.type == AstToken.EOF:
+        raise Error("Expected module statement, got EOF")
+    if not is_name_token(tok):
+        raise Error(
+            "Expected module statement keyword, got `"
+            + tok.text(lexer.input)
+            + "`"
         )
+
+    var module = parse_statement_after_keyword(lexer, tok.text(lexer.input))
+    if module.keyword != "module":
+        raise Error("Expected module statement, got `" + module.keyword + "`")
+
+    tok = lexer.next_token()
+    if tok.type != AstToken.EOF:
+        raise Error(
+            "Expected EOF after module statement, got `"
+            + tok.text(lexer.input)
+            + "`"
+        )
+    return module^
 
 
 def parse_block[
@@ -151,6 +157,5 @@ def main() raises:
     with open("examples/meta-model.yang", "r") as f:
         source = f.read()
     var lexer = AstLexer(source.as_bytes())
-    var statements = parse_document(lexer)
-    for statement in statements:
-        print(statement[])
+    var module = parse_module(lexer)
+    print(module)
