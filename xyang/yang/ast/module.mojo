@@ -35,6 +35,7 @@ struct TopContainerIterator(Iterator):
         self.index = 0
 
     def __next__(mut self) raises StopIteration -> Self.Element:
+        from ..spec import `container`
         if not self.root:
             raise StopIteration()
         ref root = self.root.value()[]
@@ -42,7 +43,7 @@ struct TopContainerIterator(Iterator):
             var i = self.index
             self.index += 1
             var child = root.children[i]
-            if child[].keyword == "container":
+            if child[].spec.value() == `container`:
                 return child.copy()
         raise StopIteration()
 
@@ -81,18 +82,17 @@ struct YangModule(Movable & Iterable):
     def _populate_from_validated_tree(
         mut self, read tree: YangConstruct
     ) raises:
+        from ..spec import `container`, `grouping`, `revision`
         self.fields[tree.spec.value()] = tree.argument.value()
         for child in tree.children:
             ref node = child[]
             var arg = node.argument.value()
             var kw = node.spec.value()
-            if node.keyword == "revision":
+            if kw == `revision`:
                 self.revisions.append(arg)
-            elif node.keyword == "grouping":
+            elif kw == `grouping`:
                 _insert_unique(self.groupings, arg, child)
-            elif node.keyword == "typedef":
-                _insert_unique(self.typedefs, arg, child)
-            elif node.keyword == "container":
+            elif kw == `container`:
                 _insert_unique(self.top_containers, arg, child)
             else:
                 self.fields[kw] = arg
