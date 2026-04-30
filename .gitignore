@@ -8,4 +8,4 @@
 # Packaged library and smoke-test binary (`pixi run package`)
 /build/
 
-/EmberJson
+/EmberJson/
