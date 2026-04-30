@@ -1,12 +1,9 @@
 ## Top-level validation: YANG module shape + JSON instance document.
 
 from xyang.json.parser import JsonValue, parse_json
-from xyang.yang.ast.construct import (
-    YangConstruct,
-    parse_module,
-    validate_module,
-)
+from xyang.yang.ast.construct import YangConstruct, validate_module
 from xyang.yang.ast.lexer import AstLexer
+from xyang.yang.ast.parser import parse_module
 from xyang.yang.ast.lookup import find_effective_child
 from xyang.validator.leafref import check_leafrefs_in_object
 from xyang.validator.tree import validate_object_against_construct

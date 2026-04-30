@@ -1,1 +1,1 @@
-## YANG text lexer (`lexer`), `YangConstruct` tree (`construct`), and tree helpers (`lookup`).
+## YANG text lexer (`lexer`), `YangConstruct` (`construct`), parser (`parser`), tree helpers (`lookup`).

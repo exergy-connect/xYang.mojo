@@ -1,7 +1,7 @@
 ## Same flow as `examples/basic_yang/validator.mojo`: validate YANG + JSON instance.
 
-from xyang.yang.ast.construct import parse_module
 from xyang.yang.ast.lexer import AstLexer
+from xyang.yang.ast.module import YangModule
 from xyang.validator.document import validate_yang_document
 
 
@@ -22,7 +22,8 @@ def main() raises:
     )
 
     var lexer = AstLexer(yang_text.as_bytes())
-    var yang_module = parse_module(lexer)
-    print("YANG module: " + yang_module.argument.value())
+    var yang_index = YangModule()
+    yang_index.parse(lexer)
+    print("YANG module: " + yang_index.module_name)
     print("Data file: " + String(DATA_PATH))
     print("Validation: valid")
