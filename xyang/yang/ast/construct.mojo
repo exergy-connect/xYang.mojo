@@ -4,7 +4,7 @@
 
 from std.memory import ArcPointer
 
-from xyang.yang.lexer import AstLexer, AstToken
+from xyang.yang.ast.lexer import AstLexer, AstToken
 from xyang.yang.spec import build_spec_table, validate_construct, `module`
 
 
@@ -138,23 +138,18 @@ def parse_statement_after_keyword[
 
     if tok.type == AstToken.SEMICOLON:
         return statement^
-
-    if tok.type == AstToken.LBRACE:
-        statement.children = parse_block(lexer)
-        return statement^
-
-    var terminator = parse_argument(lexer, tok, statement)
-    if terminator == AstToken.SEMICOLON:
-        return statement^
-    if terminator == AstToken.LBRACE:
-        statement.children = parse_block(lexer)
-        return statement^
-
-    raise Error(
-        "line "
-        + String(statement.line)
-        + ": Expected `;` or `{` after statement argument"
-    )
+    if tok.type != AstToken.LBRACE:
+        var terminator = parse_argument(lexer, tok, statement)
+        if terminator == AstToken.SEMICOLON:
+            return statement^
+        if terminator != AstToken.LBRACE:
+            raise Error(
+                "line "
+                + String(statement.line)
+                + ": Expected `;` or `{` after statement argument"
+            )
+    statement.children = parse_block(lexer)
+    return statement^
 
 
 def parse_argument[

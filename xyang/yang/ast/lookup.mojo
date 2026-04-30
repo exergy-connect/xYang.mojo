@@ -3,7 +3,7 @@
 from std.memory import ArcPointer
 
 from xyang.yang.arguments import RangeBounds, try_parse_range_bounds
-from xyang.yang.construct import YangConstruct
+from xyang.yang.ast.construct import YangConstruct
 
 
 comptime Arc = ArcPointer

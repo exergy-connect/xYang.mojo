@@ -1,1 +1,1 @@
-## YANG text lexer and generic `YangConstruct` tree (duplicated from `examples/` for the package).
+## YANG validation and parsing: `yang/ast` holds the lexer, `YangConstruct` tree, and lookup helpers.

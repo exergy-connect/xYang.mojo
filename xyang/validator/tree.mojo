@@ -1,8 +1,8 @@
 ## Validate JSON values against `YangConstruct` schema nodes.
 
 from xyang.json.parser import JsonValue, json_get
-from xyang.yang.construct import YangConstruct
-from xyang.yang.lookup import (
+from xyang.yang.ast.construct import YangConstruct
+from xyang.yang.ast.lookup import (
     find_effective_child,
     find_effective_leaf,
     find_child,

@@ -1,7 +1,7 @@
 ## Same flow as `examples/basic_yang/validator.mojo`: validate YANG + JSON instance.
 
-from xyang.yang.construct import parse_module
-from xyang.yang.lexer import AstLexer
+from xyang.yang.ast.construct import parse_module
+from xyang.yang.ast.lexer import AstLexer
 from xyang.validator.document import validate_yang_document
 
 

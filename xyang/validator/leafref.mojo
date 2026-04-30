@@ -1,8 +1,8 @@
 ## Leafref path resolution against a JSON document tree.
 
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
-from xyang.yang.construct import YangConstruct
-from xyang.yang.lookup import (
+from xyang.yang.ast.construct import YangConstruct
+from xyang.yang.ast.lookup import (
     find_effective_child,
     find_effective_leaf,
     leaf_type,

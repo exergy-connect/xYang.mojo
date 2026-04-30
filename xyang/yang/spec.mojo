@@ -14,7 +14,7 @@ from xyang.yang.arguments import (
     validate_yang_type_name,
     validate_yang_version,
 )
-from xyang.yang.construct import YangConstruct
+from xyang.yang.ast.construct import YangConstruct
 
 
 comptime Kw = UInt8
