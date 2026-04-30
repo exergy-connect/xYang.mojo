@@ -24,6 +24,6 @@ def main() raises:
     var lexer = AstLexer(yang_text.as_bytes())
     var yang_index = YangModule()
     yang_index.parse(lexer)
-    print("YANG module: " + yang_index.module_name)
+    print("YANG module: " + yang_index.get_name())
     print("Data file: " + String(DATA_PATH))
     print("Validation: valid")

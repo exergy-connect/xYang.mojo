@@ -39,8 +39,9 @@ comptime `default`: Kw = 17
 comptime `must`: Kw = 18
 comptime `error-message`: Kw = 19
 comptime `when`: Kw = 20
+comptime `<INVALID>`: Kw = 21
 
-comptime KEYWORD_COUNT: Int = 21
+comptime KEYWORD_COUNT: Int = 22
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "module",
     "yang-version",
@@ -63,6 +64,7 @@ comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "must",
     "error-message",
     "when",
+    "<INVALID>",
 ]
 
 comptime Cardinality = UInt8
@@ -145,7 +147,7 @@ struct YangConstructSpec(Copyable, ImplicitlyCopyable, Movable):
     comptime Table = InlineArray[Self, KEYWORD_COUNT]
     comptime Validate = def(
         UnsafePointer[Self, ImmutAnyOrigin],
-        read YangConstruct,
+        mut YangConstruct,
         UnsafePointer[Self.Table, ImmutAnyOrigin],
     ) raises thin -> None
 
@@ -264,7 +266,7 @@ comptime MUST_SPEC = YangConstructSpec(
 
 def build_spec_table() -> YangConstructSpec.Table:
     var specs = YangConstructSpec.Table(
-        fill=scalar_spec(`module`, validate_yang_identifier)
+        fill=scalar_spec(`<INVALID>`, validate_yang_identifier)
     )
     specs[`module`] = MODULE_SPEC
     specs[`yang-version`] = scalar_spec(`yang-version`, validate_yang_version)
@@ -294,9 +296,22 @@ def build_spec_table() -> YangConstructSpec.Table:
     return specs
 
 
+def construct_spec(
+    read node: YangConstruct, read specs: YangConstructSpec.Table
+) raises -> YangConstructSpec:
+    if not node.spec:
+        raise Error(
+            ("line " + String(node.line) + ": " if node.line > 0 else "")
+            + "Construct `"
+            + node.keyword
+            + "` has not been validated"
+        )
+    return specs[Int(node.spec.value())]
+
+
 def validate_construct(
     read spec: YangConstructSpec,
-    read node: YangConstruct,
+    mut node: YangConstruct,
     read specs: YangConstructSpec.Table,
 ) raises:
     var expected_name = keyword_spelling(spec.parent)
@@ -344,55 +359,57 @@ def validate_construct(
             node.line,
         )
 
+    node.spec = Optional[Kw](spec.parent)
     for child in node.children:
         var child_kw = keyword_id(child[].keyword, child[].line)
         ref child_spec = specs[Int(child_kw)]
-        if not child[].argument:
-            raise Error(
-                (
-                    "line " + String(child[].line) + ": " if child[].line
-                    > 0 else ""
-                )
-                + "Expected argument for `"
-                + child[].keyword
-                + "`"
-            )
-        child_spec.argument_type(
-            child[].keyword, child[].argument.value(), child[].line
-        )
-        if spec_has_allowed_fields(child_spec) or len(child[].children) != 0:
-            var child_spec_ptr = UnsafePointer(
-                to=child_spec
-            ).unsafe_origin_cast[ImmutAnyOrigin]()
-            var specs_ptr = UnsafePointer(to=specs).unsafe_origin_cast[
-                ImmutAnyOrigin
-            ]()
-            child_spec_ptr[].validate(child_spec_ptr, child[], specs_ptr)
+        var child_spec_ptr = UnsafePointer(
+            to=child_spec
+        ).unsafe_origin_cast[ImmutAnyOrigin]()
+        var specs_ptr = UnsafePointer(to=specs).unsafe_origin_cast[
+            ImmutAnyOrigin
+        ]()
+        child_spec_ptr[].validate(child_spec_ptr, child[], specs_ptr)
 
 
 def validate_construct_callback(
     spec_ptr: UnsafePointer[YangConstructSpec, ImmutAnyOrigin],
-    read node: YangConstruct,
+    mut node: YangConstruct,
     specs_ptr: UnsafePointer[YangConstructSpec.Table, ImmutAnyOrigin],
 ) raises -> None:
     validate_construct(spec_ptr[], node, specs_ptr[])
 
 
-def spec_has_allowed_fields(read spec: YangConstructSpec) -> Bool:
-    for i in range(KEYWORD_COUNT):
-        if spec.allowed_fields[i].cardinality != `0`:
-            return True
-    return False
-
-
 def validate_scalar_construct_callback(
     spec_ptr: UnsafePointer[YangConstructSpec, ImmutAnyOrigin],
-    read node: YangConstruct,
+    mut node: YangConstruct,
     specs_ptr: UnsafePointer[YangConstructSpec.Table, ImmutAnyOrigin],
 ) raises -> None:
-    raise Error(
-        ("line " + String(node.line) + ": " if node.line > 0 else "")
-        + "Unexpected recursive validation for scalar `"
-        + node.keyword
-        + "`"
-    )
+    var expected_name = keyword_spelling(spec_ptr[].parent)
+    if node.keyword != expected_name:
+        raise Error(
+            ("line " + String(node.line) + ": " if node.line > 0 else "")
+            + "Expected `"
+            + expected_name
+            + "`, got `"
+            + node.keyword
+            + "`"
+        )
+    if not node.argument:
+        raise Error(
+            ("line " + String(node.line) + ": " if node.line > 0 else "")
+            + "Expected argument for `"
+            + expected_name
+            + "`"
+        )
+    spec_ptr[].argument_type(node.keyword, node.argument.value(), node.line)
+    for child in node.children:
+        raise Error(
+            ("line " + String(child[].line) + ": " if child[].line > 0 else "")
+            + "Unknown substatement `"
+            + child[].keyword
+            + "` in `"
+            + expected_name
+            + "`"
+        )
+    node.spec = Optional[Kw](spec_ptr[].parent)

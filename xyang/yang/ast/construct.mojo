@@ -3,6 +3,8 @@
 
 from std.memory import ArcPointer
 
+from xyang.yang.spec import Kw
+
 comptime Arc = ArcPointer
 
 @fieldwise_init
@@ -13,12 +15,15 @@ struct YangConstruct(ImplicitlyDestructible, Movable, Writable):
     var argument: Optional[String]
     var children: Self.StatementList
     var line: Int
+    # Keyword id of the YangConstructSpec that validated this node.
+    var spec: Optional[Kw]
 
     def __init__(out self, keyword: String, line: Int = 0):
         self.keyword = keyword
         self.argument = Optional[String]()
         self.children = Self.StatementList()
         self.line = line
+        self.spec = Optional[Kw]()
 
     def __str__(ref self) -> String:
         return self.format(0)
