@@ -64,9 +64,9 @@ def _string_length_bounds_from_yang_arg(read arg: String) -> _YangStringLengthBo
 
 
 def new_builtin_type_parser_table[ParserT: ParserContract](
-    out m: Dict[String, fn (mut ParserT, String) raises -> YangType]
+    out m: Dict[String, def (mut ParserT, String) thin raises -> YangType]
 ):
-    m = Dict[String, fn (mut ParserT, String) raises -> YangType]()
+    m = Dict[String, def (mut ParserT, String) thin raises -> YangType]()
     m[yang_token.YANG_TYPE_DECIMAL64] = _parse_decimal64[ParserT]
     m[yang_token.YANG_TYPE_ENUMERATION] = _parse_enumeration[ParserT]
     m["integer"] = _parse_integer_range[ParserT]
