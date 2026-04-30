@@ -1,6 +1,28 @@
-from std.sys import exit
-from xyang.cli import run_cli
+## Same flow as `examples/basic_yang/validator.mojo`: validate YANG + JSON instance.
+
+from xyang.yang.construct import parse_module
+from xyang.yang.lexer import AstLexer
+from xyang.validator.document import validate_yang_document
+
+
+comptime YANG_PATH = "examples/basic_yang/basic-device.yang"
+comptime DATA_PATH = "examples/basic_yang/basic-device.json"
 
 
 def main() raises:
-    exit(run_cli())
+    var yang_text: String
+    with open(YANG_PATH, "r") as f:
+        yang_text = f.read()
+    var json_text: String
+    with open(DATA_PATH, "r") as f:
+        json_text = f.read()
+
+    validate_yang_document(
+        yang_text, json_text, String(YANG_PATH), String(DATA_PATH)
+    )
+
+    var lexer = AstLexer(yang_text.as_bytes())
+    var yang_module = parse_module(lexer)
+    print("YANG module: " + yang_module.argument.value())
+    print("Data file: " + String(DATA_PATH))
+    print("Validation: valid")
