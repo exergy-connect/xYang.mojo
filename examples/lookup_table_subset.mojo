@@ -2,6 +2,9 @@
 ##
 ##   module -> container -> list -> leaf
 ##
+## This version encodes allowed fields with the same table-construction pattern
+## as `test_func_spec.mojo`.
+##
 ##   pixi run mojo -I examples examples/lookup_table_subset.mojo
 
 from std.memory import UnsafePointer
@@ -10,17 +13,14 @@ from ast import AstLexer, YangConstruct, parse_module
 
 comptime Kw = UInt8
 comptime ConstructPtr = UnsafePointer[YangConstruct, MutAnyOrigin]
-comptime ValidateConstructFn = def(ConstructPtr) thin raises
-comptime ValidatorTable = InlineArray[ValidateConstructFn, KEYWORD_COUNT]
 
-## Cardinality of a child keyword under its parent (YANG-style); comptime template
-## parameter on `YangConstructChild` together with the child `Kw`.
-comptime Card = UInt8
-comptime `0`   : Card = 0
-comptime `1`   : Card = 1
-comptime `0..1`: Card = 2
-comptime `0..n`: Card = 3
-comptime `1..n`: Card = 4
+## Cardinality of a child keyword under its parent (YANG-style).
+comptime Cardinality = UInt8
+comptime `0`: Cardinality = 0
+comptime `1`: Cardinality = 1
+comptime `0..1`: Cardinality = 2
+comptime `0..n`: Cardinality = 3
+comptime `1..n`: Cardinality = 4
 
 comptime `module`: Kw = 0
 comptime `container`: Kw = 1
@@ -38,6 +38,16 @@ comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "description",
 ]
 
+comptime RuleTable = InlineArray[Cardinality, KEYWORD_COUNT]
+comptime FIELD = Tuple[Kw, Cardinality]
+
+
+def fields[n: Int](*fieldlist: FIELD) -> RuleTable:
+    var table = InlineArray[Cardinality, KEYWORD_COUNT](fill=`0`)
+    comptime for i in range(n):
+        table[Int(fieldlist[i][0])] = fieldlist[i][1]
+    return table
+
 
 def keyword_spelling(idx: Kw) -> String:
     return SPELLING[idx]
@@ -50,115 +60,90 @@ def keyword_id(name: String) raises -> Kw:
     raise Error("Unknown keyword `" + name + "`")
 
 
-trait YangChildRuleTag(Copyable, ImplicitlyCopyable, Movable):
+def cardinality_label(card: Cardinality) -> String:
+    if card == `0`:
+        return "0"
+    if card == `1`:
+        return "1"
+    if card == `0..1`:
+        return "0..1"
+    if card == `0..n`:
+        return "0..n"
+    if card == `1..n`:
+        return "1..n"
+    return "?"
 
-    @staticmethod
-    def label() -> String:
-        ...
 
-    @staticmethod
-    def rule_kw() -> Kw:
-        ...
-
-    @staticmethod
-    def check(name: String, count: Int) raises:
-        ...
-
-@fieldwise_init
-struct YangConstructChild[child_kw: Kw, card: Card = `0..1`](
-    Copyable, ImplicitlyCopyable, Movable, YangChildRuleTag
-):
-    @staticmethod
-    def rule_kw() -> Kw:
-        return Self.child_kw
-
-    @staticmethod
-    def label() -> String:
-        comptime if Self.card == `0`:
-            return "0"
-        if Self.card == `1`:
-            return "1"
-        if Self.card == `0..1`:
-            return "0..1"
-        if Self.card == `0..n`:
-            return "0..n"
-        if Self.card == `1..n`:
-            return "1..n"
-        return "?"
-
-    @staticmethod
-    def check(name: String, count: Int) raises:
-        comptime if Self.card == `0`:
-            if count != 0:
-                raise Error(
-                    "`" + name + "` must not appear (0), found " + String(count)
-                )
-        elif Self.card == `1`:
-            if count != 1:
-                raise Error(
-                    "`"
-                    + name
-                    + "` must appear exactly once (1), found "
-                    + String(count)
-                )
-        elif Self.card == `0..1`:
-            if count > 1:
-                raise Error(
-                    "`"
-                    + name
-                    + "` may appear at most once (0..1), found "
-                    + String(count)
-                )
-        elif Self.card == `0..n`:
-            pass
-        elif Self.card == `1..n`:
-            if count < 1:
-                raise Error(
-                    "`"
-                    + name
-                    + "` must appear at least once (1..n), found "
-                    + String(count)
-                )
+def check_cardinality(name: String, card: Cardinality, count: Int) raises:
+    if card == `0`:
+        if count != 0:
+            raise Error(
+                "`" + name + "` must not appear (0), found " + String(count)
+            )
+    elif card == `1`:
+        if count != 1:
+            raise Error(
+                "`"
+                + name
+                + "` must appear exactly once (1), found "
+                + String(count)
+            )
+    elif card == `0..1`:
+        if count > 1:
+            raise Error(
+                "`"
+                + name
+                + "` may appear at most once (0..1), found "
+                + String(count)
+            )
+    elif card == `0..n`:
+        pass
+    elif card == `1..n`:
+        if count < 1:
+            raise Error(
+                "`"
+                + name
+                + "` must appear at least once (1..n), found "
+                + String(count)
+            )
 
 
 @fieldwise_init
-struct YangConstructSpec[*ChildRuleSpecs: YangChildRuleTag](
-    Copyable, ImplicitlyCopyable, Movable
-):
+struct YangConstructSpec(Copyable, ImplicitlyCopyable, Movable):
     var parent: Kw
     var has_argument: Bool
+    var allowed_fields: RuleTable
 
 
-comptime YANG_MODULE = YangConstructSpec[
-    YangConstructChild[`container`, `1..n`],
-    YangConstructChild[`description`, `0..1`],
-](parent=`module`, has_argument=True)
+comptime YANG_MODULE = YangConstructSpec(
+    parent=`module`,
+    has_argument=True,
+    allowed_fields=fields[2]((`container`, `1..n`), (`description`, `0..1`)),
+)
 
-comptime YANG_CONTAINER = YangConstructSpec[YangConstructChild[`list`, `1..n`]](
+comptime YANG_CONTAINER = YangConstructSpec(
     parent=`container`,
     has_argument=True,
+    allowed_fields=fields[1]((`list`, `1..n`)),
 )
 
-comptime YANG_LIST = YangConstructSpec[YangConstructChild[`leaf`, `0..n`]](
+comptime YANG_LIST = YangConstructSpec(
     parent=`list`,
     has_argument=True,
+    allowed_fields=fields[1]((`leaf`, `0..n`)),
 )
 
-comptime YANG_LEAF = YangConstructSpec[](parent=`leaf`, has_argument=True)
+comptime YANG_LEAF = YangConstructSpec(
+    parent=`leaf`,
+    has_argument=True,
+    allowed_fields=fields[0](),
+)
 
-comptime YANG_DESCRIPTION = YangConstructSpec[](
+comptime YANG_DESCRIPTION = YangConstructSpec(
     parent=`description`,
     has_argument=True,
+    allowed_fields=fields[0](),
 )
-
-
-def child_rule_allowed[schema: YangConstructSpec[...]](kw: Kw) -> Bool:
-    comptime S = type_of(schema)
-    comptime for i in range(len(S.ChildRuleSpecs)):
-        comptime T = S.ChildRuleSpecs[i]
-        if kw == T.rule_kw():
-            return True
-    return False
 
 
 def validate_construct_for_kw(kw: Kw, construct: ConstructPtr) raises:
@@ -179,8 +164,7 @@ def validate_construct_for_kw(kw: Kw, construct: ConstructPtr) raises:
 
 
 @no_inline
-def validate[spec: YangConstructSpec[...]](construct: ConstructPtr) raises:
-    comptime S = type_of(spec)
+def validate[spec: YangConstructSpec](construct: ConstructPtr) raises:
     var expected_name = keyword_spelling(spec.parent)
     if construct[].keyword != expected_name:
         raise Error(
@@ -201,7 +185,7 @@ def validate[spec: YangConstructSpec[...]](construct: ConstructPtr) raises:
 
     for child in construct[].children:
         var child_kw = keyword_id(child[].keyword)
-        if not child_rule_allowed[spec](child_kw):
+        if spec.allowed_fields[Int(child_kw)] == `0`:
             raise Error(
                 "Unknown substatement `"
                 + child[].keyword
@@ -211,11 +195,11 @@ def validate[spec: YangConstructSpec[...]](construct: ConstructPtr) raises:
             )
         counts[Int(child_kw)] += 1
 
-    comptime for i in range(len(S.ChildRuleSpecs)):
-        comptime T = S.ChildRuleSpecs[i]
-        T.check(
-            keyword_spelling(T.rule_kw()),
-            counts[Int(T.rule_kw())],
+    for i in range(KEYWORD_COUNT):
+        check_cardinality(
+            keyword_spelling(Kw(i)),
+            spec.allowed_fields[i],
+            counts[i],
         )
 
     for child in construct[].children:
@@ -250,21 +234,23 @@ def validate_module(mut construct: YangConstruct) raises:
     validate_by_keyword[`module`](module_ptr)
 
 
-def describe_construct[spec: YangConstructSpec[...]]() -> String:
-    comptime S = type_of(spec)
+def describe_construct[spec: YangConstructSpec]() -> String:
     var out = keyword_spelling(spec.parent)
     if spec.has_argument:
         out += "(...)"
     out += " { "
 
-    comptime for i in range(len(S.ChildRuleSpecs)):
-        comptime T = S.ChildRuleSpecs[i]
-        if i > 0:
-            out += ", "
-        out += keyword_spelling(T.rule_kw())
-        out += "["
-        out += T.label()
-        out += "]"
+    var emitted = False
+    for i in range(KEYWORD_COUNT):
+        var card = spec.allowed_fields[i]
+        if card != `0`:
+            if emitted:
+                out += ", "
+            out += keyword_spelling(Kw(i))
+            out += "["
+            out += cardinality_label(card)
+            out += "]"
+            emitted = True
 
     out += " }"
     return out^

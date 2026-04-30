@@ -21,11 +21,13 @@ struct YangConstruct(ImplicitlyDestructible, Movable, Writable):
     var keyword: String
     var argument: Optional[String]
     var children: Self.StatementList
+    var line: Int
 
-    def __init__(out self, keyword: String):
+    def __init__(out self, keyword: String, line: Int = 0):
         self.keyword = keyword
         self.argument = Optional[String]()
         self.children = Self.StatementList()
+        self.line = line
 
     def __str__(ref self) -> String:
         return self.format(0)
@@ -63,24 +65,32 @@ def parse_module[origin: ImmutOrigin](
 ) raises -> YangConstruct:
     var tok = lexer.next_token()
     if tok.type == AstToken.EOF:
-        raise Error("Expected module statement, got EOF")
+        raise Error("line " + String(lexer.line) + ": Expected module statement, got EOF")
     if not is_name_token(tok):
         raise Error(
             "Expected module statement keyword, got `"
             + tok.text(lexer.input)
-            + "`"
+            + "` at line "
+            + String(tok.line)
         )
 
-    var module = parse_statement_after_keyword(lexer, tok.text(lexer.input))
+    var module = parse_statement_after_keyword(lexer, tok.text(lexer.input), tok.line)
     if module.keyword != "module":
-        raise Error("Expected module statement, got `" + module.keyword + "`")
+        raise Error(
+            "line "
+            + String(module.line)
+            + ": Expected module statement, got `"
+            + module.keyword
+            + "`"
+        )
 
     tok = lexer.next_token()
     if tok.type != AstToken.EOF:
         raise Error(
             "Expected EOF after module statement, got `"
             + tok.text(lexer.input)
-            + "`"
+            + "` at line "
+            + String(tok.line)
         )
     return module^
 
@@ -92,26 +102,31 @@ def parse_block[
     while True:
         var tok = lexer.next_token()
         if tok.type == AstToken.EOF:
-            raise Error("Unexpected end of input while parsing statement block")
+            raise Error(
+                "line "
+                + String(lexer.line)
+                + ": Unexpected end of input while parsing statement block"
+            )
         if tok.type == AstToken.RBRACE:
             return children^
         if not is_name_token(tok):
             raise Error(
                 "Expected statement keyword, got `"
                 + tok.text(lexer.input)
-                + "`"
+                + "` at line "
+                + String(tok.line)
             )
         children.append(
             Arc[YangConstruct](
-                parse_statement_after_keyword(lexer, tok.text(lexer.input)),
+                parse_statement_after_keyword(lexer, tok.text(lexer.input), tok.line),
             ),
         )
 
 
 def parse_statement_after_keyword[
     origin: ImmutOrigin
-](mut lexer: AstLexer[origin], keyword: String) raises -> YangConstruct:
-    var statement = YangConstruct(keyword)
+](mut lexer: AstLexer[origin], keyword: String, line: Int) raises -> YangConstruct:
+    var statement = YangConstruct(keyword, line)
     var tok = lexer.next_token()
 
     if tok.type == AstToken.SEMICOLON:
@@ -128,7 +143,11 @@ def parse_statement_after_keyword[
         statement.children = parse_block(lexer)
         return statement^
 
-    raise Error("Expected `;` or `{` after statement argument")
+    raise Error(
+        "line "
+        + String(statement.line)
+        + ": Expected `;` or `{` after statement argument"
+    )
 
 
 def parse_argument[
@@ -146,7 +165,11 @@ def parse_argument[
             statement.argument = Optional[String](result^)
             return tok.type
         if tok.type == AstToken.EOF or tok.type == AstToken.RBRACE:
-            raise Error("Unexpected end of statement argument")
+            raise Error(
+                "line "
+                + String(statement.line)
+                + ": Unexpected end of statement argument"
+            )
         if tok.type != AstToken.PLUS:
             result += " "
             result += tok.text(lexer.input, strip_quotes=True)
