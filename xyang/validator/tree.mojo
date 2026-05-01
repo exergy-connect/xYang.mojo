@@ -2,13 +2,8 @@
 
 from xyang.json.parser import JsonValue, json_get
 from xyang.yang.ast.construct import YangConstruct
-from xyang.yang.ast.lookup import (
-    find_effective_child,
-    find_effective_leaf,
-    find_child,
-    leaf_range_bounds,
-    leaf_type,
-)
+from xyang.yang.ast.module import YangModule
+from xyang.yang.spec import `container`, `key`, `list`, `must`
 
 
 @always_inline
@@ -31,16 +26,17 @@ def _raise_json_path_error(
 def validate_leaf_value(
     read value: JsonValue,
     read leaf: YangConstruct,
+    read module: YangModule,
     path: String,
     json_path: String,
 ) raises:
-    var ty = leaf_type(leaf)
+    var ty = module.leaf_type(leaf)
     if ty == "string":
         if value.kind != JsonValue.STRING:
             _raise_json_path_error(
                 json_path, value.source_line, path, ": expected string"
             )
-        if value.text.byte_length() == 0 and find_child(leaf, "must"):
+        if value.text.byte_length() == 0 and module.find_child(leaf, `must`):
             _raise_json_path_error(
                 json_path,
                 value.source_line,
@@ -66,7 +62,7 @@ def validate_leaf_value(
                 path,
                 ": uint16 value out of range",
             )
-        var rb = leaf_range_bounds(leaf)
+        var rb = module.leaf_range_bounds(leaf)
         if rb:
             var b = rb.value()
             if value.int_value < b.lo or value.int_value > b.hi:
@@ -104,7 +100,7 @@ def validate_leaf_value(
 def validate_object_against_construct(
     read data: JsonValue,
     read schema: YangConstruct,
-    read module: YangConstruct,
+    read module: YangModule,
     path: String,
     json_path: String,
 ) raises:
@@ -116,13 +112,13 @@ def validate_object_against_construct(
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var leaf = find_effective_leaf(module, schema, key)
+        var leaf = module.find_effective_leaf(schema, key)
         if leaf:
             validate_leaf_value(
-                slot, leaf.value()[], path + "/" + key, json_path
+                slot, leaf.value()[], module, path + "/" + key, json_path
             )
             continue
-        var container = find_effective_child(module, schema, "container", key)
+        var container = module.find_effective_child(schema, `container`, key)
         if container:
             validate_object_against_construct(
                 slot,
@@ -132,7 +128,7 @@ def validate_object_against_construct(
                 json_path,
             )
             continue
-        var list_node = find_effective_child(module, schema, "list", key)
+        var list_node = module.find_effective_child(schema, `list`, key)
         if list_node:
             validate_list_against_construct(
                 slot,
@@ -153,7 +149,7 @@ def validate_object_against_construct(
 def validate_list_against_construct(
     read data: JsonValue,
     read schema: YangConstruct,
-    read module: YangConstruct,
+    read module: YangModule,
     path: String,
     json_path: String,
 ) raises:
@@ -161,7 +157,7 @@ def validate_list_against_construct(
         _raise_json_path_error(
             json_path, data.source_line, path, ": expected JSON array for list"
         )
-    var key_stmt = find_child(schema, "key")
+    var key_stmt = module.find_child(schema, `key`)
     for i in range(len(data.array_values)):
         ref entry = data.array_values[i][]
         var entry_path = path + "[" + String(i) + "]"

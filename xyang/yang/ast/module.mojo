@@ -7,6 +7,7 @@ from std.memory import ArcPointer
 from .construct import YangConstruct
 from .lexer import AstLexer
 from .parser import parse_module
+from ..arguments import RangeBounds, try_parse_range_bounds
 from ..spec import Kw
 
 
@@ -36,6 +37,7 @@ struct TopContainerIterator(Iterator):
 
     def __next__(mut self) raises StopIteration -> Self.Element:
         from ..spec import `container`
+
         if not self.root:
             raise StopIteration()
         ref root = self.root.value()[]
@@ -74,6 +76,7 @@ struct YangModule(Movable & Iterable):
     ](mut self, mut lexer: AstLexer[origin]) raises:
         var tree = parse_module(lexer)
         from ..spec import MODULE_SPEC, build_spec_table, validate_construct
+
         var specs = build_spec_table()
         validate_construct(MODULE_SPEC, tree, specs)
         self._populate_from_validated_tree(tree)
@@ -83,6 +86,7 @@ struct YangModule(Movable & Iterable):
         mut self, read tree: YangConstruct
     ) raises:
         from ..spec import `container`, `grouping`, `revision`
+
         self.fields[tree.spec.value()] = tree.argument.value()
         for child in tree.children:
             ref node = child[]
@@ -109,37 +113,44 @@ struct YangModule(Movable & Iterable):
 
     def get_name(read self) raises -> String:
         from ..spec import `module`
+
         return self.fields[`module`]
 
     def get_yang_version(read self) raises -> Optional[String]:
         from ..spec import `yang-version`
+
         return self.field(`yang-version`)
 
     def get_namespace(read self) raises -> String:
         from ..spec import `namespace`
+
         return self.fields[`namespace`]
 
     def get_prefix(read self) raises -> String:
         from ..spec import `prefix`
+
         return self.fields[`prefix`]
 
     def get_organization(read self) raises -> Optional[String]:
         from ..spec import `organization`
+
         return self.field(`organization`)
 
     def get_contact(read self) raises -> Optional[String]:
         from ..spec import `contact`
+
         return self.field(`contact`)
 
     def get_description(read self) raises -> Optional[String]:
         from ..spec import `description`
+
         return self.field(`description`)
 
     def get_revisions(read self) -> List[String]:
         return self.revisions.copy()
 
     def get_top_level_containers(
-        ref self
+        ref self,
     ) -> ref[self.top_containers] ConstructMap:
         return self.top_containers
 
@@ -166,3 +177,110 @@ struct YangModule(Movable & Iterable):
         if name not in self.top_containers:
             return Optional[Arc[YangConstruct]]()
         return Optional[Arc[YangConstruct]](self.top_containers[name].copy())
+
+    def find_child(
+        read self, read node: YangConstruct, keyword: Kw
+    ) -> Optional[Arc[YangConstruct]]:
+        for child in node.children:
+            if child[].spec.value() == keyword:
+                return Optional[Arc[YangConstruct]](child.copy())
+        return Optional[Arc[YangConstruct]]()
+
+    def find_grouping(
+        read self, read name: String
+    ) raises -> Optional[Arc[YangConstruct]]:
+        if name not in self.groupings:
+            return Optional[Arc[YangConstruct]]()
+        return Optional[Arc[YangConstruct]](self.groupings[name].copy())
+
+    def is_leaf_name_in_uses(
+        read self, read parent: YangConstruct, name: String
+    ) raises -> Bool:
+        for child in parent.children:
+            if child[].keyword != "uses" or not child[].argument:
+                continue
+            var grouping = self.find_grouping(child[].argument.value())
+            if not grouping:
+                continue
+            for gchild in grouping.value()[].children:
+                if (
+                    gchild[].keyword == "leaf"
+                    and gchild[].argument
+                    and gchild[].argument.value() == name
+                ):
+                    return True
+        return False
+
+    def find_effective_leaf(
+        read self, read parent: YangConstruct, name: String
+    ) raises -> Optional[Arc[YangConstruct]]:
+        for child in parent.children:
+            if (
+                child[].keyword == "leaf"
+                and child[].argument
+                and child[].argument.value() == name
+            ):
+                return Optional[Arc[YangConstruct]](child.copy())
+        for child in parent.children:
+            if child[].keyword != "uses" or not child[].argument:
+                continue
+            var grouping = self.find_grouping(child[].argument.value())
+            if not grouping:
+                continue
+            var leaf = self.find_effective_leaf(grouping.value()[], name)
+            if leaf:
+                return leaf^
+        return Optional[Arc[YangConstruct]]()
+
+    def find_effective_child(
+        read self,
+        read parent: YangConstruct,
+        keyword: Kw,
+        name: String,
+    ) -> Optional[Arc[YangConstruct]]:
+        for child in parent.children:
+            if (
+                child[].spec.value() == keyword
+                and child[].argument
+                and child[].argument.value() == name
+            ):
+                return Optional[Arc[YangConstruct]](child.copy())
+        return Optional[Arc[YangConstruct]]()
+
+    def leaf_type(read self, read leaf: YangConstruct) -> String:
+        from ..spec import `type`
+
+        var ty = self.find_child(leaf, `type`)
+        if ty and ty.value()[].argument:
+            return ty.value()[].argument.value()
+        return ""
+
+    def leaf_range(read self, read leaf: YangConstruct) -> String:
+        from ..spec import `range-stmt`, `type`
+
+        var ty = self.find_child(leaf, `type`)
+        if not ty:
+            return ""
+        var range_stmt = self.find_child(ty.value()[], `range-stmt`)
+        if range_stmt and range_stmt.value()[].argument:
+            return range_stmt.value()[].argument.value()
+        return ""
+
+    def leaf_range_bounds(
+        read self, read leaf: YangConstruct
+    ) raises -> Optional[RangeBounds]:
+        var text = self.leaf_range(leaf)
+        if text.byte_length() == 0:
+            return Optional[RangeBounds]()
+        return try_parse_range_bounds(text)
+
+    def leafref_path(read self, read leaf: YangConstruct) -> String:
+        from ..spec import `path`, `type`
+
+        var ty = self.find_child(leaf, `type`)
+        if not ty:
+            return ""
+        var path_stmt = self.find_child(ty.value()[], `path`)
+        if path_stmt and path_stmt.value()[].argument:
+            return path_stmt.value()[].argument.value()
+        return ""

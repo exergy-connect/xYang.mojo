@@ -2,12 +2,8 @@
 
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
 from xyang.yang.ast.construct import YangConstruct
-from xyang.yang.ast.lookup import (
-    find_effective_child,
-    find_effective_leaf,
-    leaf_type,
-    leafref_path,
-)
+from xyang.yang.ast.module import YangModule
+from xyang.yang.spec import `container`, `list`
 
 
 def path_segment_name(segment: String) -> String:
@@ -71,7 +67,7 @@ def string_in_list(value: String, read values: List[String]) -> Bool:
 def check_leafrefs_in_object(
     read data: JsonValue,
     read schema: YangConstruct,
-    read module: YangConstruct,
+    read module: YangModule,
     read root: JsonValue,
     path: String,
     json_path: String,
@@ -81,9 +77,9 @@ def check_leafrefs_in_object(
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var leaf = find_effective_leaf(module, schema, key)
-        if leaf and leaf_type(leaf.value()[]) == "leafref":
-            var target_path = leafref_path(leaf.value()[])
+        var leaf = module.find_effective_leaf(schema, key)
+        if leaf and module.leaf_type(leaf.value()[]) == "leafref":
+            var target_path = module.leafref_path(leaf.value()[])
             var targets = collect_path_values(root, target_path)
             var actual = json_scalar_text(slot)
             if not string_in_list(actual, targets):
@@ -101,7 +97,7 @@ def check_leafrefs_in_object(
                     + actual
                     + "` does not resolve"
                 )
-        var container = find_effective_child(module, schema, "container", key)
+        var container = module.find_effective_child(schema, `container`, key)
         if container:
             check_leafrefs_in_object(
                 slot,
@@ -111,7 +107,7 @@ def check_leafrefs_in_object(
                 path + "/" + key,
                 json_path,
             )
-        var list_node = find_effective_child(module, schema, "list", key)
+        var list_node = module.find_effective_child(schema, `list`, key)
         if list_node:
             check_leafrefs_in_list(
                 slot,
@@ -126,7 +122,7 @@ def check_leafrefs_in_object(
 def check_leafrefs_in_list(
     read data: JsonValue,
     read schema: YangConstruct,
-    read module: YangConstruct,
+    read module: YangModule,
     read root: JsonValue,
     path: String,
     json_path: String,
