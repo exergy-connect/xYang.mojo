@@ -18,53 +18,83 @@ from xyang.yang.ast.construct import YangConstruct
 
 
 comptime Kw = UInt8
-comptime `module`: Kw = 0
-comptime `yang-version`: Kw = 1
-comptime `namespace`: Kw = 2
-comptime `prefix`: Kw = 3
-comptime `organization`: Kw = 4
+comptime `<INVALID>`: Kw = 0
+comptime `anydata`: Kw = 1
+comptime `anyxml`: Kw = 2
+comptime `augment`: Kw = 3
+comptime `choice`: Kw = 4
 comptime `contact`: Kw = 5
-comptime `description`: Kw = 6
-comptime `revision`: Kw = 7
-comptime `grouping`: Kw = 8
-comptime `uses`: Kw = 9
-comptime `container`: Kw = 10
-comptime `list`: Kw = 11
-comptime `key`: Kw = 12
-comptime `leaf`: Kw = 13
-comptime `type`: Kw = 14
-comptime `range-stmt`: Kw = 15
-comptime `path`: Kw = 16
-comptime `default`: Kw = 17
-comptime `must`: Kw = 18
-comptime `error-message`: Kw = 19
-comptime `when`: Kw = 20
-comptime `<INVALID>`: Kw = 21
+comptime `container`: Kw = 6
+comptime `default`: Kw = 7
+comptime `description`: Kw = 8
+comptime `deviation`: Kw = 9
+comptime `error-message`: Kw = 10
+comptime `extension`: Kw = 11
+comptime `feature`: Kw = 12
+comptime `grouping`: Kw = 13
+comptime `identity`: Kw = 14
+comptime `import`: Kw = 15
+comptime `include`: Kw = 16
+comptime `key`: Kw = 17
+comptime `leaf`: Kw = 18
+comptime `leaf-list`: Kw = 19
+comptime `list`: Kw = 20
+comptime `module`: Kw = 21
+comptime `must`: Kw = 22
+comptime `namespace`: Kw = 23
+comptime `notification`: Kw = 24
+comptime `organization`: Kw = 25
+comptime `path`: Kw = 26
+comptime `prefix`: Kw = 27
+comptime `range-stmt`: Kw = 28
+comptime `reference`: Kw = 29
+comptime `revision`: Kw = 30
+comptime `rpc`: Kw = 31
+comptime `type`: Kw = 32
+comptime `typedef`: Kw = 33
+comptime `uses`: Kw = 34
+comptime `when`: Kw = 35
+comptime `yang-version`: Kw = 36
 
-comptime KEYWORD_COUNT: Int = 22
+comptime KEYWORD_COUNT: Int = 37
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
-    "module",
-    "yang-version",
-    "namespace",
-    "prefix",
-    "organization",
+    "<INVALID>",
+    "anydata",
+    "anyxml",
+    "augment",
+    "choice",
     "contact",
-    "description",
-    "revision",
-    "grouping",
-    "uses",
     "container",
-    "list",
+    "default",
+    "description",
+    "deviation",
+    "error-message",
+    "extension",
+    "feature",
+    "grouping",
+    "identity",
+    "import",
+    "include",
     "key",
     "leaf",
-    "type",
-    "range",
-    "path",
-    "default",
+    "leaf-list",
+    "list",
+    "module",
     "must",
-    "error-message",
+    "namespace",
+    "notification",
+    "organization",
+    "path",
+    "prefix",
+    "range",
+    "reference",
+    "revision",
+    "rpc",
+    "type",
+    "typedef",
+    "uses",
     "when",
-    "<INVALID>",
+    "yang-version",
 ]
 
 comptime Cardinality = UInt8
@@ -180,19 +210,39 @@ def scalar_spec(
     )
 
 
+## Source: RFC 7950 section 7.1.1, "The module's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.1.1
 comptime MODULE_SPEC = YangConstructSpec(
     `module`,
     validate_yang_identifier,
-    fields[9](
-        (`yang-version`, `0..1`),
-        (`namespace`, `1`),
-        (`prefix`, `1`),
-        (`organization`, `0..1`),
+    fields[27](
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`augment`, `0..n`),
+        (`choice`, `0..n`),
         (`contact`, `0..1`),
+        (`container`, `0..n`),
         (`description`, `0..1`),
-        (`revision`, `0..n`),
+        (`deviation`, `0..n`),
+        (`extension`, `0..n`),
+        (`feature`, `0..n`),
         (`grouping`, `0..n`),
-        (`container`, `1..n`),
+        (`identity`, `0..n`),
+        (`import`, `0..n`),
+        (`include`, `0..n`),
+        (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
+        (`list`, `0..n`),
+        (`namespace`, `1`),
+        (`notification`, `0..n`),
+        (`organization`, `0..1`),
+        (`prefix`, `1`),
+        (`reference`, `0..1`),
+        (`revision`, `0..n`),
+        (`rpc`, `0..n`),
+        (`typedef`, `0..n`),
+        (`uses`, `0..n`),
+        (`yang-version`, `1`),
     ),
 )
 comptime CONTAINER_SPEC = YangConstructSpec(
@@ -293,6 +343,25 @@ def build_spec_table() -> YangConstructSpec.Table:
         `error-message`, validate_yang_string
     )
     specs[Int(`when`)] = scalar_spec(`when`, validate_yang_expression)
+    specs[Int(`anydata`)] = scalar_spec(`anydata`, validate_yang_identifier)
+    specs[Int(`anyxml`)] = scalar_spec(`anyxml`, validate_yang_identifier)
+    specs[Int(`augment`)] = scalar_spec(`augment`, validate_yang_path)
+    specs[Int(`choice`)] = scalar_spec(`choice`, validate_yang_identifier)
+    specs[Int(`deviation`)] = scalar_spec(`deviation`, validate_yang_path)
+    specs[Int(`extension`)] = scalar_spec(`extension`, validate_yang_identifier)
+    specs[Int(`feature`)] = scalar_spec(`feature`, validate_yang_identifier)
+    specs[Int(`identity`)] = scalar_spec(`identity`, validate_yang_identifier)
+    specs[Int(`import`)] = scalar_spec(`import`, validate_yang_identifier)
+    specs[Int(`include`)] = scalar_spec(`include`, validate_yang_identifier)
+    specs[Int(`leaf-list`)] = scalar_spec(
+        `leaf-list`, validate_yang_identifier
+    )
+    specs[Int(`notification`)] = scalar_spec(
+        `notification`, validate_yang_identifier
+    )
+    specs[Int(`reference`)] = scalar_spec(`reference`, validate_yang_string)
+    specs[Int(`rpc`)] = scalar_spec(`rpc`, validate_yang_identifier)
+    specs[Int(`typedef`)] = scalar_spec(`typedef`, validate_yang_identifier)
     return specs
 
 
