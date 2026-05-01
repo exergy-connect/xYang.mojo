@@ -1,6 +1,25 @@
-## Minimal lexer for a raw YANG `YangConstruct` tree.
+## Lexer for surface syntax when building a raw YANG `YangConstruct` tree.
 ##
-## It recognizes statement names, argument atoms, quoted strings, `{`, `}`, `;`, `+`, and EOF.
+## `AstLexer` walks a UTF-8 `ByteView` (no ownership), maintains `pos` and a 1-based `line` for
+## diagnostics, and yields `AstToken` values: `{` `}` `;` `+`, double- or single-quoted `STRING`,
+## `EOF`, and unquoted identifier runs.
+##
+## **Skip layer.** Before each token, `skip_ws_and_comments` consumes ASCII whitespace (space, tab,
+## CR, LF—incrementing `line` on LF), `//` line comments to EOL, and C-style `/* … */` block
+## comments (tracking newlines inside the block). YANG does not treat comments as significant;
+## this matches typical scanner behavior for statement-oriented text.
+##
+## **Identifiers.** A maximal byte run that does not hit whitespace, `{}`, `;`, `+`, or an
+## opening quote becomes `IDENTIFIER`. This is a lightweight token for statement keywords and
+## unquoted arguments; it is not a full YANG identifier or XPath lexer.
+##
+## **Strings.** Quoted literals allow `\` escapes; the next byte is consumed verbatim (including
+## another newline for line continuation). Unterminated quotes and a trailing `\` at EOF raise.
+## Token `start`/`length` include the delimiters; `AstToken.text*` can strip them.
+##
+## **Out of scope.** Numeric literals, unquoted strings other than identifier scans, `..`, `@`, and
+## other YANG-specific lexemes are not separate token kinds here—only what the construct-tree parser
+## needs.
 
 from std.memory import Span
 
@@ -13,7 +32,6 @@ comptime `'` = _to_byte["'"]()
 comptime `{` = _to_byte["{"]()
 comptime `}` = _to_byte["}"]()
 comptime `;` = _to_byte[";"]()
-comptime `:` = _to_byte[":"]()
 comptime `+` = _to_byte["+"]()
 comptime `/` = _to_byte["/"]()
 comptime `*` = _to_byte["*"]()
@@ -31,51 +49,24 @@ def _to_byte[s: StaticString]() -> Byte:
     comptime byte = s.as_bytes()[0]
     return byte
 
-
 @always_inline
-def _atom_scan_stop_table() -> InlineArray[Bool, 256]:
+def token_table[*tokens: Byte]() -> InlineArray[Bool, 256]:
     var t = InlineArray[Bool, 256](fill=False)
-    t[` `] = True
-    t[`\n`] = True
-    t[`\t`] = True
-    t[`\r`] = True
-    t[`{`] = True
-    t[`}`] = True
-    t[`;`] = True
-    t[`+`] = True
-    t[`"`] = True
-    t[`'`] = True
+    comptime for i in range(len(tokens)):
+        t[tokens[i]] = True
     return t^
-
-
-comptime ATOM_SCAN_STOP = _atom_scan_stop_table()
-
-
-@always_inline
-def _whitespace_scan_stop_table() -> InlineArray[Bool, 256]:
-    var t = InlineArray[Bool, 256](fill=False)
-    t[` `] = True
-    t[`\n`] = True
-    t[`\t`] = True
-    t[`\r`] = True
-    return t^
-
-
-comptime WHITESPACE_SCAN_STOP = _whitespace_scan_stop_table()
-
 
 @fieldwise_init
 struct AstToken(Copyable):
     comptime Type = UInt8
 
-    comptime ATOM: Self.Type = 0
+    comptime IDENTIFIER: Self.Type = 0
     comptime LBRACE: Self.Type = 1
     comptime RBRACE: Self.Type = 2
     comptime SEMICOLON: Self.Type = 3
     comptime PLUS: Self.Type = 4
     comptime STRING: Self.Type = 5
-    comptime QNAME: Self.Type = 6
-    comptime EOF: Self.Type = 7
+    comptime EOF: Self.Type = 6
 
     var type: Self.Type
     var start: Int
@@ -117,68 +108,58 @@ struct AstLexer[origin: ImmutOrigin]:
         return self.pos >= len(self.input)
 
     def skip_ws_and_comments(mut self):
+        comptime WHITESPACE_SCAN_STOP = token_table[` `, `\n`, `\t`, `\r`]()
+
         while not self.eof():
             var ch = self.input[self.pos]
             if WHITESPACE_SCAN_STOP[Int(ch)]:
                 if ch == `\n`:
                     self.line += 1
                 self.pos += 1
-            elif (
-                ch == `/`
-                and self.pos + 1 < len(self.input)
-                and self.input[self.pos + 1] == `/`
-            ):
-                self.pos += 2
-                while not self.eof():
-                    var line_ch = self.input[self.pos]
-                    if line_ch == `\n` or line_ch == `\r`:
-                        break
-                    self.pos += 1
-            elif (
-                ch == `/`
-                and self.pos + 1 < len(self.input)
-                and self.input[self.pos + 1] == `*`
-            ):
-                self.pos += 2
-                while not self.eof():
-                    var block_ch = self.input[self.pos]
-                    if (
-                        block_ch == `*`
-                        and self.pos + 1 < len(self.input)
-                        and self.input[self.pos + 1] == `/`
-                    ):
-                        self.pos += 2
-                        break
-                    if block_ch == `\n`:
-                        self.line += 1
-                    self.pos += 1
+            elif ch == `/` and self.pos + 1 < len(self.input):
+                var next_ch = self.input[self.pos + 1]
+                if next_ch == `/`:
+                    self.pos += 2
+                    while not self.eof():
+                        var line_ch = self.input[self.pos]
+                        if line_ch == `\n` or line_ch == `\r`:
+                            break
+                        self.pos += 1
+                elif next_ch == `*`:
+                    self.pos += 2
+                    while not self.eof():
+                        var block_ch = self.input[self.pos]
+                        if (
+                            block_ch == `*`
+                            and self.pos + 1 < len(self.input)
+                            and self.input[self.pos + 1] == `/`
+                        ):
+                            self.pos += 2
+                            break
+                        if block_ch == `\n`:
+                            self.line += 1
+                        self.pos += 1
+                else:
+                    return
             else:
                 return
 
-    def scan_atom(mut self) raises -> Int:
+    def scan_identifier(mut self) raises -> Int:
+        comptime IDENTIFIER_SCAN_STOP = token_table[
+            ` `, `\n`, `\t`, `\r`, `{`, `}`, `;`, `+`, `"`, `'`
+        ]()
+
         var start = self.pos
         while not self.eof():
             var ch = self.input[self.pos]
-            if ATOM_SCAN_STOP[Int(ch)]:
+            if IDENTIFIER_SCAN_STOP[Int(ch)]:
                 break
             self.pos += 1
 
         if self.pos == start:
-            raise Error("Expected YANG token")
+            raise Error("Expected YANG IDENTIFIER")
 
         return self.pos - start
-
-    def atom_type(self, start: Int, length: Int) -> AstToken.Type:
-        var end = start + length
-        var colon_count = 0
-        var colon_pos = -1
-        for i in range(start, end):
-            if self.input[i] == `:`:
-                colon_count += 1
-                colon_pos = i
-        if colon_count == 1 and colon_pos > start and colon_pos < end - 1:
-            return AstToken.QNAME
-        return AstToken.ATOM
 
     def scan_quoted_string(mut self) raises -> Int:
         var start = self.pos
@@ -205,6 +186,18 @@ struct AstLexer[origin: ImmutOrigin]:
         raise Error("Unterminated string literal")
 
     def next_token(mut self) raises -> AstToken:
+        @always_inline
+        def token_type_table() -> InlineArray[AstToken.Type, 256]:
+            var t = InlineArray[AstToken.Type, 256](fill=AstToken.IDENTIFIER)
+            t[`{`] = AstToken.LBRACE
+            t[`}`] = AstToken.RBRACE
+            t[`;`] = AstToken.SEMICOLON
+            t[`+`] = AstToken.PLUS
+            t[`"`] = AstToken.STRING
+            t[`'`] = AstToken.STRING
+            return t^
+        comptime TOKEN_TYPES = token_type_table()
+
         self.skip_ws_and_comments()
 
         if self.eof():
@@ -212,42 +205,27 @@ struct AstLexer[origin: ImmutOrigin]:
                 type=AstToken.EOF, start=self.pos, length=0, line=self.line
             )
 
-        var start = self.pos
-        var token_line = self.line
-        var ch = self.input[self.pos]
+        var token_type = TOKEN_TYPES[Int(self.input[self.pos])]
 
-        if ch == `{`:
-            self.pos += 1
-            return AstToken(
-                type=AstToken.LBRACE, start=start, length=1, line=token_line
-            )
-        if ch == `}`:
-            self.pos += 1
-            return AstToken(
-                type=AstToken.RBRACE, start=start, length=1, line=token_line
-            )
-        if ch == `;`:
-            self.pos += 1
-            return AstToken(
-                type=AstToken.SEMICOLON, start=start, length=1, line=token_line
-            )
-        if ch == `+`:
-            self.pos += 1
-            return AstToken(
-                type=AstToken.PLUS, start=start, length=1, line=token_line
-            )
-        if ch == `"` or ch == `'`:
+        if token_type == AstToken.STRING:
+            var start = self.pos
+            var line = self.line
             return AstToken(
                 type=AstToken.STRING,
                 start=start,
                 length=self.scan_quoted_string(),
-                line=token_line,
+                line=line,
+            )
+        if token_type != AstToken.IDENTIFIER:
+            self.pos += 1
+            return AstToken(
+                type=token_type, start=self.pos - 1, length=1, line=self.line
             )
 
-        var length = self.scan_atom()
+        var start = self.pos
         return AstToken(
-            type=self.atom_type(start, length),
+            type=AstToken.IDENTIFIER,
             start=start,
-            length=length,
-            line=token_line,
+            length=self.scan_identifier(),
+            line=self.line,
         )

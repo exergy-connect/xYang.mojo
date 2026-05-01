@@ -10,7 +10,7 @@ comptime Arc = ArcPointer
 
 
 def is_name_token(tok: AstToken) -> Bool:
-    return tok.type == AstToken.ATOM or tok.type == AstToken.QNAME
+    return tok.type == AstToken.IDENTIFIER
 
 def parse_module[
     origin: ImmutOrigin
@@ -129,6 +129,5 @@ def parse_argument[
         if tok.type != AstToken.PLUS:
             result += " "
             result += tok.text(lexer.input, strip_quotes=True)
-
 
 
