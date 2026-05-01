@@ -45,7 +45,7 @@ struct TopContainerIterator(Iterator):
             var i = self.index
             self.index += 1
             var child = root.children[i]
-            if child[].spec.value() == `container`:
+            if child[].spec == `container`:
                 return child.copy()
         raise StopIteration()
 
@@ -87,11 +87,11 @@ struct YangModule(Movable & Iterable):
     ) raises:
         from ..spec import `container`, `grouping`, `revision`
 
-        self.fields[tree.spec.value()] = tree.argument.value()
+        self.fields[tree.spec] = tree.argument.value()
         for child in tree.children:
             ref node = child[]
             var arg = node.argument.value()
-            var kw = node.spec.value()
+            var kw = node.spec
             if kw == `revision`:
                 self.revisions.append(arg)
             elif kw == `grouping`:
@@ -182,7 +182,7 @@ struct YangModule(Movable & Iterable):
         read self, read node: YangConstruct, keyword: Kw
     ) -> Optional[Arc[YangConstruct]]:
         for child in node.children:
-            if child[].spec.value() == keyword:
+            if child[].spec == keyword:
                 return Optional[Arc[YangConstruct]](child.copy())
         return Optional[Arc[YangConstruct]]()
 
@@ -238,7 +238,7 @@ struct YangModule(Movable & Iterable):
         from ..spec import `container`, `leaf`, `list`
 
         for child in parent.children:
-            var kw = child[].spec.value()
+            var kw = child[].spec
             if (
                 (kw == `leaf` or kw == `container` or kw == `list`)
                 and child[].argument
@@ -271,7 +271,7 @@ struct YangModule(Movable & Iterable):
         from ..spec import `container`, `leaf`, `list`
 
         for child in parent.children:
-            var kw = child[].spec.value()
+            var kw = child[].spec
             if (
                 not (kw == `leaf` or kw == `container` or kw == `list`)
                 or not child[].argument
@@ -296,7 +296,7 @@ struct YangModule(Movable & Iterable):
     ) -> Optional[Arc[YangConstruct]]:
         for child in parent.children:
             if (
-                child[].spec.value() == keyword
+                child[].spec == keyword
                 and child[].argument
                 and child[].argument.value() == name
             ):

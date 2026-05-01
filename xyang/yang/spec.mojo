@@ -353,9 +353,7 @@ def build_spec_table() -> YangConstructSpec.Table:
     specs[Int(`identity`)] = scalar_spec(`identity`, validate_yang_identifier)
     specs[Int(`import`)] = scalar_spec(`import`, validate_yang_identifier)
     specs[Int(`include`)] = scalar_spec(`include`, validate_yang_identifier)
-    specs[Int(`leaf-list`)] = scalar_spec(
-        `leaf-list`, validate_yang_identifier
-    )
+    specs[Int(`leaf-list`)] = scalar_spec(`leaf-list`, validate_yang_identifier)
     specs[Int(`notification`)] = scalar_spec(
         `notification`, validate_yang_identifier
     )
@@ -368,14 +366,14 @@ def build_spec_table() -> YangConstructSpec.Table:
 def construct_spec(
     read node: YangConstruct, read specs: YangConstructSpec.Table
 ) raises -> YangConstructSpec:
-    if not node.spec:
+    if node.spec == `<INVALID>`:
         raise Error(
             ("line " + String(node.line) + ": " if node.line > 0 else "")
             + "Construct `"
             + node.keyword
             + "` has not been validated"
         )
-    return specs[Int(node.spec.value())]
+    return specs[Int(node.spec)]
 
 
 def validate_construct(
@@ -428,13 +426,13 @@ def validate_construct(
             node.line,
         )
 
-    node.spec = Optional[Kw](spec.parent)
+    node.spec = spec.parent
     for child in node.children:
         var child_kw = keyword_id(child[].keyword, child[].line)
         ref child_spec = specs[Int(child_kw)]
-        var child_spec_ptr = UnsafePointer(
-            to=child_spec
-        ).unsafe_origin_cast[ImmutAnyOrigin]()
+        var child_spec_ptr = UnsafePointer(to=child_spec).unsafe_origin_cast[
+            ImmutAnyOrigin
+        ]()
         var specs_ptr = UnsafePointer(to=specs).unsafe_origin_cast[
             ImmutAnyOrigin
         ]()
@@ -481,4 +479,4 @@ def validate_scalar_construct_callback(
             + expected_name
             + "`"
         )
-    node.spec = Optional[Kw](spec_ptr[].parent)
+    node.spec = spec_ptr[].parent

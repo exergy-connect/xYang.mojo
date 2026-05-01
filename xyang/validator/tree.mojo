@@ -6,7 +6,13 @@ from std.memory import ArcPointer
 from xyang.json.parser import JsonValue, json_get
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import `container`, `key`, `leaf`, `list`, `must`
+from xyang.yang.spec import (
+    `container`,
+    `key`,
+    `leaf`,
+    `list`,
+    `must`,
+)
 
 
 comptime Arc = ArcPointer
@@ -127,6 +133,7 @@ def validate_leaf_value(
     )
 
 
+@no_inline
 def validate_object_against_construct(
     read data: JsonValue,
     read schema: YangConstruct,
@@ -140,6 +147,7 @@ def validate_object_against_construct(
     )
 
 
+@no_inline
 def validate_object_against_construct(
     read data: JsonValue,
     read schema: YangConstruct,
@@ -157,39 +165,46 @@ def validate_object_against_construct(
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var child_schema_path = schema_path + "/" + key
         var data_child = cache.data_child(module, schema, schema_path, key)
-        if data_child and data_child.value()[].spec.value() == `leaf`:
-            validate_leaf_value(
-                slot,
-                data_child.value()[],
-                module,
-                path + "/" + key,
+        if not data_child:
+            _raise_json_path_error(
                 json_path,
+                slot.source_line,
+                path,
+                ": unknown field `" + key + "`",
             )
+        ref child = data_child.value()[]
+        var child_kind = child.spec
+        var child_path = path + "/" + key
+
+        if child_kind == `leaf`:
+            validate_leaf_value(slot, child, module, child_path, json_path)
             continue
-        if data_child and data_child.value()[].spec.value() == `container`:
+
+        if child_kind == `container`:
             validate_object_against_construct(
                 slot,
-                data_child.value()[],
+                child,
                 module,
-                path + "/" + key,
+                child_path,
                 json_path,
-                child_schema_path,
+                schema_path + "/" + key,
                 cache,
             )
             continue
-        if data_child and data_child.value()[].spec.value() == `list`:
+
+        if child_kind == `list`:
             validate_list_against_construct(
                 slot,
-                data_child.value()[],
+                child,
                 module,
-                path + "/" + key,
+                child_path,
                 json_path,
-                child_schema_path,
+                schema_path + "/" + key,
                 cache,
             )
             continue
+
         _raise_json_path_error(
             json_path,
             slot.source_line,
@@ -198,6 +213,7 @@ def validate_object_against_construct(
         )
 
 
+@no_inline
 def validate_list_against_construct(
     read data: JsonValue,
     read schema: YangConstruct,

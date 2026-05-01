@@ -109,7 +109,7 @@ def check_leafrefs_in_object(
         var data_child = module.find_effective_data_child(schema, key)
         if (
             data_child
-            and data_child.value()[].spec.value() == `leaf`
+            and data_child.value()[].spec == `leaf`
             and module.leaf_type(data_child.value()[]) == "leafref"
         ):
             var target_path = module.leafref_path(data_child.value()[])
@@ -129,7 +129,7 @@ def check_leafrefs_in_object(
                     + actual
                     + "` does not resolve"
                 )
-        if data_child and data_child.value()[].spec.value() == `container`:
+        if data_child and data_child.value()[].spec == `container`:
             check_leafrefs_in_object(
                 slot,
                 data_child.value()[],
@@ -139,7 +139,7 @@ def check_leafrefs_in_object(
                 json_path,
                 cache,
             )
-        if data_child and data_child.value()[].spec.value() == `list`:
+        if data_child and data_child.value()[].spec == `list`:
             check_leafrefs_in_list(
                 slot,
                 data_child.value()[],

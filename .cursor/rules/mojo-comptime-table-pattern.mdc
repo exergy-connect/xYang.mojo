@@ -1,0 +1,117 @@
+---
+description: Mojo comptime lookup table patterns for byte scanners
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo comptime table pattern
+
+Use this pattern when scanner or parser logic needs a small, dense lookup table
+that can be built once at compile time and indexed cheaply at runtime.
+
+The lexer example is `xyang/yang/ast/lexer.mojo`.
+
+## Byte constants
+
+Prefer named `comptime` byte constants over magic integer literals:
+
+```mojo
+@always_inline
+def _to_byte[s: StaticString]() -> Byte:
+    comptime assert s.byte_length() == 1, "expected one character string"
+    comptime byte = s.as_bytes()[0]
+    return byte
+
+comptime `{` = _to_byte["{"]()
+comptime `}` = _to_byte["}"]()
+comptime `\n` = _to_byte["\n"]()
+```
+
+Rules:
+
+1. Use a `StaticString` parameter for character literals.
+2. Put `comptime assert` inside the helper body.
+3. Keep the result type `Byte`.
+4. Use backtick names for readable byte constants when the spelling is useful.
+
+## Boolean membership table
+
+Use an `InlineArray[Bool, 256]` for byte-set membership, such as scanner stop
+characters:
+
+```mojo
+@always_inline
+def token_table[*tokens: Byte]() -> InlineArray[Bool, 256]:
+    var table = InlineArray[Bool, 256](fill=False)
+    comptime for i in range(len(tokens)):
+        table[tokens[i]] = True
+    return table^
+```
+
+Then build local `comptime` tables where they are used:
+
+```mojo
+comptime IDENTIFIER_SCAN_STOP = token_table[
+    ` `, `\n`, `\t`, `\r`, `{`, `}`, `;`, `+`, `"`, `'`
+]()
+
+if IDENTIFIER_SCAN_STOP[ch]:
+    break
+```
+
+Rules:
+
+1. Allocate the full byte domain with size `256`.
+2. Initialize with `fill=False`.
+3. Populate with a `comptime for` over the variadic byte list.
+4. Define specific tables near the scanner method that uses them when that keeps
+   the meaning local.
+
+## Byte-to-token table
+
+Use an `InlineArray[TokenType, 256]` when most bytes map to a default token and
+only a few bytes have special token kinds:
+
+```mojo
+@always_inline
+def byte_to_token_table[
+    *pairs: Tuple[Byte, AstToken.Type]
+](
+    default: AstToken.Type = AstToken.IDENTIFIER
+) -> InlineArray[AstToken.Type, 256]:
+    var table = InlineArray[AstToken.Type, 256](fill=default)
+    comptime for i in range(len(pairs)):
+        table[pairs[i][0]] = pairs[i][1]
+    return table^
+```
+
+Usage:
+
+```mojo
+comptime TOKEN_TYPES = byte_to_token_table[
+    (`{`, AstToken.LBRACE),
+    (`}`, AstToken.RBRACE),
+    (`;`, AstToken.SEMICOLON),
+    (`+`, AstToken.PLUS),
+    (`"`, AstToken.STRING),
+    (`'`, AstToken.STRING),
+](default=AstToken.IDENTIFIER)
+
+var token_type = TOKEN_TYPES[input[pos]]
+```
+
+Rules:
+
+1. Use `Tuple[Byte, TokenType]` for simple data mappings; this is fine when both
+   parts are small value types.
+2. Fill the table with the default token type first.
+3. Assign `table[pair[0]] = pair[1]`.
+4. Keep handler/function dispatch tables separate; function values need the
+   type-level key/value pattern from `mojo-handler-dispatch-pattern.mdc`.
+
+## When to use
+
+Use comptime tables for scanner hot paths where a branch chain would obscure the
+byte-set or byte-to-token mapping. Avoid them when the mapping is sparse over a
+large non-byte domain, when a normal `if` chain is clearer, or when the table
+stores non-value payloads such as thin function handlers.

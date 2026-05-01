@@ -27,6 +27,13 @@ from std.memory import Span
 comptime ByteView = Span[Byte, _]
 
 
+@always_inline
+def _to_byte[s: StaticString]() -> Byte:
+    comptime assert s.byte_length() == 1, "expected one character string"
+    comptime byte = s.as_bytes()[0]
+    return byte
+
+
 comptime `"` = _to_byte['"']()
 comptime `'` = _to_byte["'"]()
 comptime `{` = _to_byte["{"]()
@@ -35,19 +42,13 @@ comptime `;` = _to_byte[";"]()
 comptime `+` = _to_byte["+"]()
 comptime `/` = _to_byte["/"]()
 comptime `*` = _to_byte["*"]()
-comptime `\\` = _to_byte["\\"]()
+comptime ` ` = _to_byte[" "]()
 
 comptime `\n` = _to_byte["\n"]()
 comptime `\t` = _to_byte["\t"]()
-comptime ` ` = _to_byte[" "]()
+comptime `\\` = _to_byte["\\"]()
 comptime `\r` = _to_byte["\r"]()
 
-
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
 
 @always_inline
 def token_table[*tokens: Byte]() -> InlineArray[Bool, 256]:
@@ -55,6 +56,7 @@ def token_table[*tokens: Byte]() -> InlineArray[Bool, 256]:
     comptime for i in range(len(tokens)):
         t[tokens[i]] = True
     return t^
+
 
 @fieldwise_init
 struct AstToken(Copyable):
@@ -67,6 +69,16 @@ struct AstToken(Copyable):
     comptime PLUS: Self.Type = 4
     comptime STRING: Self.Type = 5
     comptime EOF: Self.Type = 6
+
+    @always_inline
+    @staticmethod
+    def byte_to_token_table[
+        *tuples: Tuple[Byte, Self.Type]
+    ](default: Self.Type = Self.IDENTIFIER) -> InlineArray[Self.Type, 256]:
+        var t = InlineArray[Self.Type, 256](fill=default)
+        comptime for i in range(len(tuples)):
+            t[tuples[i][0]] = tuples[i][1]
+        return t^
 
     var type: Self.Type
     var start: Int
@@ -186,17 +198,14 @@ struct AstLexer[origin: ImmutOrigin]:
         raise Error("Unterminated string literal")
 
     def next_token(mut self) raises -> AstToken:
-        @always_inline
-        def token_type_table() -> InlineArray[AstToken.Type, 256]:
-            var t = InlineArray[AstToken.Type, 256](fill=AstToken.IDENTIFIER)
-            t[`{`] = AstToken.LBRACE
-            t[`}`] = AstToken.RBRACE
-            t[`;`] = AstToken.SEMICOLON
-            t[`+`] = AstToken.PLUS
-            t[`"`] = AstToken.STRING
-            t[`'`] = AstToken.STRING
-            return t^
-        comptime TOKEN_TYPES = token_type_table()
+        comptime TOKEN_TYPES = AstToken.byte_to_token_table[
+            (`{`, AstToken.LBRACE),
+            (`}`, AstToken.RBRACE),
+            (`;`, AstToken.SEMICOLON),
+            (`+`, AstToken.PLUS),
+            (`"`, AstToken.STRING),
+            (`'`, AstToken.STRING),
+        ](default=AstToken.IDENTIFIER)
 
         self.skip_ws_and_comments()
 

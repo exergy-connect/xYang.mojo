@@ -1,0 +1,135 @@
+---
+description: Mojo handler dispatch pattern using type-level key/value pairs
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo handler dispatch pattern
+
+Use this pattern when you want a dense O(1) keyword-to-handler table.
+
+See the runnable example:
+
+```bash
+pixi run mojo examples/handlers.mojo
+```
+
+## Problem
+
+Thin function values do not work well as normal payload values in generic
+`Tuple[Kw, F]` or fieldwise mapping structs. In particular, a pair like this
+can fail because the handler type is not `Movable` in that context:
+
+```mojo
+comptime HandlerMapping[F: AnyType] = Tuple[Kw, F]
+```
+
+Splitting keys and handlers into separate variadic lists compiles, but makes the
+API easy to misalign:
+
+```mojo
+handler_dispatch_table[Handler, `leaf`, `container`](
+    validate_unknown,
+    validate_leaf,
+    validate_container,
+)
+```
+
+Prefer type-level key/value pairs instead.
+
+## Pattern
+
+Define a handler signature, a mapping trait specialized to that signature, and a
+type-level key/value struct:
+
+```mojo
+comptime Kw = UInt8
+comptime KEYWORD_COUNT: Int = 4
+
+comptime Handler = def(name: String) raises thin -> None
+
+trait HandlerMapping:
+    comptime kw: Kw
+    comptime callback: Handler
+
+
+struct HandlerKV[key: Kw, handler: Handler](HandlerMapping):
+    comptime kw = Self.key
+    comptime callback = Self.handler
+```
+
+Then build the table from variadic mapping types:
+
+```mojo
+@always_inline
+def handler_dispatch_table[
+    *mappings: HandlerMapping
+](
+    default_handler: Handler
+) -> InlineArray[Handler, KEYWORD_COUNT]:
+    var table = InlineArray[Handler, KEYWORD_COUNT](fill=default_handler)
+    comptime for i in range(len(mappings)):
+        table[mappings[i].kw] = mappings[i].callback
+    return table^
+```
+
+Usage keeps the key and handler paired:
+
+```mojo
+comptime HANDLERS = handler_dispatch_table[
+    HandlerKV[`leaf`, validate_leaf],
+    HandlerKV[`container`, validate_container],
+    HandlerKV[`list`, validate_list],
+](validate_unknown)
+
+HANDLERS[keyword](name)
+```
+
+## Rules
+
+1. Use a `trait` with `comptime kw` and `comptime callback` requirements.
+2. Use a parametric struct like `HandlerKV[key, handler]` to bind the pair.
+3. Inside the struct, access parameters with `Self.key` and `Self.handler`.
+4. Provide a default handler so every table slot is initialized.
+5. Keep the trait specialized to one handler signature.
+
+## Recursive handlers
+
+Use this pattern only when handlers do not call back into the same dispatcher.
+Recursive dispatch through a comptime function table can fail with:
+
+```text
+function instantiation in parameter domain that recursively requires itself
+```
+
+Known non-solutions:
+
+- `global_constant[HANDLERS]()` still leaves the call in the parameter domain.
+- `@no_inline` on the dispatcher and handlers does not break the cycle.
+- Passing the dispatcher as a function parameter, struct method, or
+  `UnsafePointer` still lets Mojo see the recursive call.
+- Erasing function pointers through an opaque static vtable can avoid some
+  typing issues, but it does not by itself solve recursive dispatch.
+
+Using multiple handler-table instances can bound recursion manually, for example
+`dispatch_a -> HANDLERS_A -> dispatch_b -> HANDLERS_B -> dispatch_stop`, but
+that is recursion unrolling and imposes a fixed maximum depth. Do not use it for
+unbounded recursive structures such as YANG schema/data trees.
+
+For recursive validators, prefer explicit branches ordered by expected
+frequency, or use a true runtime indirection mechanism that the compiler does
+not instantiate as a comptime function call graph.
+
+## Current limitation
+
+This Mojo build does not support generic traits, so avoid trying to write:
+
+```mojo
+trait HandlerMapping[F: AnyType]:
+    comptime kw: Kw
+    comptime callback: Self.F
+```
+
+Instead, make one small mapping trait per handler signature, such as
+`DataChildMapping` for `DataChildHandler` or `ArgumentMapping` for
+`ArgumentValidator`.
