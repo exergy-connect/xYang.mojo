@@ -3,9 +3,11 @@
 from xyang.json.parser import JsonValue, parse_json
 from xyang.yang.ast.module import YangModule
 from xyang.yang.ast.lexer import AstLexer
-from xyang.yang.spec import `container`
-from xyang.validator.leafref import check_leafrefs_in_object
-from xyang.validator.tree import validate_object_against_construct
+from xyang.validator.leafref import LeafrefCache, check_leafrefs_in_object
+from xyang.validator.tree import (
+    ValidationCache,
+    validate_object_against_construct,
+)
 
 
 def validate_data(
@@ -18,13 +20,12 @@ def validate_data(
         if data.source_line > 0:
             pfx += "line " + String(data.source_line) + ": "
         raise Error(pfx + "/: expected top-level JSON object")
-    var module_root = module.root_construct()
+    var validation_cache = ValidationCache()
+    var leafref_cache = LeafrefCache()
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var container = module.find_effective_child(
-            module_root[], `container`, key
-        )
+        var container = module.top_container(key)
         if not container:
             var pfx2 = String()
             if json_path.byte_length() > 0:
@@ -33,7 +34,13 @@ def validate_data(
                 pfx2 += "line " + String(slot.source_line) + ": "
             raise Error(pfx2 + "/: unknown top-level field `" + key + "`")
         validate_object_against_construct(
-            slot, container.value()[], module, "/" + key, json_path
+            slot,
+            container.value()[],
+            module,
+            "/" + key,
+            json_path,
+            "/" + key,
+            validation_cache,
         )
         check_leafrefs_in_object(
             slot,
@@ -42,6 +49,7 @@ def validate_data(
             data,
             "/" + key,
             json_path,
+            leafref_cache,
         )
 
 

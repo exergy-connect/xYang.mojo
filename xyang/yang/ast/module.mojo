@@ -232,6 +232,62 @@ struct YangModule(Movable & Iterable):
                 return leaf^
         return Optional[Arc[YangConstruct]]()
 
+    def find_effective_data_child(
+        read self, read parent: YangConstruct, name: String
+    ) raises -> Optional[Arc[YangConstruct]]:
+        from ..spec import `container`, `leaf`, `list`
+
+        for child in parent.children:
+            var kw = child[].spec.value()
+            if (
+                (kw == `leaf` or kw == `container` or kw == `list`)
+                and child[].argument
+                and child[].argument.value() == name
+            ):
+                return Optional[Arc[YangConstruct]](child.copy())
+        for child in parent.children:
+            if child[].keyword != "uses" or not child[].argument:
+                continue
+            var grouping = self.find_grouping(child[].argument.value())
+            if not grouping:
+                continue
+            var data_child = self.find_effective_data_child(
+                grouping.value()[], name
+            )
+            if data_child:
+                return data_child^
+        return Optional[Arc[YangConstruct]]()
+
+    def effective_data_children(
+        read self, read parent: YangConstruct
+    ) raises -> ConstructMap:
+        var out = ConstructMap()
+        self._populate_effective_data_children(parent, out)
+        return out^
+
+    def _populate_effective_data_children(
+        read self, read parent: YangConstruct, mut out: ConstructMap
+    ) raises:
+        from ..spec import `container`, `leaf`, `list`
+
+        for child in parent.children:
+            var kw = child[].spec.value()
+            if (
+                not (kw == `leaf` or kw == `container` or kw == `list`)
+                or not child[].argument
+            ):
+                continue
+            var name = child[].argument.value()
+            if name not in out:
+                out[name] = child.copy()
+        for child in parent.children:
+            if child[].keyword != "uses" or not child[].argument:
+                continue
+            var grouping = self.find_grouping(child[].argument.value())
+            if not grouping:
+                continue
+            self._populate_effective_data_children(grouping.value()[], out)
+
     def find_effective_child(
         read self,
         read parent: YangConstruct,

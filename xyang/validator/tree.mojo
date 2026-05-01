@@ -1,9 +1,39 @@
 ## Validate JSON values against `YangConstruct` schema nodes.
 
+from std.collections import Dict
+from std.memory import ArcPointer
+
 from xyang.json.parser import JsonValue, json_get
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import `container`, `key`, `list`, `must`
+from xyang.yang.spec import `container`, `key`, `leaf`, `list`, `must`
+
+
+comptime Arc = ArcPointer
+comptime DataChildMap = Dict[String, Arc[YangConstruct]]
+
+
+struct ValidationCache:
+    var data_children: Dict[String, DataChildMap]
+
+    def __init__(out self):
+        self.data_children = Dict[String, DataChildMap]()
+
+    def data_child(
+        mut self,
+        read module: YangModule,
+        read schema: YangConstruct,
+        schema_path: String,
+        key: String,
+    ) raises -> Optional[Arc[YangConstruct]]:
+        if schema_path not in self.data_children:
+            var children = module.effective_data_children(schema)
+            self.data_children[schema_path] = children^
+        if key not in self.data_children[schema_path]:
+            return Optional[Arc[YangConstruct]]()
+        return Optional[Arc[YangConstruct]](
+            self.data_children[schema_path][key].copy()
+        )
 
 
 @always_inline
@@ -104,6 +134,21 @@ def validate_object_against_construct(
     path: String,
     json_path: String,
 ) raises:
+    var cache = ValidationCache()
+    validate_object_against_construct(
+        data, schema, module, path, json_path, path, cache
+    )
+
+
+def validate_object_against_construct(
+    read data: JsonValue,
+    read schema: YangConstruct,
+    read module: YangModule,
+    path: String,
+    json_path: String,
+    schema_path: String,
+    mut cache: ValidationCache,
+) raises:
     if data.kind != JsonValue.OBJECT:
         _raise_json_path_error(
             json_path, data.source_line, path, ": expected JSON object"
@@ -112,30 +157,37 @@ def validate_object_against_construct(
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var leaf = module.find_effective_leaf(schema, key)
-        if leaf:
+        var child_schema_path = schema_path + "/" + key
+        var data_child = cache.data_child(module, schema, schema_path, key)
+        if data_child and data_child.value()[].spec.value() == `leaf`:
             validate_leaf_value(
-                slot, leaf.value()[], module, path + "/" + key, json_path
+                slot,
+                data_child.value()[],
+                module,
+                path + "/" + key,
+                json_path,
             )
             continue
-        var container = module.find_effective_child(schema, `container`, key)
-        if container:
+        if data_child and data_child.value()[].spec.value() == `container`:
             validate_object_against_construct(
                 slot,
-                container.value()[],
+                data_child.value()[],
                 module,
                 path + "/" + key,
                 json_path,
+                child_schema_path,
+                cache,
             )
             continue
-        var list_node = module.find_effective_child(schema, `list`, key)
-        if list_node:
+        if data_child and data_child.value()[].spec.value() == `list`:
             validate_list_against_construct(
                 slot,
-                list_node.value()[],
+                data_child.value()[],
                 module,
                 path + "/" + key,
                 json_path,
+                child_schema_path,
+                cache,
             )
             continue
         _raise_json_path_error(
@@ -152,6 +204,8 @@ def validate_list_against_construct(
     read module: YangModule,
     path: String,
     json_path: String,
+    schema_path: String,
+    mut cache: ValidationCache,
 ) raises:
     if data.kind != JsonValue.ARRAY:
         _raise_json_path_error(
@@ -162,7 +216,7 @@ def validate_list_against_construct(
         ref entry = data.array_values[i][]
         var entry_path = path + "[" + String(i) + "]"
         validate_object_against_construct(
-            entry, schema, module, entry_path, json_path
+            entry, schema, module, entry_path, json_path, schema_path, cache
         )
         if key_stmt and key_stmt.value()[].argument:
             var key = key_stmt.value()[].argument.value()

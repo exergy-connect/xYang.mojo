@@ -1,9 +1,14 @@
 ## Leafref path resolution against a JSON document tree.
 
+from std.collections import Dict
+
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import `container`, `list`
+from xyang.yang.spec import `container`, `leaf`, `list`
+
+
+comptime TargetSet = Dict[String, Bool]
 
 
 def path_segment_name(segment: String) -> String:
@@ -57,11 +62,22 @@ def collect_path_values(read root: JsonValue, path: String) -> List[String]:
     return out^
 
 
-def string_in_list(value: String, read values: List[String]) -> Bool:
-    for i in range(len(values)):
-        if values[i] == value:
-            return True
-    return False
+struct LeafrefCache:
+    var target_sets: Dict[String, TargetSet]
+
+    def __init__(out self):
+        self.target_sets = Dict[String, TargetSet]()
+
+    def contains(
+        mut self, read root: JsonValue, target_path: String, value: String
+    ) raises -> Bool:
+        if target_path not in self.target_sets:
+            var values = collect_path_values(root, target_path)
+            var target_set = TargetSet()
+            for i in range(len(values)):
+                target_set[values[i]] = True
+            self.target_sets[target_path] = target_set^
+        return value in self.target_sets[target_path]
 
 
 def check_leafrefs_in_object(
@@ -72,17 +88,33 @@ def check_leafrefs_in_object(
     path: String,
     json_path: String,
 ) raises:
+    var cache = LeafrefCache()
+    check_leafrefs_in_object(data, schema, module, root, path, json_path, cache)
+
+
+def check_leafrefs_in_object(
+    read data: JsonValue,
+    read schema: YangConstruct,
+    read module: YangModule,
+    read root: JsonValue,
+    path: String,
+    json_path: String,
+    mut cache: LeafrefCache,
+) raises:
     if data.kind != JsonValue.OBJECT:
         return
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var leaf = module.find_effective_leaf(schema, key)
-        if leaf and module.leaf_type(leaf.value()[]) == "leafref":
-            var target_path = module.leafref_path(leaf.value()[])
-            var targets = collect_path_values(root, target_path)
+        var data_child = module.find_effective_data_child(schema, key)
+        if (
+            data_child
+            and data_child.value()[].spec.value() == `leaf`
+            and module.leaf_type(data_child.value()[]) == "leafref"
+        ):
+            var target_path = module.leafref_path(data_child.value()[])
             var actual = json_scalar_text(slot)
-            if not string_in_list(actual, targets):
+            if not cache.contains(root, target_path, actual):
                 var pfx = String()
                 if json_path.byte_length() > 0:
                     pfx += json_path + " "
@@ -97,25 +129,25 @@ def check_leafrefs_in_object(
                     + actual
                     + "` does not resolve"
                 )
-        var container = module.find_effective_child(schema, `container`, key)
-        if container:
+        if data_child and data_child.value()[].spec.value() == `container`:
             check_leafrefs_in_object(
                 slot,
-                container.value()[],
+                data_child.value()[],
                 module,
                 root,
                 path + "/" + key,
                 json_path,
+                cache,
             )
-        var list_node = module.find_effective_child(schema, `list`, key)
-        if list_node:
+        if data_child and data_child.value()[].spec.value() == `list`:
             check_leafrefs_in_list(
                 slot,
-                list_node.value()[],
+                data_child.value()[],
                 module,
                 root,
                 path + "/" + key,
                 json_path,
+                cache,
             )
 
 
@@ -126,6 +158,7 @@ def check_leafrefs_in_list(
     read root: JsonValue,
     path: String,
     json_path: String,
+    mut cache: LeafrefCache,
 ) raises:
     if data.kind != JsonValue.ARRAY:
         return
@@ -137,4 +170,5 @@ def check_leafrefs_in_list(
             root,
             path + "[" + String(i) + "]",
             json_path,
+            cache,
         )
