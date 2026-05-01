@@ -1,7 +1,7 @@
 ## Minimal lexer for the raw YANG AST example.
 ##
 ## It recognizes only the token shapes needed to build a YangConstruct tree:
-## statement names / argument atoms, quoted strings, `{`, `}`, `;`, `+`, and EOF.
+## statement names / argument identifiers, quoted strings, `{`, `}`, `;`, `+`, and EOF.
 
 from std.memory import Span
 
@@ -14,7 +14,6 @@ comptime `'` = _to_byte["'"]()
 comptime `{` = _to_byte["{"]()
 comptime `}` = _to_byte["}"]()
 comptime `;` = _to_byte[";"]()
-comptime `:` = _to_byte[":"]()
 comptime `+` = _to_byte["+"]()
 comptime `/` = _to_byte["/"]()
 comptime `*` = _to_byte["*"]()
@@ -37,14 +36,13 @@ def _to_byte[s: StaticString]() -> Byte:
 struct AstToken(Copyable):
     comptime Type = UInt8
 
-    comptime ATOM: Self.Type = 0
+    comptime IDENTIFIER: Self.Type = 0
     comptime LBRACE: Self.Type = 1
     comptime RBRACE: Self.Type = 2
     comptime SEMICOLON: Self.Type = 3
     comptime PLUS: Self.Type = 4
     comptime STRING: Self.Type = 5
-    comptime QNAME: Self.Type = 6
-    comptime EOF: Self.Type = 7
+    comptime EOF: Self.Type = 6
 
     var type: Self.Type
     var start: Int
@@ -124,7 +122,7 @@ struct AstLexer[origin: ImmutOrigin]:
             else:
                 return
 
-    def scan_atom(mut self) raises -> Int:
+    def scan_identifier(mut self) raises -> Int:
         var start = self.pos
         while not self.eof():
             var ch = self.input[self.pos]
@@ -148,18 +146,6 @@ struct AstLexer[origin: ImmutOrigin]:
             raise Error("Expected YANG token")
 
         return self.pos - start
-
-    def atom_type(self, start: Int, length: Int) -> AstToken.Type:
-        var end = start + length
-        var colon_count = 0
-        var colon_pos = -1
-        for i in range(start, end):
-            if self.input[i] == `:`:
-                colon_count += 1
-                colon_pos = i
-        if colon_count == 1 and colon_pos > start and colon_pos < end - 1:
-            return AstToken.QNAME
-        return AstToken.ATOM
 
     def scan_quoted_string(mut self) raises -> Int:
         var start = self.pos
@@ -225,9 +211,9 @@ struct AstLexer[origin: ImmutOrigin]:
                 line=token_line,
             )
 
-        var length = self.scan_atom()
+        var length = self.scan_identifier()
         return AstToken(
-            type=self.atom_type(start, length),
+            type=AstToken.IDENTIFIER,
             start=start,
             length=length,
             line=token_line,

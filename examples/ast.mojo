@@ -57,7 +57,7 @@ struct YangConstruct(ImplicitlyDestructible, Movable, Writable):
 
 
 def is_name_token(tok: AstToken) -> Bool:
-    return tok.type == AstToken.ATOM or tok.type == AstToken.QNAME
+    return tok.type == AstToken.IDENTIFIER
 
 
 def parse_module[origin: ImmutOrigin](
