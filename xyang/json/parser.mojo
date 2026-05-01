@@ -7,9 +7,13 @@ comptime Arc = ArcPointer
 comptime ByteView = Span[Byte, _]
 
 comptime `"` = _to_byte['"']()
+comptime `+b` = _to_byte["+"]()
 comptime `-` = _to_byte["-"]()
+comptime `.b` = _to_byte["."]()
 comptime `0b` = _to_byte["0"]()
 comptime `9b` = _to_byte["9"]()
+comptime `Eb` = _to_byte["E"]()
+comptime `eb` = _to_byte["e"]()
 comptime `{b` = _to_byte["{"]()
 comptime `}b` = _to_byte["}"]()
 comptime `[b` = _to_byte["["]()
@@ -127,16 +131,30 @@ struct JsonParser[origin: ImmutOrigin]:
             if ch == `\\`:
                 if self.eof():
                     self.syntax_error("Trailing escape in JSON string")
+                var escaped = self.input[self.pos]
                 self.pos += 1
-            out += String(
-                StringSlice(
-                    unsafe_from_utf8=self.input[self.pos - 1 : self.pos]
+                if escaped == _to_byte["n"]():
+                    out += "\n"
+                elif escaped == _to_byte["r"]():
+                    out += "\r"
+                elif escaped == _to_byte["t"]():
+                    out += "\t"
+                else:
+                    out += String(
+                        StringSlice(
+                            unsafe_from_utf8=self.input[self.pos - 1 : self.pos]
+                        )
+                    )
+            else:
+                out += String(
+                    StringSlice(
+                        unsafe_from_utf8=self.input[self.pos - 1 : self.pos]
+                    )
                 )
-            )
         self.syntax_error("Unterminated JSON string")
         return ""
 
-    def parse_int(mut self) raises -> JsonValue:
+    def parse_number(mut self) raises -> JsonValue:
         self.skip_ws()
         var ln = self.line
         var start = self.pos
@@ -148,12 +166,39 @@ struct JsonParser[origin: ImmutOrigin]:
             and self.input[self.pos] <= `9b`
         ):
             self.pos += 1
+        if not self.eof() and self.input[self.pos] == `.b`:
+            self.pos += 1
+            while (
+                not self.eof()
+                and self.input[self.pos] >= `0b`
+                and self.input[self.pos] <= `9b`
+            ):
+                self.pos += 1
+        if not self.eof() and (
+            self.input[self.pos] == `eb` or self.input[self.pos] == `Eb`
+        ):
+            self.pos += 1
+            if not self.eof() and (
+                self.input[self.pos] == `+b` or self.input[self.pos] == `-`
+            ):
+                self.pos += 1
+            while (
+                not self.eof()
+                and self.input[self.pos] >= `0b`
+                and self.input[self.pos] <= `9b`
+            ):
+                self.pos += 1
         var text = String(
             StringSlice(unsafe_from_utf8=self.input[start : self.pos])
         )
         var value = make_json(JsonValue.INT, ln)
         value.text = text
-        value.int_value = Int64(atol(text))
+        if (
+            text.find(".") == -1
+            and text.find("e") == -1
+            and text.find("E") == -1
+        ):
+            value.int_value = Int64(atol(text))
         return value^
 
     def parse_array(mut self) raises -> JsonValue:
@@ -208,7 +253,7 @@ struct JsonParser[origin: ImmutOrigin]:
             value.text = self.parse_string()
             return value^
         if ch == `-` or (ch >= `0b` and ch <= `9b`):
-            return self.parse_int()
+            return self.parse_number()
         if ch == _to_byte["t"]():
             self.consume_literal("true")
             var value = make_json(JsonValue.BOOL, ln)
