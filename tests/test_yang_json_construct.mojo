@@ -119,6 +119,59 @@ def test_yang_json_module_indexes_supported_subset() raises:
     assert_equal(cfg != None, True)
 
 
+def test_overlapping_length_in_xyang_rejected() raises:
+    ## RFC 7950 §9.4.4: `length` segments must be disjoint (only in `x-yang.length`
+    ## when JSON Schema cannot express the constraint).
+    var json_text = """
+{
+  "x-yang": {
+    "module": "badlen",
+    "yang-version": "1.1",
+    "namespace": "urn:badlen",
+    "prefix": "b"
+  },
+  "type": "object",
+  "properties": {
+    "x": {
+      "type": "string",
+      "x-yang": {"type": "leaf", "length": "1..4|2..5"}
+    }
+  }
+}
+"""
+    try:
+        _ = parse_yang_json_module(json_text)
+        raise Error("expected overlapping length to fail validation")
+    except:
+        pass
+
+
+def test_pattern_invert_from_json_emits_modifier() raises:
+    var json_text = """
+{
+  "x-yang": {
+    "module": "invpat",
+    "yang-version": "1.1",
+    "namespace": "urn:invpat",
+    "prefix": "i"
+  },
+  "type": "object",
+  "properties": {
+    "x": {
+      "type": "string",
+      "x-yang": {"type": "leaf", "pattern": "[0-9]+", "patternInvert": true}
+    }
+  }
+}
+"""
+    var tree = parse_yang_json(json_text)
+    var formatted = tree.format(0)
+    if "invert-match" not in formatted:
+        raise Error("expected modifier invert-match in emitted YANG tree")
+
+
 def main() raises:
     test_yang_json_raw_construct_matches_yang_text()
     test_yang_json_module_indexes_supported_subset()
+    test_overlapping_length_in_xyang_rejected()
+    test_pattern_invert_from_json_emits_modifier()

@@ -4,6 +4,11 @@ from std.collections import Dict
 from std.memory import ArcPointer
 
 from xyang.json.parser import JsonValue, json_get
+from xyang.validator.pattern_match import (
+    unicode_scalar_count,
+    yang_string_matches_xsd_subset,
+)
+from xyang.yang.arguments import length_allows_scalar_count
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.yang.spec import (
@@ -72,6 +77,28 @@ def validate_leaf_value(
             _raise_json_path_error(
                 json_path, value.source_line, path, ": expected string"
             )
+        var segs = module.leaf_length_segments(leaf)
+        if len(segs) > 0:
+            var ulen = unicode_scalar_count(value.text)
+            if not length_allows_scalar_count(segs, ulen):
+                _raise_json_path_error(
+                    json_path,
+                    value.source_line,
+                    path,
+                    ": string length outside `length` restriction",
+                )
+        var pats = module.leaf_pattern_specs(leaf)
+        for i in range(len(pats)):
+            var ok = yang_string_matches_xsd_subset(pats[i].regex, value.text)
+            if pats[i].invert:
+                ok = not ok
+            if not ok:
+                _raise_json_path_error(
+                    json_path,
+                    value.source_line,
+                    path,
+                    ": string does not match `pattern` restriction",
+                )
         if value.text.byte_length() == 0 and module.find_child(leaf, `must`):
             _raise_json_path_error(
                 json_path,

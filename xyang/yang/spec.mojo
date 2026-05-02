@@ -5,8 +5,12 @@ from std.memory import UnsafePointer
 from xyang.yang.arguments import (
     ArgumentValidator,
     validate_yang_expression,
+    validate_yang_fraction_digits,
     validate_yang_identifier,
+    validate_yang_length,
+    validate_yang_modifier,
     validate_yang_path,
+    validate_yang_pattern_arg,
     validate_yang_qname,
     validate_yang_range,
     validate_yang_revision_date,
@@ -55,8 +59,15 @@ comptime `typedef`: Kw = 33
 comptime `uses`: Kw = 34
 comptime `when`: Kw = 35
 comptime `yang-version`: Kw = 36
+comptime `length`: Kw = 37
+comptime `pattern`: Kw = 38
+comptime `modifier`: Kw = 39
+comptime `fraction-digits`: Kw = 40
+comptime `enum`: Kw = 41
+comptime `bit`: Kw = 42
+comptime `base`: Kw = 43
 
-comptime KEYWORD_COUNT: Int = 37
+comptime KEYWORD_COUNT: Int = 44
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "<INVALID>",
     "anydata",
@@ -95,6 +106,13 @@ comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "uses",
     "when",
     "yang-version",
+    "length",
+    "pattern",
+    "modifier",
+    "fraction-digits",
+    "enum",
+    "bit",
+    "base",
 ]
 
 comptime Cardinality = UInt8
@@ -283,9 +301,35 @@ comptime LEAF_SPEC = YangConstructSpec(
 comptime TYPE_SPEC = YangConstructSpec(
     `type`,
     validate_yang_type_name,
-    fields[2](
+    fields[9](
         (`path`, `0..1`),
         (`range-stmt`, `0..1`),
+        (`length`, `0..1`),
+        (`pattern`, `0..n`),
+        (`fraction-digits`, `0..1`),
+        (`enum`, `0..n`),
+        (`bit`, `0..n`),
+        (`type`, `0..n`),
+        (`base`, `0..n`),
+    ),
+)
+comptime LENGTH_STMT_SPEC = YangConstructSpec(
+    `length`,
+    validate_yang_length,
+    fields[3](
+        (`description`, `0..1`),
+        (`error-message`, `0..1`),
+        (`reference`, `0..1`),
+    ),
+)
+comptime PATTERN_STMT_SPEC = YangConstructSpec(
+    `pattern`,
+    validate_yang_pattern_arg,
+    fields[4](
+        (`description`, `0..1`),
+        (`error-message`, `0..1`),
+        (`reference`, `0..1`),
+        (`modifier`, `0..1`),
     ),
 )
 comptime GROUPING_SPEC = YangConstructSpec(
@@ -360,6 +404,15 @@ def build_spec_table() -> YangConstructSpec.Table:
     specs[Int(`reference`)] = scalar_spec(`reference`, validate_yang_string)
     specs[Int(`rpc`)] = scalar_spec(`rpc`, validate_yang_identifier)
     specs[Int(`typedef`)] = scalar_spec(`typedef`, validate_yang_identifier)
+    specs[Int(`length`)] = LENGTH_STMT_SPEC
+    specs[Int(`pattern`)] = PATTERN_STMT_SPEC
+    specs[Int(`modifier`)] = scalar_spec(`modifier`, validate_yang_modifier)
+    specs[Int(`fraction-digits`)] = scalar_spec(
+        `fraction-digits`, validate_yang_fraction_digits
+    )
+    specs[Int(`enum`)] = scalar_spec(`enum`, validate_yang_identifier)
+    specs[Int(`bit`)] = scalar_spec(`bit`, validate_yang_identifier)
+    specs[Int(`base`)] = scalar_spec(`base`, validate_yang_qname)
     return specs
 
 

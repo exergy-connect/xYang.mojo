@@ -1,13 +1,21 @@
 ## Parsed YANG module: root tree plus header fields and indexes.
 
-from std.collections import Dict
+from std.collections import Dict, List
 from std.iter import Iterable, Iterator
 from std.memory import ArcPointer
 
 from .construct import YangConstruct
 from .lexer import AstLexer
 from .parser import parse_module
-from ..arguments import RangeBounds, try_parse_range_bounds
+from ..arguments import (
+    LengthSegment,
+    RangeBounds,
+    YangPatternSpec,
+    _strip_spaces,
+    length_allows_scalar_count,
+    try_parse_length_segments,
+    try_parse_range_bounds,
+)
 from ..spec import Kw
 
 
@@ -329,6 +337,46 @@ struct YangModule(Movable & Iterable):
         if text.byte_length() == 0:
             return Optional[RangeBounds]()
         return try_parse_range_bounds(text)
+
+    def leaf_length_argument(read self, read leaf: YangConstruct) -> String:
+        from ..spec import `length`, `type`
+
+        var ty = self.find_child(leaf, `type`)
+        if not ty:
+            return ""
+        var ln = self.find_child(ty.value()[], `length`)
+        if not ln or not ln.value()[].argument:
+            return ""
+        return ln.value()[].argument.value()
+
+    def leaf_length_segments(
+        read self, read leaf: YangConstruct
+    ) raises -> List[LengthSegment]:
+        var text = self.leaf_length_argument(leaf)
+        if text.byte_length() == 0:
+            return List[LengthSegment]()
+        return try_parse_length_segments(text, 0)
+
+    def leaf_pattern_specs(
+        read self, read leaf: YangConstruct
+    ) raises -> List[YangPatternSpec]:
+        from ..spec import `modifier`, `pattern`, `type`
+
+        var out = List[YangPatternSpec]()
+        var ty = self.find_child(leaf, `type`)
+        if not ty:
+            return out^
+        for ch in ty.value()[].children:
+            if ch[].spec != `pattern` or not ch[].argument:
+                continue
+            var inv = False
+            for sub in ch[].children:
+                if sub[].spec == `modifier` and sub[].argument:
+                    if _strip_spaces(sub[].argument.value()) == "invert-match":
+                        inv = True
+                    break
+            out.append(YangPatternSpec(ch[].argument.value(), inv))
+        return out^
 
     def leafref_path(read self, read leaf: YangConstruct) -> String:
         from ..spec import `path`, `type`

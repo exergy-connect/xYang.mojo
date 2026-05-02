@@ -9,6 +9,12 @@
 ## **Input shape (conventions)**
 ## - Root JSON object must carry an **`x-yang`** object with module fields
 ##   (`module`, `namespace`, `prefix`, …).
+## - For string leaves, **`x-yang.pattern`** and **`x-yang.patternInvert`** map to
+##   `pattern` and `modifier invert-match` (RFC 7950 §9.4.5–9.4.6).
+## - **`x-yang.length`**: use only for RFC `length-arg` that JSON Schema cannot
+##   express (`|`, `min` / `max`, etc.). Plain bounds belong in **`minLength`** /
+##   **`maxLength`**; if those are set, they define `length` and a *simple*
+##   `x-yang.length` (a single integer or `digits..digits`) is ignored.
 ## - Each schema object that becomes a data node (leaf, container, …) must
 ##   have its own **`x-yang`** object with a **`type`** field naming the YANG
 ##   statement kind (`leaf`, `list`, `container`, …). Objects without `x-yang`
@@ -31,6 +37,7 @@
 from std.memory import ArcPointer
 
 import xyang.json.parser as json_parser
+from xyang.yang.arguments import _strip_spaces
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.yang.spec import MODULE_SPEC, build_spec_table, validate_construct
@@ -106,6 +113,44 @@ def _json_scalar(
     ):
         return Optional[String](json_parser.json_scalar_text(v))
     return Optional[String]()
+
+
+def _ascii_digits_only(read s: String) -> Bool:
+    if s.byte_length() == 0:
+        return False
+    var b = s.as_bytes()
+    for i in range(len(b)):
+        var c = Int(b[i])
+        if c < ord("0") or c > ord("9"):
+            return False
+    return True
+
+
+def _yang_length_requires_xyang(read expr: String) -> Bool:
+    ## True when `length-arg` cannot be represented with only JSON Schema
+    ## `minLength` / `maxLength` (RFC 7950 §9.4.4).
+    var s = _strip_spaces(expr)
+    if s.byte_length() == 0:
+        return False
+    if s.find("|") >= 0:
+        return True
+    if s.find("..max") >= 0:
+        return True
+    if s.startswith("min.."):
+        return True
+    if s.find("..min") >= 0:
+        return True
+    if s == "min" or s == "max":
+        return True
+    var parts = s.split("..")
+    if len(parts) == 1:
+        return not _ascii_digits_only(String(parts[0]))
+    if len(parts) == 2:
+        return not (
+            _ascii_digits_only(String(parts[0]))
+            and _ascii_digits_only(String(parts[1]))
+        )
+    return True
 
 
 def _strip_json_schema_anchors(pattern: String) -> String:
@@ -293,15 +338,44 @@ def _type_from_schema(
     var t = _stmt("type", "string")
     var min_len = _json_scalar(schema, "minLength")
     var max_len = _json_scalar(schema, "maxLength")
-    if min_len and max_len:
-        _append_arg(t, "length", min_len.value() + ".." + max_len.value())
-    elif min_len:
-        _append_arg(t, "length", min_len.value() + "..")
-    elif max_len:
-        _append_arg(t, "length", "0.." + max_len.value())
-    var pattern = _json_scalar(schema, "pattern")
-    if pattern:
-        _append_arg(t, "pattern", _strip_json_schema_anchors(pattern.value()))
+    var has_json_len = min_len or max_len
+
+    var xy_len = String()
+    if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+        xy_len = _json_string(xy.value()[], "length")
+
+    var used_complex_xy_len = False
+    if xy_len.byte_length() > 0 and _yang_length_requires_xyang(xy_len):
+        _append_arg(t, "length", xy_len)
+        used_complex_xy_len = True
+    elif xy_len.byte_length() > 0 and not has_json_len:
+        _append_arg(t, "length", xy_len)
+
+    if not used_complex_xy_len:
+        if min_len and max_len:
+            _append_arg(t, "length", min_len.value() + ".." + max_len.value())
+        elif min_len:
+            _append_arg(t, "length", min_len.value() + "..max")
+        elif max_len:
+            _append_arg(t, "length", "0.." + max_len.value())
+    var pat_invert = False
+    var xy_pat = String()
+    if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+        pat_invert = _json_bool(xy.value()[], "patternInvert")
+        xy_pat = _json_string(xy.value()[], "pattern")
+    var json_pat = _json_scalar(schema, "pattern")
+    var pat_text = String()
+    if xy_pat.byte_length() > 0:
+        pat_text = _strip_json_schema_anchors(xy_pat)
+    elif json_pat:
+        pat_text = _strip_json_schema_anchors(json_pat.value())
+    if pat_text.byte_length() > 0:
+        if pat_invert:
+            var pnode = _stmt("pattern", pat_text)
+            _append_arg(pnode, "modifier", "invert-match")
+            _append_stmt(t, pnode^)
+        else:
+            _append_arg(t, "pattern", pat_text)
     return t^
 
 
