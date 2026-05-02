@@ -5,13 +5,9 @@
 ##
 ## `ThermostatApp` / `ThermostatSystem` are checked with **reflection** against the
 ## embedded schema: `Yang.comptime_validate` walks **`YangModule`** (effective leaves)
-## and `reflect[Self]()` field names (see `examples/trait_self.mojo`), then runs type
-## checks; each
-## `YangLeaf` parent is `Parent.yang_container_name()` (e.g.
-## `YangLeaf[Self, …]` on `ThermostatSystem`); leaf names, builtin marker
-## (`YangBuiltinString` / `YangBuiltinBool` → `yang_type_keyword` + `comptime Value`),
-## and optional **`MaxStringLength` / `NoStringConstraints`**, must match the indexed
-## module (e.g. string `maxLength` → `length` hi).
+## and `reflect[Self]()` field names/types (see `examples/trait_self.mojo`). Each
+## `YangLeaf` field gets its YANG leaf name from the Mojo member variable name;
+## builtins and length caps must match the module.
 ##
 ##   pixi run package
 ##   export MODULAR_MOJO_IMPORT_PATH="$PWD/.pixi/envs/default/lib/mojo"
@@ -116,14 +112,6 @@ struct YangBuiltinBool(
 
 trait LeafModelSpec:
     @staticmethod
-    def parent_container_str() -> String:
-        ...
-
-    @staticmethod
-    def leaf_name_str() -> String:
-        ...
-
-    @staticmethod
     def yang_type_str() -> String:
         ...
 
@@ -140,86 +128,17 @@ trait Yang:
     def yang_container_name() -> String:
         ...
 
-    ## Optional follow-up (e.g. `_validate_leaf_model_vs_module` per `YangLeaf` field);
-    ## default is a no-op; runs after the **`reflect[Self]()`**-driven module walk below.
-    @staticmethod
-    def _yang_validate_leaf_field_types(read module: YangModule) raises:
-        return
-
-    ## Default: walk **`YangModule`** for this **`Yang`** type using **`reflect[Self]()`**
-    ## for field metadata (`examples/trait_self.mojo`). **`Self` as a generic type
-    ## argument** (e.g. `Foo[Self]`) still refers to the trait here; **`reflect[Self]`**
-    ## resolves to the implementation struct.**
     @staticmethod
     def comptime_validate(read module: YangModule) raises:
-        comptime info = reflect[Self]()
-        comptime _nfc = info.field_count()
-        var want = Self.yang_container_name()
-        var c = module.top_container(want)
-        if not c:
-            raise Error(
-                "reflection: Yang subtree missing top container `" + want + "`"
-            )
-        var schema_leaves = _effective_leaf_names_under(module, c.value()[])
-        if len(schema_leaves) != _nfc:
-            raise Error(
-                "reflection: container `"
-                + want
-                + "` has "
-                + String(len(schema_leaves))
-                + " effective leaf(es) vs "
-                + String(_nfc)
-                + " model field(s)"
-            )
-        for i in range(len(schema_leaves)):
-            var ln = schema_leaves[i]
-            var in_model = False
-            for j in range(_nfc):
-                if info.field_names()[j] == ln:
-                    in_model = True
-                    break
-            if not in_model:
-                raise Error(
-                    "reflection: schema leaf `"
-                    + want
-                    + "/"
-                    + ln
-                    + "` has no matching Mojo field"
-                )
-        for j in range(_nfc):
-            var fname = info.field_names()[j]
-            var in_schema = False
-            for i in range(len(schema_leaves)):
-                if schema_leaves[i] == fname:
-                    in_schema = True
-                    break
-            if not in_schema:
-                raise Error(
-                    "reflection: Mojo field `"
-                    + fname
-                    + "` missing under YANG `"
-                    + want
-                    + "`"
-                )
-        Self._yang_validate_leaf_field_types(module)
+        _validate_yang_subtree[Self](module)
 
 
 @fieldwise_init
 struct YangLeaf[
-    Parent: Movable & ImplicitlyDestructible & Yang,
-    leaf_name: StringLiteral,
     Builtin: YangBuiltinDescriptor,
     Constraints: StringLengthCap,
 ](ImplicitlyDestructible, LeafModelSpec, Movable):
     var value: Self.Builtin.Value
-
-    @staticmethod
-    def parent_container_str() -> String:
-        return Self.Parent.yang_container_name()
-
-    @staticmethod
-    def leaf_name_str() -> String:
-        return String(Self.leaf_name)
 
     @staticmethod
     def yang_type_str() -> String:
@@ -228,14 +147,6 @@ struct YangLeaf[
     @staticmethod
     def model_max_string_length() -> Int:
         return Self.Constraints.model_max_string_length()
-
-    @staticmethod
-    def yang_container() -> String:
-        return Self.Parent.yang_container_name()
-
-    @staticmethod
-    def yang_leaf() -> String:
-        return String(Self.leaf_name)
 
 
 @fieldwise_init
@@ -258,25 +169,10 @@ struct ThermostatSystem(ImplicitlyDestructible, Movable, Yang):
     def yang_container_name() -> String:
         return "system"
 
-    @staticmethod
-    def _yang_validate_leaf_field_types(read module: YangModule) raises:
-        ## `Yang.comptime_validate` default already walked `YangModule` vs `reflect[Self]()`.
-        _validate_leaf_fields_vs_module_thermostat(module)
-
-    ## `leaf hostname { type string; … }` with JSON `maxLength` 253
-    var hostname: YangLeaf[
-        Self,
-        "hostname",
-        YangBuiltinString,
-        MaxStringLength[253],
-    ]
+    ## `leaf hostname { type string; … }`
+    var hostname: YangLeaf[YangBuiltinString, MaxStringLength[253]]
     ## `leaf enabled { type boolean; … }`
-    var enabled: YangLeaf[
-        Self,
-        "enabled",
-        YangBuiltinBool,
-        NoStringConstraints,
-    ]
+    var enabled: YangLeaf[YangBuiltinBool, NoStringConstraints]
 
 
 @fieldwise_init
@@ -348,12 +244,88 @@ def _schema_string_max_length(
     return Int(hi)
 
 
+def _validate_yang_subtree[T: Yang](read module: YangModule) raises:
+    comptime info = reflect[T]()
+    comptime _nfc = info.field_count()
+    var want = T.yang_container_name()
+    var c = module.top_container(want)
+    if not c:
+        raise Error(
+            "reflection: Yang subtree missing top container `" + want + "`"
+        )
+    var schema_leaves = _effective_leaf_names_under(module, c.value()[])
+    if len(schema_leaves) != _nfc:
+        raise Error(
+            "reflection: container `"
+            + want
+            + "` has "
+            + String(len(schema_leaves))
+            + " effective leaf(es) vs "
+            + String(_nfc)
+            + " model field(s)"
+        )
+    for i in range(len(schema_leaves)):
+        var ln = schema_leaves[i]
+        var in_model = False
+        for j in range(_nfc):
+            if info.field_names()[j] == ln:
+                in_model = True
+                break
+        if not in_model:
+            raise Error(
+                "reflection: schema leaf `"
+                + want
+                + "/"
+                + ln
+                + "` has no matching Mojo field"
+            )
+    comptime for j in range(_nfc):
+        var fname = String(info.field_names()[j])
+        var in_schema = False
+        for i in range(len(schema_leaves)):
+            if schema_leaves[i] == fname:
+                in_schema = True
+                break
+        if not in_schema:
+            raise Error(
+                "reflection: Mojo field `"
+                + fname
+                + "` missing under YANG `"
+                + want
+                + "`"
+            )
+        _validate_leaf_field_type_vs_module[info.field_types()[j]](
+            module, want, fname
+        )
+
+
+def _validate_leaf_field_type_vs_module[
+    FT: AnyType,
+](read module: YangModule, read parent: String, read leaf: String) raises:
+    ## Thin wrapper for `_validate_leaf_model_vs_module[FT]`.
+    _validate_leaf_model_vs_module[FT](module, parent, leaf)
+
+
 def _validate_leaf_model_vs_module[
-    FT: LeafModelSpec
-](read module: YangModule) raises:
-    var yt = FT.yang_type_str()
-    var parent = FT.parent_container_str()
-    var leaf = FT.leaf_name_str()
+    FT: AnyType
+](read module: YangModule, read parent: String, read leaf: String) raises:
+    var reflected_ty = reflect[FT]().name()
+    var string_marker = reflect[YangBuiltinString]().name()
+    var bool_marker = reflect[YangBuiltinBool]().name()
+    var yt = "string"
+    if string_marker in reflected_ty:
+        pass
+    elif bool_marker in reflected_ty:
+        yt = "boolean"
+    else:
+        raise Error(
+            "reflection: field `"
+            + parent
+            + "/"
+            + leaf
+            + "` is not a recognized YangLeaf builtin: "
+            + reflected_ty
+        )
     var c = module.top_container(parent)
     if not c:
         raise Error("reflection: missing container `" + parent + "`")
@@ -373,22 +345,24 @@ def _validate_leaf_model_vs_module[
             + schema_ty
             + "`"
         )
-    var model_max = FT.model_max_string_length()
     if yt == "string":
         var schema_max = _schema_string_max_length(module, parent, leaf)
-        if model_max != schema_max:
+        var want_constraint = "MaxStringLength[" + String(schema_max) + "]"
+        if schema_max == -1:
+            want_constraint = reflect[NoStringConstraints]().name()
+        if want_constraint not in reflected_ty:
             raise Error(
                 "reflection: leaf `"
                 + parent
                 + "/"
                 + leaf
-                + "` model max string length "
-                + String(model_max)
-                + " != schema length upper bound "
+                + "` model constraints `"
+                + reflected_ty
+                + "` do not match schema length upper bound "
                 + String(schema_max)
             )
     else:
-        if model_max != -1:
+        if reflect[NoStringConstraints]().name() not in reflected_ty:
             raise Error(
                 "reflection: non-string leaf `"
                 + parent
@@ -424,27 +398,6 @@ def _effective_leaf_names_under(
                 seen[n] = True
                 out.append(n)
     return out^
-
-
-def _validate_leaf_fields_vs_module_thermostat(read module: YangModule) raises:
-    ## `struct_field_types` is not usable as `LeafModelSpec` here (typed `AnyType`);
-    ## keep these `YangLeaf` spellings aligned with `ThermostatSystem`’s fields.
-    _validate_leaf_model_vs_module[
-        YangLeaf[
-            ThermostatSystem,
-            "hostname",
-            YangBuiltinString,
-            MaxStringLength[253],
-        ]
-    ](module)
-    _validate_leaf_model_vs_module[
-        YangLeaf[
-            ThermostatSystem,
-            "enabled",
-            YangBuiltinBool,
-            NoStringConstraints,
-        ]
-    ](module)
 
 
 def _validate_mojo_model_vs_yang(read module: YangModule) raises:
@@ -499,27 +452,14 @@ def main() raises:
         "Reflection: Mojo model matches schema for `"
         + YangContainer[ThermostatSystem].yang_name()
         + "` leaves `"
-        + YangLeaf[
-            ThermostatSystem,
-            "hostname",
-            YangBuiltinString,
-            MaxStringLength[253],
-        ].leaf_name_str()
+        + String(reflect[ThermostatSystem]().field_names()[0])
         + "` (string, max "
         + String(
             YangLeaf[
-                ThermostatSystem,
-                "hostname",
-                YangBuiltinString,
-                MaxStringLength[253],
+                YangBuiltinString, MaxStringLength[253]
             ].model_max_string_length()
         )
         + ") and `"
-        + YangLeaf[
-            ThermostatSystem,
-            "enabled",
-            YangBuiltinBool,
-            NoStringConstraints,
-        ].leaf_name_str()
+        + String(reflect[ThermostatSystem]().field_names()[1])
         + "` (boolean)."
     )
