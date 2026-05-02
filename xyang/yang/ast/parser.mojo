@@ -118,7 +118,7 @@ def parse_argument[
     while True:
         var tok = lexer.next_token()
         if tok.type == AstToken.SEMICOLON or tok.type == AstToken.LBRACE:
-            statement.argument = Optional[String](result^)
+            statement.set_raw_argument(result^)
             return tok.type
         if tok.type == AstToken.EOF or tok.type == AstToken.RBRACE:
             raise Error(
@@ -129,5 +129,4 @@ def parse_argument[
         if tok.type != AstToken.PLUS:
             result += " "
             result += tok.text(lexer.input, strip_quotes=True)
-
 

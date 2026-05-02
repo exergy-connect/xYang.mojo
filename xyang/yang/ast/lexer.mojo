@@ -88,7 +88,7 @@ struct AstToken(Copyable):
     def text_slice[
         origin: ImmutOrigin
     ](
-        self, source: ByteView[origin], strip_quotes: Bool = False
+        self, source: ByteView[origin], strip_quotes: Bool = True
     ) -> StringSlice[origin]:
         var start = self.start
         var end = self.start + self.length
@@ -99,7 +99,7 @@ struct AstToken(Copyable):
 
     def text[
         origin: ImmutOrigin
-    ](self, source: ByteView[origin], strip_quotes: Bool = False) -> String:
+    ](self, source: ByteView[origin], strip_quotes: Bool = True) -> String:
         return String(self.text_slice(source, strip_quotes))
 
     def __str__(ref self) -> String:

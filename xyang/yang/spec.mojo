@@ -2,7 +2,7 @@
 
 from std.memory import UnsafePointer
 
-from xyang.yang.arguments import (
+from xyang.yang.argument_validators import (
     ArgumentValidator,
     validate_yang_expression,
     validate_yang_fraction_digits,
@@ -19,53 +19,52 @@ from xyang.yang.arguments import (
     validate_yang_version,
 )
 from xyang.yang.ast.construct import YangConstruct
+from xyang.yang.keyword import Keyword, `<INVALID>`
 
 
-comptime Kw = UInt8
-comptime `<INVALID>`: Kw = 0
-comptime `anydata`: Kw = 1
-comptime `anyxml`: Kw = 2
-comptime `augment`: Kw = 3
-comptime `choice`: Kw = 4
-comptime `contact`: Kw = 5
-comptime `container`: Kw = 6
-comptime `default`: Kw = 7
-comptime `description`: Kw = 8
-comptime `deviation`: Kw = 9
-comptime `error-message`: Kw = 10
-comptime `extension`: Kw = 11
-comptime `feature`: Kw = 12
-comptime `grouping`: Kw = 13
-comptime `identity`: Kw = 14
-comptime `import`: Kw = 15
-comptime `include`: Kw = 16
-comptime `key`: Kw = 17
-comptime `leaf`: Kw = 18
-comptime `leaf-list`: Kw = 19
-comptime `list`: Kw = 20
-comptime `module`: Kw = 21
-comptime `must`: Kw = 22
-comptime `namespace`: Kw = 23
-comptime `notification`: Kw = 24
-comptime `organization`: Kw = 25
-comptime `path`: Kw = 26
-comptime `prefix`: Kw = 27
-comptime `range-stmt`: Kw = 28
-comptime `reference`: Kw = 29
-comptime `revision`: Kw = 30
-comptime `rpc`: Kw = 31
-comptime `type`: Kw = 32
-comptime `typedef`: Kw = 33
-comptime `uses`: Kw = 34
-comptime `when`: Kw = 35
-comptime `yang-version`: Kw = 36
-comptime `length`: Kw = 37
-comptime `pattern`: Kw = 38
-comptime `modifier`: Kw = 39
-comptime `fraction-digits`: Kw = 40
-comptime `enum`: Kw = 41
-comptime `bit`: Kw = 42
-comptime `base`: Kw = 43
+comptime `anydata`: Keyword = 1
+comptime `anyxml`: Keyword = 2
+comptime `augment`: Keyword = 3
+comptime `choice`: Keyword = 4
+comptime `contact`: Keyword = 5
+comptime `container`: Keyword = 6
+comptime `default`: Keyword = 7
+comptime `description`: Keyword = 8
+comptime `deviation`: Keyword = 9
+comptime `error-message`: Keyword = 10
+comptime `extension`: Keyword = 11
+comptime `feature`: Keyword = 12
+comptime `grouping`: Keyword = 13
+comptime `identity`: Keyword = 14
+comptime `import`: Keyword = 15
+comptime `include`: Keyword = 16
+comptime `key`: Keyword = 17
+comptime `leaf`: Keyword = 18
+comptime `leaf-list`: Keyword = 19
+comptime `list`: Keyword = 20
+comptime `module`: Keyword = 21
+comptime `must`: Keyword = 22
+comptime `namespace`: Keyword = 23
+comptime `notification`: Keyword = 24
+comptime `organization`: Keyword = 25
+comptime `path`: Keyword = 26
+comptime `prefix`: Keyword = 27
+comptime `range-stmt`: Keyword = 28
+comptime `reference`: Keyword = 29
+comptime `revision`: Keyword = 30
+comptime `rpc`: Keyword = 31
+comptime `type`: Keyword = 32
+comptime `typedef`: Keyword = 33
+comptime `uses`: Keyword = 34
+comptime `when`: Keyword = 35
+comptime `yang-version`: Keyword = 36
+comptime `length`: Keyword = 37
+comptime `pattern`: Keyword = 38
+comptime `modifier`: Keyword = 39
+comptime `fraction-digits`: Keyword = 40
+comptime `enum`: Keyword = 41
+comptime `bit`: Keyword = 42
+comptime `base`: Keyword = 43
 
 comptime KEYWORD_COUNT: Int = 44
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
@@ -123,14 +122,14 @@ comptime `0..n`: Cardinality = 3
 comptime `1..n`: Cardinality = 4
 
 
-def keyword_spelling(idx: Kw) -> String:
+def keyword_spelling(idx: Keyword) -> String:
     return SPELLING[Int(idx)]
 
 
-def keyword_id(name: String, line: Int = 0) raises -> Kw:
+def keyword_id(name: String, line: Int = 0) raises -> Keyword:
     for i in range(KEYWORD_COUNT):
         if name == SPELLING[i]:
-            return Kw(i)
+            return Keyword(i)
     raise Error(
         ("line " + String(line) + ": " if line > 0 else "")
         + "Unknown YANG keyword `"
@@ -181,7 +180,7 @@ struct FieldRule(Copyable, ImplicitlyCopyable, Movable):
 
 
 comptime RuleTable = InlineArray[FieldRule, KEYWORD_COUNT]
-comptime FIELD = Tuple[Kw, Cardinality]
+comptime FIELD = Tuple[Keyword, Cardinality]
 
 
 def fields[n: Int](*fieldlist: FIELD) -> RuleTable:
@@ -199,14 +198,14 @@ struct YangConstructSpec(Copyable, ImplicitlyCopyable, Movable):
         UnsafePointer[Self.Table, ImmutAnyOrigin],
     ) raises thin -> None
 
-    var parent: Kw
+    var parent: Keyword
     var argument_type: ArgumentValidator
     var allowed_fields: RuleTable
     var validate: Self.Validate
 
     def __init__(
         out self,
-        parent: Kw,
+        parent: Keyword,
         argument_type: ArgumentValidator,
         allowed_fields: RuleTable,
         validate: Self.Validate = validate_construct_callback,
@@ -218,7 +217,7 @@ struct YangConstructSpec(Copyable, ImplicitlyCopyable, Movable):
 
 
 def scalar_spec(
-    parent: Kw, argument_type: ArgumentValidator
+    parent: Keyword, argument_type: ArgumentValidator
 ) -> YangConstructSpec:
     return YangConstructSpec(
         parent,
@@ -444,14 +443,14 @@ def validate_construct(
             + node.keyword
             + "`"
         )
-    if not node.argument:
+    if not node.has_argument():
         raise Error(
             ("line " + String(node.line) + ": " if node.line > 0 else "")
             + "Expected argument for `"
             + expected_name
             + "`"
         )
-    spec.argument_type(node.keyword, node.argument.value(), node.line)
+    spec.argument_type(node)
 
     var counts = InlineArray[Int, KEYWORD_COUNT](fill=0)
     for child in node.children:
@@ -473,7 +472,7 @@ def validate_construct(
 
     for i in range(KEYWORD_COUNT):
         check_cardinality(
-            keyword_spelling(Kw(i)),
+            keyword_spelling(Keyword(i)),
             spec.allowed_fields[i].cardinality,
             counts[i],
             node.line,
@@ -515,14 +514,14 @@ def validate_scalar_construct_callback(
             + node.keyword
             + "`"
         )
-    if not node.argument:
+    if not node.has_argument():
         raise Error(
             ("line " + String(node.line) + ": " if node.line > 0 else "")
             + "Expected argument for `"
             + expected_name
             + "`"
         )
-    spec_ptr[].argument_type(node.keyword, node.argument.value(), node.line)
+    spec_ptr[].argument_type(node)
     for child in node.children:
         raise Error(
             ("line " + String(child[].line) + ": " if child[].line > 0 else "")

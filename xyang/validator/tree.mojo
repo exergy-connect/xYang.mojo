@@ -261,8 +261,8 @@ def validate_list_against_construct(
         validate_object_against_construct(
             entry, schema, module, entry_path, json_path, schema_path, cache
         )
-        if key_stmt and key_stmt.value()[].argument:
-            var key = key_stmt.value()[].argument.value()
+        if key_stmt and key_stmt.value()[].has_argument():
+            var key = key_stmt.value()[].argument_text()
             if not json_get(entry, key):
                 _raise_json_path_error(
                     json_path,

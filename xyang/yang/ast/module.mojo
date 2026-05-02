@@ -16,7 +16,7 @@ from ..arguments import (
     try_parse_length_segments,
     try_parse_range_bounds,
 )
-from ..spec import Kw
+from ..keyword import Keyword
 
 
 comptime Arc = ArcPointer
@@ -65,7 +65,7 @@ struct YangModule(Movable & Iterable):
     ]: Iterator = TopContainerIterator
 
     var root: Optional[Arc[YangConstruct]]
-    var fields: Dict[Kw, String]
+    var fields: Dict[Keyword, String]
     var revisions: List[String]
     var groupings: ConstructMap
     var typedefs: ConstructMap
@@ -73,7 +73,7 @@ struct YangModule(Movable & Iterable):
 
     def __init__(out self):
         self.root = Optional[Arc[YangConstruct]]()
-        self.fields = Dict[Kw, String]()
+        self.fields = Dict[Keyword, String]()
         self.revisions = List[String]()
         self.groupings = ConstructMap()
         self.typedefs = ConstructMap()
@@ -95,10 +95,10 @@ struct YangModule(Movable & Iterable):
     ) raises:
         from ..spec import `container`, `grouping`, `revision`
 
-        self.fields[tree.spec] = tree.argument.value()
+        self.fields[tree.spec] = tree.argument_text()
         for child in tree.children:
             ref node = child[]
-            var arg = node.argument.value()
+            var arg = node.argument_text()
             var kw = node.spec
             if kw == `revision`:
                 self.revisions.append(arg)
@@ -114,7 +114,7 @@ struct YangModule(Movable & Iterable):
             raise Error("YANG module has no parsed root construct")
         return self.root.value().copy()
 
-    def field(read self, kw: Kw) raises -> Optional[String]:
+    def field(read self, kw: Keyword) raises -> Optional[String]:
         if kw not in self.fields:
             return Optional[String]()
         return Optional[String](self.fields[kw])
@@ -187,7 +187,7 @@ struct YangModule(Movable & Iterable):
         return Optional[Arc[YangConstruct]](self.top_containers[name].copy())
 
     def find_child(
-        read self, read node: YangConstruct, keyword: Kw
+        read self, read node: YangConstruct, keyword: Keyword
     ) -> Optional[Arc[YangConstruct]]:
         for child in node.children:
             if child[].spec == keyword:
@@ -205,16 +205,16 @@ struct YangModule(Movable & Iterable):
         read self, read parent: YangConstruct, name: String
     ) raises -> Bool:
         for child in parent.children:
-            if child[].keyword != "uses" or not child[].argument:
+            if child[].keyword != "uses" or not child[].has_argument():
                 continue
-            var grouping = self.find_grouping(child[].argument.value())
+            var grouping = self.find_grouping(child[].argument_text())
             if not grouping:
                 continue
             for gchild in grouping.value()[].children:
                 if (
                     gchild[].keyword == "leaf"
-                    and gchild[].argument
-                    and gchild[].argument.value() == name
+                    and gchild[].has_argument()
+                    and gchild[].argument_text() == name
                 ):
                     return True
         return False
@@ -225,14 +225,14 @@ struct YangModule(Movable & Iterable):
         for child in parent.children:
             if (
                 child[].keyword == "leaf"
-                and child[].argument
-                and child[].argument.value() == name
+                and child[].has_argument()
+                and child[].argument_text() == name
             ):
                 return Optional[Arc[YangConstruct]](child.copy())
         for child in parent.children:
-            if child[].keyword != "uses" or not child[].argument:
+            if child[].keyword != "uses" or not child[].has_argument():
                 continue
-            var grouping = self.find_grouping(child[].argument.value())
+            var grouping = self.find_grouping(child[].argument_text())
             if not grouping:
                 continue
             var leaf = self.find_effective_leaf(grouping.value()[], name)
@@ -249,14 +249,14 @@ struct YangModule(Movable & Iterable):
             var kw = child[].spec
             if (
                 (kw == `leaf` or kw == `container` or kw == `list`)
-                and child[].argument
-                and child[].argument.value() == name
+                and child[].has_argument()
+                and child[].argument_text() == name
             ):
                 return Optional[Arc[YangConstruct]](child.copy())
         for child in parent.children:
-            if child[].keyword != "uses" or not child[].argument:
+            if child[].keyword != "uses" or not child[].has_argument():
                 continue
-            var grouping = self.find_grouping(child[].argument.value())
+            var grouping = self.find_grouping(child[].argument_text())
             if not grouping:
                 continue
             var data_child = self.find_effective_data_child(
@@ -282,16 +282,16 @@ struct YangModule(Movable & Iterable):
             var kw = child[].spec
             if (
                 not (kw == `leaf` or kw == `container` or kw == `list`)
-                or not child[].argument
+                or not child[].has_argument()
             ):
                 continue
-            var name = child[].argument.value()
+            var name = child[].argument_text()
             if name not in out:
                 out[name] = child.copy()
         for child in parent.children:
-            if child[].keyword != "uses" or not child[].argument:
+            if child[].keyword != "uses" or not child[].has_argument():
                 continue
-            var grouping = self.find_grouping(child[].argument.value())
+            var grouping = self.find_grouping(child[].argument_text())
             if not grouping:
                 continue
             self._populate_effective_data_children(grouping.value()[], out)
@@ -299,14 +299,14 @@ struct YangModule(Movable & Iterable):
     def find_effective_child(
         read self,
         read parent: YangConstruct,
-        keyword: Kw,
+        keyword: Keyword,
         name: String,
     ) -> Optional[Arc[YangConstruct]]:
         for child in parent.children:
             if (
                 child[].spec == keyword
-                and child[].argument
-                and child[].argument.value() == name
+                and child[].has_argument()
+                and child[].argument_text() == name
             ):
                 return Optional[Arc[YangConstruct]](child.copy())
         return Optional[Arc[YangConstruct]]()
@@ -315,8 +315,8 @@ struct YangModule(Movable & Iterable):
         from ..spec import `type`
 
         var ty = self.find_child(leaf, `type`)
-        if ty and ty.value()[].argument:
-            return ty.value()[].argument.value()
+        if ty and ty.value()[].has_argument():
+            return ty.value()[].argument_text()
         return ""
 
     def leaf_range(read self, read leaf: YangConstruct) -> String:
@@ -326,8 +326,8 @@ struct YangModule(Movable & Iterable):
         if not ty:
             return ""
         var range_stmt = self.find_child(ty.value()[], `range-stmt`)
-        if range_stmt and range_stmt.value()[].argument:
-            return range_stmt.value()[].argument.value()
+        if range_stmt and range_stmt.value()[].has_argument():
+            return range_stmt.value()[].argument_text()
         return ""
 
     def leaf_range_bounds(
@@ -345,9 +345,9 @@ struct YangModule(Movable & Iterable):
         if not ty:
             return ""
         var ln = self.find_child(ty.value()[], `length`)
-        if not ln or not ln.value()[].argument:
+        if not ln or not ln.value()[].has_argument():
             return ""
-        return ln.value()[].argument.value()
+        return ln.value()[].argument_text()
 
     def leaf_length_segments(
         read self, read leaf: YangConstruct
@@ -367,15 +367,15 @@ struct YangModule(Movable & Iterable):
         if not ty:
             return out^
         for ch in ty.value()[].children:
-            if ch[].spec != `pattern` or not ch[].argument:
+            if ch[].spec != `pattern` or not ch[].has_argument():
                 continue
             var inv = False
             for sub in ch[].children:
-                if sub[].spec == `modifier` and sub[].argument:
-                    if _strip_spaces(sub[].argument.value()) == "invert-match":
+                if sub[].spec == `modifier` and sub[].has_argument():
+                    if _strip_spaces(sub[].argument_text()) == "invert-match":
                         inv = True
                     break
-            out.append(YangPatternSpec(ch[].argument.value(), inv))
+            out.append(YangPatternSpec(ch[].argument_text(), inv))
         return out^
 
     def leafref_path(read self, read leaf: YangConstruct) -> String:
@@ -385,6 +385,6 @@ struct YangModule(Movable & Iterable):
         if not ty:
             return ""
         var path_stmt = self.find_child(ty.value()[], `path`)
-        if path_stmt and path_stmt.value()[].argument:
-            return path_stmt.value()[].argument.value()
+        if path_stmt and path_stmt.value()[].has_argument():
+            return path_stmt.value()[].argument_text()
         return ""

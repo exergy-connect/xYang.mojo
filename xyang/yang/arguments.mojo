@@ -3,18 +3,103 @@
 ## Includes RFC 7950 §9.4 (`length`, `pattern`, `modifier`) argument checks.
 
 from std.collections import List
-
-from xyang.yang.identifiers import (
-    is_identifier,
-    is_qname,
-    is_revision_date,
-    is_supported_type_name,
-)
+from std.utils import Variant
 
 
-comptime ArgumentValidator = def(
-    name: String, argument: String, line: Int
-) raises thin -> None
+struct NoArgument(Copyable, ImplicitlyCopyable, Movable):
+    def __init__(out self):
+        pass
+
+
+@fieldwise_init
+struct RawArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct StringArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct IdentifierArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct QNameArgument(Movable):
+    var text: String
+    var prefix: Optional[String]
+    var local_name: String
+
+
+@fieldwise_init
+struct PathArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct XPathExpressionArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct RevisionDateArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct RangeArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct LengthArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct PatternArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct ModifierArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct FractionDigitsArgument(Copyable, ImplicitlyCopyable, Movable):
+    var value: Int
+
+
+@fieldwise_init
+struct TypeNameArgument(Movable):
+    var text: String
+
+
+@fieldwise_init
+struct BoolArgument(Copyable, ImplicitlyCopyable, Movable):
+    var value: Bool
+
+
+comptime YangArgument = Variant[
+    NoArgument,
+    RawArgument,
+    StringArgument,
+    IdentifierArgument,
+    QNameArgument,
+    PathArgument,
+    XPathExpressionArgument,
+    RevisionDateArgument,
+    RangeArgument,
+    LengthArgument,
+    PatternArgument,
+    ModifierArgument,
+    FractionDigitsArgument,
+    TypeNameArgument,
+    BoolArgument,
+]
 
 
 @fieldwise_init
@@ -171,167 +256,3 @@ def try_parse_range_bounds(
     var hi = Int64(atol(String(parts[1]).strip()))
     return Optional[RangeBounds](RangeBounds(lo, hi))
 
-
-def validate_yang_any(name: String, argument: String, line: Int) raises -> None:
-    return
-
-
-def validate_yang_string(
-    name: String, argument: String, line: Int
-) raises -> None:
-    return
-
-
-def validate_yang_identifier(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if not is_identifier(argument):
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected identifier argument"
-        )
-
-
-def validate_yang_qname(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if not is_qname(argument):
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected identifier or prefixed identifier"
-        )
-
-
-def validate_yang_version(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if argument != "1" and argument != "1.1":
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected YANG version 1 or 1.1"
-        )
-
-
-def validate_yang_revision_date(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if not is_revision_date(argument):
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected revision date YYYY-MM-DD"
-        )
-
-
-def validate_yang_range(
-    name: String, argument: String, line: Int
-) raises -> None:
-    var parsed = try_parse_range_bounds(argument)
-    if not parsed:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected basic range expression"
-        )
-
-
-def validate_yang_length(
-    name: String, argument: String, line: Int
-) raises -> None:
-    _ = try_parse_length_segments(argument, line)
-
-
-def validate_yang_pattern_arg(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if _strip_spaces(argument).byte_length() == 0:
-        raise Error(
-            _line_prefix(line)
-            + "`"
-            + name
-            + "` expected non-empty XSD regular expression"
-        )
-
-
-def validate_yang_modifier(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if _strip_spaces(argument) != "invert-match":
-        raise Error(
-            _line_prefix(line)
-            + "`"
-            + name
-            + "` expected argument `invert-match`"
-        )
-
-
-def validate_yang_fraction_digits(
-    name: String, argument: String, line: Int
-) raises -> None:
-    var t = _strip_spaces(argument)
-    if t.byte_length() == 0:
-        raise Error(_line_prefix(line) + "`" + name + "` expected digit string")
-    var n = atol(t)
-    if n < 1 or n > 18:
-        raise Error(
-            _line_prefix(line)
-            + "`"
-            + name
-            + "` must be between 1 and 18 (RFC 7950 §9.3)"
-        )
-
-
-def validate_yang_path(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if argument.byte_length() == 0:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected non-empty path"
-        )
-
-
-def validate_yang_type_name(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if not is_supported_type_name(argument):
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected basic YANG type name"
-        )
-
-
-def validate_yang_expression(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if argument.byte_length() == 0:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected non-empty expression"
-        )
-
-
-def validate_yang_bool(
-    name: String, argument: String, line: Int
-) raises -> None:
-    if argument != "true" and argument != "false":
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` expected boolean argument"
-        )

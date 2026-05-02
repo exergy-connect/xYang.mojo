@@ -64,7 +64,7 @@ def _stmt(
 ) -> YangConstruct:
     var node = YangConstruct(keyword, line)
     if argument.byte_length() > 0:
-        node.argument = Optional[String](argument)
+        node.set_raw_argument(argument)
     return node^
 
 
