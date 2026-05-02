@@ -1,8 +1,12 @@
-from std.testing import assert_equal
+from std.testing import assert_equal, assert_true
 
 from xyang.json import parse_yang_json, parse_yang_json_module
+from xyang.yang.argument_validators import validate_yang_path
+from xyang.yang.arguments import PathArgument
 from xyang.yang.ast.lexer import AstLexer
+from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.parser import parse_module
+from xyang.yang.path import parse_yang_path
 
 
 def test_yang_json_raw_construct_matches_yang_text() raises:
@@ -170,8 +174,47 @@ def test_pattern_invert_from_json_emits_modifier() raises:
         raise Error("expected modifier invert-match in emitted YANG tree")
 
 
+def test_parse_yang_path_with_leafref_predicate() raises:
+    var path = parse_yang_path(
+        "/data-model/entities[name = current()/../entity]/fields/name"
+    )
+    assert_true(path.absolute)
+    assert_equal(len(path.segments), 4)
+    assert_equal(path.segments[1].node.local_name, "entities")
+    assert_equal(len(path.segments[1].predicates), 1)
+    assert_equal(path.segments[1].predicates[0].key.local_name, "name")
+    assert_equal(path.segments[1].predicates[0].target.parent_steps, 1)
+    assert_equal(path.segments[1].predicates[0].target.segments[0].local_name, "entity")
+
+
+def test_path_argument_stores_validated_yang_path() raises:
+    var node = YangConstruct("path", 7)
+    node.set_raw_argument("../fields/name")
+    validate_yang_path(node)
+    assert_true(node.argument.isa[PathArgument]())
+    ref arg = node.argument.get[PathArgument]()
+    assert_equal(arg.text, "../fields/name")
+    assert_equal(arg.path.parent_steps, 1)
+    assert_equal(len(arg.path.segments), 2)
+    assert_equal(arg.path.segments[0].node.local_name, "fields")
+
+
+def test_invalid_yang_path_rejected() raises:
+    var node = YangConstruct("path", 11)
+    node.set_raw_argument("/data-model/")
+    var failed = False
+    try:
+        validate_yang_path(node)
+    except:
+        failed = True
+    assert_true(failed)
+
+
 def main() raises:
     test_yang_json_raw_construct_matches_yang_text()
     test_yang_json_module_indexes_supported_subset()
     test_overlapping_length_in_xyang_rejected()
     test_pattern_invert_from_json_emits_modifier()
+    test_parse_yang_path_with_leafref_predicate()
+    test_path_argument_stores_validated_yang_path()
+    test_invalid_yang_path_rejected()
