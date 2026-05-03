@@ -15,7 +15,6 @@ from xyang.yang.arguments import (
     PatternArgument,
     QNameArgument,
     RangeArgument,
-    RawArgument,
     RevisionDateArgument,
     StringArgument,
     TypeNameArgument,
@@ -43,13 +42,18 @@ struct YangConstruct(
 
     def __init__(out self, keyword: String, line: UInt = 0):
         self.keyword = keyword
-        self.argument = YangArgumentValue(NoArgument())
+        self.argument = YangArgumentValue()
         self.children = Self.StatementList()
         self.line = line
         self.spec = `<INVALID>`
 
     def has_argument(read self) -> Bool:
-        return not self.argument.isa[NoArgument]()
+        ## Raw lexer text uses `NoArgument` payload with non-empty `argument.text`;
+        ## validated nodes use a typed payload (and usually non-empty text).
+        return (
+            self.argument.text.byte_length() > 0
+            or not self.argument.isa[NoArgument]()
+        )
 
     def argument_text(read self) -> String:
         return self.argument.text.copy()
@@ -64,7 +68,7 @@ struct YangConstruct(
         self.argument = argument^
 
     def set_raw_argument(mut self, var text: String):
-        self.set_argument(YangArgumentValue(RawArgument(text^)))
+        self.set_argument(YangArgumentValue(text^))
 
     def __str__(ref self) -> String:
         return self.format(0)

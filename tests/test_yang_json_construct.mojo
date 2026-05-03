@@ -194,7 +194,7 @@ def test_path_argument_stores_validated_yang_path() raises:
     PathArgument.validate(node)
     assert_true(node.argument.isa[PathArgument]())
     ref arg = node.argument.get[PathArgument]()
-    assert_equal(arg.text, "../fields/name")
+    assert_equal(node.argument.text, "../fields/name")
     assert_equal(arg.path.parent_steps, 1)
     assert_equal(len(arg.path.segments), 2)
     assert_equal(arg.path.segments[0].node.local_name, "fields")

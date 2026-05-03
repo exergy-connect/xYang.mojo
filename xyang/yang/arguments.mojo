@@ -4,6 +4,7 @@
 ## Includes RFC 7950 §9.4 (`length`, `pattern`, `modifier`) argument checks.
 
 from std.collections import List
+from std.memory import ArcPointer
 from std.utils import Variant
 
 from xyang.yang.identifiers import (
@@ -14,6 +15,10 @@ from xyang.yang.identifiers import (
 )
 from xyang.yang.path import YangPath
 from xyang.yang.path import parse_yang_path
+from xyang.yang.xpath.api import parse_xpath_expression
+from xyang.yang.xpath.pratt_parser import Expr
+
+comptime Arc = ArcPointer
 
 
 trait YangArgumentHost:
@@ -34,9 +39,6 @@ comptime YangConstruct = Some[YangArgumentHost]
 
 
 trait YangArgument:
-    def get_text(read self) -> String:
-        ...
-
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         ...
@@ -53,51 +55,28 @@ def _argument_error(read node: YangConstruct, message: String) -> Error:
 
 
 struct NoArgument(Movable, YangArgument):
-    var text: String
-
     def __init__(out self):
-        self.text = ""
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         return
 
 
-@fieldwise_init
-struct RawArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
-
-    @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
-        return
-
-
-@fieldwise_init
 struct StringArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        node.set_argument(YangArgumentValue(StringArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, StringArgument()))
 
 
 ## `yang-version` statement; stores a `StringArgument` payload (1 or 1.1).
-@fieldwise_init
 struct YangVersionArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -114,32 +93,25 @@ struct YangVersionArgument(Movable, YangArgument):
                 + node.argument_keyword()
                 + "` expected YANG version 1 or 1.1"
             )
-        node.set_argument(YangArgumentValue(StringArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, StringArgument()))
 
 
-@fieldwise_init
 struct IdentifierArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_identifier(argument):
             raise _argument_error(node, "expected identifier argument")
-        node.set_argument(YangArgumentValue(IdentifierArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, IdentifierArgument()))
 
 
 @fieldwise_init
 struct QNameArgument(Movable, YangArgument):
-    var text: String
     var prefix: String
     var local_name: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -150,66 +122,66 @@ struct QNameArgument(Movable, YangArgument):
             )
         var parts = argument.split(":")
         if len(parts) == 2:
+            var prefix = String(parts[0])
+            var local_name = String(parts[1])
             node.set_argument(
                 YangArgumentValue(
-                    QNameArgument(argument^, String(parts[0]), String(parts[1]))
+                    argument^, QNameArgument(prefix^, local_name^)
                 )
             )
         else:
-            node.set_argument(YangArgumentValue(IdentifierArgument(argument^)))
+            node.set_argument(
+                YangArgumentValue(argument^, IdentifierArgument())
+            )
 
 
 @fieldwise_init
 struct PathArgument(Movable, YangArgument):
-    var text: String
     var path: YangPath
-
-    def get_text(read self) -> String:
-        return self.text.copy()
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var parsed = parse_yang_path(argument, node.argument_line())
-        node.set_argument(YangArgumentValue(PathArgument(argument^, parsed^)))
+        node.set_argument(YangArgumentValue(argument^, PathArgument(parsed^)))
 
 
 @fieldwise_init
 struct XPathExpressionArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    var root: Arc[Expr]
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(node, "expected non-empty expression")
-        node.set_argument(YangArgumentValue(XPathExpressionArgument(argument^)))
+        var line = node.argument_line()
+        var ptr = parse_xpath_expression(argument, line)
+        var owned = ptr.take_pointee()
+        ptr.free()
+        node.set_argument(
+            YangArgumentValue(
+                argument^,
+                XPathExpressionArgument(Arc[Expr](owned^)),
+            )
+        )
 
 
-@fieldwise_init
 struct RevisionDateArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_revision_date(argument):
             raise _argument_error(node, "expected revision date YYYY-MM-DD")
-        node.set_argument(YangArgumentValue(RevisionDateArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, RevisionDateArgument()))
 
 
-@fieldwise_init
 struct RangeArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -217,29 +189,23 @@ struct RangeArgument(Movable, YangArgument):
         var parsed = try_parse_range_bounds(argument)
         if not parsed:
             raise _argument_error(node, "expected basic range expression")
-        node.set_argument(YangArgumentValue(RangeArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, RangeArgument()))
 
 
-@fieldwise_init
 struct LengthArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         _ = try_parse_length_segments(argument, node.argument_line())
-        node.set_argument(YangArgumentValue(LengthArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, LengthArgument()))
 
 
-@fieldwise_init
 struct PatternArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -248,31 +214,24 @@ struct PatternArgument(Movable, YangArgument):
             raise _argument_error(
                 node, "expected non-empty XSD regular expression"
             )
-        node.set_argument(YangArgumentValue(PatternArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, PatternArgument()))
 
 
-@fieldwise_init
 struct ModifierArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if _strip_spaces(argument) != "invert-match":
             raise _argument_error(node, "expected argument `invert-match`")
-        node.set_argument(YangArgumentValue(ModifierArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, ModifierArgument()))
 
 
 @fieldwise_init
 struct FractionDigitsArgument(Movable, YangArgument):
-    var text: String
     var value: Int
-
-    def get_text(read self) -> String:
-        return self.text.copy()
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -286,46 +245,37 @@ struct FractionDigitsArgument(Movable, YangArgument):
                 node, "must be between 1 and 18 (RFC 7950 §9.3)"
             )
         node.set_argument(
-            YangArgumentValue(FractionDigitsArgument(argument^, Int(n)))
+            YangArgumentValue(argument^, FractionDigitsArgument(Int(n)))
         )
 
 
-@fieldwise_init
 struct TypeNameArgument(Movable, YangArgument):
-    var text: String
-
-    def get_text(read self) -> String:
-        return self.text.copy()
+    def __init__(out self):
+        pass
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_supported_type_name(argument):
             raise _argument_error(node, "expected basic YANG type name")
-        node.set_argument(YangArgumentValue(TypeNameArgument(argument^)))
+        node.set_argument(YangArgumentValue(argument^, TypeNameArgument()))
 
 
 @fieldwise_init
 struct BoolArgument(Movable, YangArgument):
-    var text: String
     var value: Bool
-
-    def get_text(read self) -> String:
-        return self.text.copy()
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if argument != "true" and argument != "false":
             raise _argument_error(node, "expected boolean argument")
-        node.set_argument(
-            YangArgumentValue(BoolArgument(argument^, argument == "true"))
-        )
+        var truth = argument == "true"
+        node.set_argument(YangArgumentValue(argument^, BoolArgument(truth)))
 
 
 comptime YangArgumentPayload = Variant[
     NoArgument,
-    RawArgument,
     StringArgument,
     IdentifierArgument,
     QNameArgument,
@@ -346,9 +296,13 @@ struct YangArgumentValue(Movable):
     var text: String
     var payload: YangArgumentPayload
 
-    def __init__[T: YangArgument & Movable](out self, var argument: T):
-        self.text = argument.get_text()
-        self.payload = YangArgumentPayload(argument^)
+    def __init__(out self, var text: String = ""):
+        self.text = text^
+        self.payload = YangArgumentPayload(NoArgument())
+
+    def __init__[T: Movable](out self, var text: String, var inner: T):
+        self.text = text^
+        self.payload = YangArgumentPayload(inner^)
 
     def isa[T: AnyType](read self) -> Bool:
         return self.payload.isa[T]()
