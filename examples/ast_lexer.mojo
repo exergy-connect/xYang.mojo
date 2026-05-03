@@ -5,31 +5,26 @@
 
 from std.memory import Span
 
+import xyang.yang.ast.util as ast_util
+
 
 comptime ByteView = Span[Byte, _]
 
 
-comptime `"` = _to_byte['"']()
-comptime `'` = _to_byte["'"]()
-comptime `{` = _to_byte["{"]()
-comptime `}` = _to_byte["}"]()
-comptime `;` = _to_byte[";"]()
-comptime `+` = _to_byte["+"]()
-comptime `/` = _to_byte["/"]()
-comptime `*` = _to_byte["*"]()
-comptime `\\` = _to_byte["\\"]()
+comptime `"` = ast_util.to_byte['"']()
+comptime `'` = ast_util.to_byte["'"]()
+comptime `{` = ast_util.to_byte["{"]()
+comptime `}` = ast_util.to_byte["}"]()
+comptime `;` = ast_util.to_byte[";"]()
+comptime `+` = ast_util.to_byte["+"]()
+comptime `/` = ast_util.to_byte["/"]()
+comptime `*` = ast_util.to_byte["*"]()
+comptime `\\` = ast_util.to_byte["\\"]()
 
-comptime `\n` = _to_byte["\n"]()
-comptime `\t` = _to_byte["\t"]()
-comptime ` ` = _to_byte[" "]()
-comptime `\r` = _to_byte["\r"]()
-
-
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
+comptime `\n` = ast_util.to_byte["\n"]()
+comptime `\t` = ast_util.to_byte["\t"]()
+comptime ` ` = ast_util.to_byte[" "]()
+comptime `\r` = ast_util.to_byte["\r"]()
 
 
 @fieldwise_init

@@ -14,7 +14,7 @@
 ## `examples/structure.mojo`: `FieldDefinition`, `RepeatedField`, and
 ## `CompositeFieldDefinition`.  The aliases map RFC productions to comptime types.
 ##
-##   pixi run mojo examples/yang_ebnf.mojo
+##   pixi run mojo -I . -I examples examples/yang_ebnf.mojo
 
 from structure import (
     CompositeFieldDefinition,

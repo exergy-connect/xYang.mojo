@@ -3,35 +3,30 @@
 
 from std.memory import ArcPointer, Span
 
+import xyang.yang.ast.util as ast_util
+
 comptime Arc = ArcPointer
 comptime ByteView = Span[Byte, _]
 
-comptime `"` = _to_byte['"']()
-comptime `+b` = _to_byte["+"]()
-comptime `-` = _to_byte["-"]()
-comptime `.b` = _to_byte["."]()
-comptime `0b` = _to_byte["0"]()
-comptime `9b` = _to_byte["9"]()
-comptime `Eb` = _to_byte["E"]()
-comptime `eb` = _to_byte["e"]()
-comptime `{b` = _to_byte["{"]()
-comptime `}b` = _to_byte["}"]()
-comptime `[b` = _to_byte["["]()
-comptime `]b` = _to_byte["]"]()
-comptime `:b` = _to_byte[":"]()
-comptime `,b` = _to_byte[","]()
-comptime ` b` = _to_byte[" "]()
-comptime `\n` = _to_byte["\n"]()
-comptime `\r` = _to_byte["\r"]()
-comptime `\t` = _to_byte["\t"]()
-comptime `\\` = _to_byte["\\"]()
-
-
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
+comptime `"` = ast_util.to_byte['"']()
+comptime `+b` = ast_util.to_byte["+"]()
+comptime `-` = ast_util.to_byte["-"]()
+comptime `.b` = ast_util.to_byte["."]()
+comptime `0b` = ast_util.to_byte["0"]()
+comptime `9b` = ast_util.to_byte["9"]()
+comptime `Eb` = ast_util.to_byte["E"]()
+comptime `eb` = ast_util.to_byte["e"]()
+comptime `{b` = ast_util.to_byte["{"]()
+comptime `}b` = ast_util.to_byte["}"]()
+comptime `[b` = ast_util.to_byte["["]()
+comptime `]b` = ast_util.to_byte["]"]()
+comptime `:b` = ast_util.to_byte[":"]()
+comptime `,b` = ast_util.to_byte[","]()
+comptime ` b` = ast_util.to_byte[" "]()
+comptime `\n` = ast_util.to_byte["\n"]()
+comptime `\r` = ast_util.to_byte["\r"]()
+comptime `\t` = ast_util.to_byte["\t"]()
+comptime `\\` = ast_util.to_byte["\\"]()
 
 
 @fieldwise_init
@@ -133,11 +128,11 @@ struct JsonParser[origin: ImmutOrigin]:
                     self.syntax_error("Trailing escape in JSON string")
                 var escaped = self.input[self.pos]
                 self.pos += 1
-                if escaped == _to_byte["n"]():
+                if escaped == ast_util.to_byte["n"]():
                     out += "\n"
-                elif escaped == _to_byte["r"]():
+                elif escaped == ast_util.to_byte["r"]():
                     out += "\r"
-                elif escaped == _to_byte["t"]():
+                elif escaped == ast_util.to_byte["t"]():
                     out += "\t"
                 else:
                     out += String(
@@ -254,17 +249,17 @@ struct JsonParser[origin: ImmutOrigin]:
             return value^
         if ch == `-` or (ch >= `0b` and ch <= `9b`):
             return self.parse_number()
-        if ch == _to_byte["t"]():
+        if ch == ast_util.to_byte["t"]():
             self.consume_literal("true")
             var value = make_json(JsonValue.BOOL, ln)
             value.bool_value = True
             return value^
-        if ch == _to_byte["f"]():
+        if ch == ast_util.to_byte["f"]():
             self.consume_literal("false")
             var value = make_json(JsonValue.BOOL, ln)
             value.bool_value = False
             return value^
-        if ch == _to_byte["n"]():
+        if ch == ast_util.to_byte["n"]():
             self.consume_literal("null")
             return make_json(JsonValue.NULL, ln)
         self.syntax_error("Unexpected JSON token at byte " + String(self.pos))

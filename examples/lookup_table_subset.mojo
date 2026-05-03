@@ -5,7 +5,7 @@
 ## This version encodes allowed fields with the same table-construction pattern
 ## as `test_func_spec.mojo`.
 ##
-##   pixi run mojo -I examples examples/lookup_table_subset.mojo
+##   pixi run mojo -I . -I examples examples/lookup_table_subset.mojo
 
 from std.memory import UnsafePointer
 

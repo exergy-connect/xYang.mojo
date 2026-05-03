@@ -1,0 +1,80 @@
+---
+description: Mojo pattern — pair canonical string (source of truth) with std.utils.Variant payload (parse of that text)
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo: canonical `text` + typed `Variant` payload
+
+## When this helps
+
+Use this when callers **often need both**:
+
+1. **The original / canonical string form** — what was written, what you round-trip, print, log, or serialize; and  
+2. **Type-safe semantic access** — a **`std.utils.Variant[T1, T2, …]`** (or similar) holding the **parsed, typed** interpretation of that string.
+
+The wrapper is **not** “cache display text copied out of the variant.” It **pairs** a **stable textual representation** with a **typed parse result** whose meaning is: *this payload is what you get when you parse/validate that text.*
+
+## Model
+
+- **`text`** — **Canonical / source representation.** This is what you treat as authoritative for the literal form.
+- **`payload`** — **The parsed, typed interpretation of `text`.** It is **derived from** `text`, not the other way around.
+
+**Invariant:** **`payload` must be a valid interpretation of `text`.**
+
+- If **`text` changes**, **`payload` must be reparsed** (or the whole value replaced) so the invariant holds.
+- If **`payload` is mutated independently**, either **do not allow that**, or **regenerate / recanonicalize `text`** so it again matches the payload. Otherwise the pair is inconsistent.
+
+## Construction
+
+**Prefer** construction that **starts from `text`**, **parses and validates**, then **stores both** together — for example a parser or factory:
+
+```mojo
+def parse_value(text: String) raises -> Value:
+    ...
+```
+
+Inside, you typically: read **`text`**, run your grammar or validators, build the appropriate **`Variant`** member, then assign **`self.text`** and **`self.payload`** in one coherent path.
+
+**Consistency:** **`text` and `payload` stay aligned because `payload` is produced by parsing/validating `text`** — not because a string was copied from a struct before moving it into the variant.
+
+### Constructors from member structs
+
+A generic **`__init__[T: …](out self, var item: T)`** that sets **`text`** from **`item`** and moves **`item`** into **`payload`** can still be valid **only** as an **optional convenience**: it must **produce canonical `text`** and go through the **same validation rules** as parsing (or call the same internal logic) so the invariant holds. If it is just “serialize the struct” without matching your canonical form, prefer **`parse_value(canonical_string(...))`** instead.
+
+Delegate **`isa[T]()`** / **`get[T]()`** to **`payload`** if you want a single access surface.
+
+## Host object
+
+The object that **owns** the slot (AST node, config row, command, etc.) typically:
+
+- Stores **`var field: Value`** (or your wrapper name).
+- Exposes setters that either **replace `text` and reparse**, or **replace the whole `Value`** after **`parse_value`**.
+
+Consumers that need the literal use **`field.text`**; consumers that need semantics use **`field.isa[Foo]()`** / **`field.get[Foo]()`** — remembering that **payload** is only trustworthy relative to **text**.
+
+Use a **sentinel** alternative in the **`Variant`** (e.g. **`Empty`**) for “nothing stored” if that fits your API.
+
+## Mutable payload access
+
+**Warning:** Exposing **mutable** access to **`payload`** (e.g. **`get` returning a mutable `ref`** that callers can alter) can **break the invariant** unless the wrapper **also** updates or **recanonicalizes `text`** on every such mutation. Safer patterns: **immutable** semantic access, **replace** the whole **`Value`** via **`parse_value`**, or **explicit** mutators that re-sync **`text`**.
+
+## Adding an alternative
+
+1. Extend the parser / **`parse_value`** (and validation) so a new **`text` shape** maps to a new **`Variant`** member.
+2. Append the new struct to **`Variant[T1, T2, …]`**.
+3. Update dispatch (validators, printers) that match on **`isa`**.
+
+## When **not** to use this
+
+- **Uniform representation**: if every case is the same shape (e.g. a tag + one integer), prefer a **comptime tag + `value` field** (`mojo-enum-pattern.mdc`) instead of a **`Variant`** of many structs.
+- **Very large or rare** alternatives: weigh **`Variant`** size and codegen cost; sometimes indirection (`Arc`, pointer to base) fits better.
+
+## Rules (summary)
+
+1. Treat **`text`** as the **canonical** form; **`payload`** is the **parse** of **`text`**.
+2. **Primary** construction path: **`parse_value(text)`** (or equivalent) — parse/validate, then store **both**.
+3. **All** **`Variant`** members should be **`Movable`**; the variant owns the active member.
+4. **Do not** let **`text` and `payload` drift**; changing one requires **reparse**, **recanonicalize**, or **replace** the whole value.
+5. Prefer **`get[T]()`** only after **`isa[T]()`** is known true, or follow your codebase’s conventions for partial access.
+

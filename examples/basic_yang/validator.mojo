@@ -1,14 +1,16 @@
 ## Standalone table-driven validator for `basic-device.yang`.
 ##
-## No `xyang` package is used here. The YANG file is parsed through the generic
-## construct tree from `examples/ast.mojo`, then validated with the same
-## compile-time lookup-table style used by `examples/lookup_table_subset.mojo`.
-## A tiny JSON parser is included so the example is self-contained.
+## The YANG file is parsed through the generic construct tree from
+## `examples/ast.mojo`, then validated with the same compile-time lookup-table
+## style used by `examples/lookup_table_subset.mojo`. A tiny JSON parser is
+## included so the example stays self-contained aside from shared `to_byte` from
+## `xyang.yang.ast.util`.
 ##
-##   pixi run mojo -I examples examples/basic_yang/validator.mojo
+##   pixi run mojo -I . -I examples examples/basic_yang/validator.mojo
 
 from std.memory import ArcPointer, Span, UnsafePointer
 
+import xyang.yang.ast.util as ast_util
 from ast import AstLexer, YangConstruct, parse_module
 
 comptime Arc = ArcPointer
@@ -17,28 +19,21 @@ comptime ByteView = Span[Byte, _]
 comptime YANG_PATH = "examples/basic_yang/basic-device.yang"
 comptime DATA_PATH = "examples/basic_yang/basic-device.json"
 
-comptime `"` = _to_byte['"']()
-comptime `-` = _to_byte["-"]()
-comptime `0b` = _to_byte["0"]()
-comptime `9b` = _to_byte["9"]()
-comptime `{b` = _to_byte["{"]()
-comptime `}b` = _to_byte["}"]()
-comptime `[b` = _to_byte["["]()
-comptime `]b` = _to_byte["]"]()
-comptime `:b` = _to_byte[":"]()
-comptime `,b` = _to_byte[","]()
-comptime ` b` = _to_byte[" "]()
-comptime `\n` = _to_byte["\n"]()
-comptime `\r` = _to_byte["\r"]()
-comptime `\t` = _to_byte["\t"]()
-comptime `\\` = _to_byte["\\"]()
-
-
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
+comptime `"` = ast_util.to_byte['"']()
+comptime `-` = ast_util.to_byte["-"]()
+comptime `0b` = ast_util.to_byte["0"]()
+comptime `9b` = ast_util.to_byte["9"]()
+comptime `{b` = ast_util.to_byte["{"]()
+comptime `}b` = ast_util.to_byte["}"]()
+comptime `[b` = ast_util.to_byte["["]()
+comptime `]b` = ast_util.to_byte["]"]()
+comptime `:b` = ast_util.to_byte[":"]()
+comptime `,b` = ast_util.to_byte[","]()
+comptime ` b` = ast_util.to_byte[" "]()
+comptime `\n` = ast_util.to_byte["\n"]()
+comptime `\r` = ast_util.to_byte["\r"]()
+comptime `\t` = ast_util.to_byte["\t"]()
+comptime `\\` = ast_util.to_byte["\\"]()
 
 
 comptime Kw = UInt8
@@ -146,20 +141,25 @@ def is_digit(ch: Byte) -> Bool:
 
 
 def is_alpha(ch: Byte) -> Bool:
-    return (ch >= _to_byte["a"]() and ch <= _to_byte["z"]()) or (
-        ch >= _to_byte["A"]() and ch <= _to_byte["Z"]()
-    )
+    return (
+        ch >= ast_util.to_byte["a"]() and ch <= ast_util.to_byte["z"]()
+    ) or (ch >= ast_util.to_byte["A"]() and ch <= ast_util.to_byte["Z"]())
 
 
 def is_identifier_char(ch: Byte) -> Bool:
-    return is_alpha(ch) or is_digit(ch) or ch == `-` or ch == _to_byte["_"]()
+    return (
+        is_alpha(ch)
+        or is_digit(ch)
+        or ch == `-`
+        or ch == ast_util.to_byte["_"]()
+    )
 
 
 def is_identifier(text: String) -> Bool:
     var bytes = text.as_bytes()
     if len(bytes) == 0:
         return False
-    if not is_alpha(bytes[0]) and bytes[0] != _to_byte["_"]():
+    if not is_alpha(bytes[0]) and bytes[0] != ast_util.to_byte["_"]():
         return False
     for i in range(1, len(bytes)):
         if not is_identifier_char(bytes[i]):
@@ -760,17 +760,17 @@ struct JsonParser[origin: ImmutOrigin]:
             return value^
         if ch == `-` or (ch >= `0b` and ch <= `9b`):
             return self.parse_int()
-        if ch == _to_byte["t"]():
+        if ch == ast_util.to_byte["t"]():
             self.consume_literal("true")
             var value = make_json(JsonValue.BOOL, ln)
             value.bool_value = True
             return value^
-        if ch == _to_byte["f"]():
+        if ch == ast_util.to_byte["f"]():
             self.consume_literal("false")
             var value = make_json(JsonValue.BOOL, ln)
             value.bool_value = False
             return value^
-        if ch == _to_byte["n"]():
+        if ch == ast_util.to_byte["n"]():
             self.consume_literal("null")
             return make_json(JsonValue.NULL, ln)
         self.syntax_error("Unexpected JSON token at byte " + String(self.pos))

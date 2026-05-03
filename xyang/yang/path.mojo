@@ -5,38 +5,32 @@
 
 from std.memory import Span
 
+import xyang.yang.ast.util as ast_util
 from xyang.yang.identifiers import is_alpha, is_identifier_char
 
 
 comptime ByteView = Span[Byte, _]
 
 
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
-
-
-comptime `/` = _to_byte["/"]()
-comptime `.` = _to_byte["."]()
-comptime `:` = _to_byte[":"]()
-comptime `[` = _to_byte["["]()
-comptime `]` = _to_byte["]"]()
-comptime `=` = _to_byte["="]()
-comptime `(` = _to_byte["("]()
-comptime `)` = _to_byte[")"]()
-comptime ` ` = _to_byte[" "]()
-comptime `\n` = _to_byte["\n"]()
-comptime `\t` = _to_byte["\t"]()
-comptime `\r` = _to_byte["\r"]()
+comptime `/` = ast_util.to_byte["/"]()
+comptime `.` = ast_util.to_byte["."]()
+comptime `:` = ast_util.to_byte[":"]()
+comptime `[` = ast_util.to_byte["["]()
+comptime `]` = ast_util.to_byte["]"]()
+comptime `=` = ast_util.to_byte["="]()
+comptime `(` = ast_util.to_byte["("]()
+comptime `)` = ast_util.to_byte[")"]()
+comptime ` ` = ast_util.to_byte[" "]()
+comptime `\n` = ast_util.to_byte["\n"]()
+comptime `\t` = ast_util.to_byte["\t"]()
+comptime `\r` = ast_util.to_byte["\r"]()
 
 
 def _is_ws(ch: Byte) -> Bool:
     return ch == ` ` or ch == `\n` or ch == `\t` or ch == `\r`
 
 
-def _line_prefix(line: Int) -> String:
+def _line_prefix(line: UInt) -> String:
     if line > 0:
         return "line " + String(line) + ": "
     return ""
@@ -91,7 +85,7 @@ def parse_yang_qname(text: String) raises -> YangQName:
     return qname^
 
 
-def parse_yang_path(text: String, line: Int = 0) raises -> YangPath:
+def parse_yang_path(text: String, line: UInt = 0) raises -> YangPath:
     var bytes = text.as_bytes()
     var parser = YangPathParser(bytes, line)
     return parser.parse()
@@ -100,9 +94,9 @@ def parse_yang_path(text: String, line: Int = 0) raises -> YangPath:
 struct YangPathParser[origin: ImmutOrigin]:
     var input: ByteView[Self.origin]
     var pos: Int
-    var source_line: Int
+    var source_line: UInt
 
-    def __init__(out self, input: ByteView[Self.origin], source_line: Int):
+    def __init__(out self, input: ByteView[Self.origin], source_line: UInt):
         self.input = input
         self.pos = 0
         self.source_line = source_line
@@ -198,7 +192,9 @@ struct YangPathParser[origin: ImmutOrigin]:
             if self.eof() or self.input[self.pos] != `[`:
                 break
             predicates.append(self.parse_predicate())
-        return YangPathStep(self.slice_text(start, self.pos), node^, predicates^)
+        return YangPathStep(
+            self.slice_text(start, self.pos), node^, predicates^
+        )
 
     def parse_qname(mut self) raises -> YangQName:
         self.skip_ws()
@@ -218,7 +214,10 @@ struct YangPathParser[origin: ImmutOrigin]:
     def parse_identifier(mut self) raises:
         if self.eof():
             self.syntax_error("expected identifier")
-        if not is_alpha(self.input[self.pos]) and self.input[self.pos] != _to_byte["_"]():
+        if (
+            not is_alpha(self.input[self.pos])
+            and self.input[self.pos] != ast_util.to_byte["_"]()
+        ):
             self.syntax_error("expected identifier")
         self.pos += 1
         while not self.eof() and is_identifier_char(self.input[self.pos]):
@@ -234,7 +233,9 @@ struct YangPathParser[origin: ImmutOrigin]:
         self.consume(`/`, "expected `/` after `current()`")
         var target = self.parse_key_expression()
         self.consume(`]`, "expected `]` after path predicate")
-        return YangPathPredicate(self.slice_text(start, self.pos), key^, target^)
+        return YangPathPredicate(
+            self.slice_text(start, self.pos), key^, target^
+        )
 
     def consume_current_call(mut self) raises:
         self.skip_ws()

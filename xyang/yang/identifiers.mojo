@@ -1,36 +1,44 @@
 ## Identifier and simple literal checks for YANG text arguments.
 
-comptime `0b` = _to_byte["0"]()
-comptime `9b` = _to_byte["9"]()
-comptime `-` = _to_byte["-"]()
+import xyang.yang.ast.util as ast_util
 
+comptime `0b` = ast_util.to_byte["0"]()
+comptime `9b` = ast_util.to_byte["9"]()
+comptime `-` = ast_util.to_byte["-"]()
 
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
+comptime a_b = ast_util.to_byte["a"]()
+comptime z_b = ast_util.to_byte["z"]()
+comptime A_b = ast_util.to_byte["A"]()
+comptime Z_b = ast_util.to_byte["Z"]()
+
+comptime ALPHA = (
+    ast_util.BitSet.range[a_b, z_b]() | ast_util.BitSet.range[A_b, Z_b]()
+)
 
 
 def is_digit(ch: Byte) -> Bool:
     return ch >= `0b` and ch <= `9b`
 
 
+@always_inline
 def is_alpha(ch: Byte) -> Bool:
-    return (ch >= _to_byte["a"]() and ch <= _to_byte["z"]()) or (
-        ch >= _to_byte["A"]() and ch <= _to_byte["Z"]()
-    )
+    return ch in ALPHA
 
 
 def is_identifier_char(ch: Byte) -> Bool:
-    return is_alpha(ch) or is_digit(ch) or ch == `-` or ch == _to_byte["_"]()
+    return (
+        is_alpha(ch)
+        or is_digit(ch)
+        or ch == `-`
+        or ch == ast_util.to_byte["_"]()
+    )
 
 
 def is_identifier(text: StringSlice) -> Bool:
     var bytes = text.as_bytes()
     if len(bytes) == 0:
         return False
-    if not is_alpha(bytes[0]) and bytes[0] != _to_byte["_"]():
+    if not is_alpha(bytes[0]) and bytes[0] != ast_util.to_byte["_"]():
         return False
     for i in range(1, len(bytes)):
         if not is_identifier_char(bytes[i]):

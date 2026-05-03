@@ -4,7 +4,7 @@
 ## models: it preserves the nested construct shape without deciding which
 ## constructs are valid in each context.
 ##
-##   pixi run mojo examples/ast.mojo
+##   pixi run mojo -I . -I examples examples/ast.mojo
 
 from std.memory import ArcPointer
 

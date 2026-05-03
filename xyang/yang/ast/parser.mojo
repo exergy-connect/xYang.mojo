@@ -12,6 +12,7 @@ comptime Arc = ArcPointer
 def is_name_token(tok: AstToken) -> Bool:
     return tok.type == AstToken.IDENTIFIER
 
+
 def parse_module[
     origin: ImmutOrigin
 ](mut lexer: AstLexer[origin]) raises -> YangConstruct:
@@ -31,7 +32,7 @@ def parse_module[
         )
 
     var module = parse_statement_after_keyword(
-        lexer, tok.text(lexer.input), tok.line
+        lexer, tok.text(lexer.input), UInt(tok.line)
     )
     if module.keyword != "module":
         raise Error(
@@ -51,6 +52,7 @@ def parse_module[
             + String(tok.line)
         )
     return module^
+
 
 def parse_block[
     origin: ImmutOrigin
@@ -76,7 +78,7 @@ def parse_block[
         children.append(
             Arc[YangConstruct](
                 parse_statement_after_keyword(
-                    lexer, tok.text(lexer.input), tok.line
+                    lexer, tok.text(lexer.input), UInt(tok.line)
                 ),
             ),
         )
@@ -85,7 +87,7 @@ def parse_block[
 def parse_statement_after_keyword[
     origin: ImmutOrigin
 ](
-    mut lexer: AstLexer[origin], keyword: String, line: Int
+    mut lexer: AstLexer[origin], keyword: String, line: UInt
 ) raises -> YangConstruct:
     var statement = YangConstruct(keyword, line)
     var tok = lexer.next_token()
@@ -129,4 +131,3 @@ def parse_argument[
         if tok.type != AstToken.PLUS:
             result += " "
             result += tok.text(lexer.input, strip_quotes=True)
-

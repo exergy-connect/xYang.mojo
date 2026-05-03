@@ -1,7 +1,6 @@
 from std.testing import assert_equal, assert_true
 
 from xyang.json import parse_yang_json, parse_yang_json_module
-from xyang.yang.argument_validators import validate_yang_path
 from xyang.yang.arguments import PathArgument
 from xyang.yang.ast.lexer import AstLexer
 from xyang.yang.ast.construct import YangConstruct
@@ -184,13 +183,15 @@ def test_parse_yang_path_with_leafref_predicate() raises:
     assert_equal(len(path.segments[1].predicates), 1)
     assert_equal(path.segments[1].predicates[0].key.local_name, "name")
     assert_equal(path.segments[1].predicates[0].target.parent_steps, 1)
-    assert_equal(path.segments[1].predicates[0].target.segments[0].local_name, "entity")
+    assert_equal(
+        path.segments[1].predicates[0].target.segments[0].local_name, "entity"
+    )
 
 
 def test_path_argument_stores_validated_yang_path() raises:
     var node = YangConstruct("path", 7)
     node.set_raw_argument("../fields/name")
-    validate_yang_path(node)
+    PathArgument.validate(node)
     assert_true(node.argument.isa[PathArgument]())
     ref arg = node.argument.get[PathArgument]()
     assert_equal(arg.text, "../fields/name")
@@ -204,7 +205,7 @@ def test_invalid_yang_path_rejected() raises:
     node.set_raw_argument("/data-model/")
     var failed = False
     try:
-        validate_yang_path(node)
+        PathArgument.validate(node)
     except:
         failed = True
     assert_true(failed)

@@ -2,24 +2,79 @@
 
 from std.memory import UnsafePointer
 
-from xyang.yang.argument_validators import (
-    ArgumentValidator,
-    validate_yang_expression,
-    validate_yang_fraction_digits,
-    validate_yang_identifier,
-    validate_yang_length,
-    validate_yang_modifier,
-    validate_yang_path,
-    validate_yang_pattern_arg,
-    validate_yang_qname,
-    validate_yang_range,
-    validate_yang_revision_date,
-    validate_yang_string,
-    validate_yang_type_name,
-    validate_yang_version,
-)
+import xyang.yang.arguments as yarg
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.keyword import Keyword, `<INVALID>`
+
+comptime ArgumentValidator = def(mut YangConstruct) raises thin -> None
+
+
+## Thin wrappers so `YangConstructSpec` stores monomorphic `ArgumentValidator`
+## callbacks; `YangArgument::validate` is typed with `YangArgumentHost`, not
+## concrete `YangConstruct`.
+@always_inline
+def _validate_identifier(mut node: YangConstruct) raises -> None:
+    yarg.IdentifierArgument.validate(node)
+
+
+@always_inline
+def _validate_string(mut node: YangConstruct) raises -> None:
+    yarg.StringArgument.validate(node)
+
+
+@always_inline
+def _validate_qname(mut node: YangConstruct) raises -> None:
+    yarg.QNameArgument.validate(node)
+
+
+@always_inline
+def _validate_type_name(mut node: YangConstruct) raises -> None:
+    yarg.TypeNameArgument.validate(node)
+
+
+@always_inline
+def _validate_length(mut node: YangConstruct) raises -> None:
+    yarg.LengthArgument.validate(node)
+
+
+@always_inline
+def _validate_pattern(mut node: YangConstruct) raises -> None:
+    yarg.PatternArgument.validate(node)
+
+
+@always_inline
+def _validate_revision_date(mut node: YangConstruct) raises -> None:
+    yarg.RevisionDateArgument.validate(node)
+
+
+@always_inline
+def _validate_xpath(mut node: YangConstruct) raises -> None:
+    yarg.XPathExpressionArgument.validate(node)
+
+
+@always_inline
+def _validate_range(mut node: YangConstruct) raises -> None:
+    yarg.RangeArgument.validate(node)
+
+
+@always_inline
+def _validate_path(mut node: YangConstruct) raises -> None:
+    yarg.PathArgument.validate(node)
+
+
+@always_inline
+def _validate_modifier(mut node: YangConstruct) raises -> None:
+    yarg.ModifierArgument.validate(node)
+
+
+@always_inline
+def _validate_fraction_digits(mut node: YangConstruct) raises -> None:
+    yarg.FractionDigitsArgument.validate(node)
+
+
+@always_inline
+def _validate_yang_version(mut node: YangConstruct) raises -> None:
+    yarg.YangVersionArgument.validate(node)
 
 
 comptime `anydata`: Keyword = 1
@@ -126,7 +181,7 @@ def keyword_spelling(idx: Keyword) -> String:
     return SPELLING[Int(idx)]
 
 
-def keyword_id(name: String, line: Int = 0) raises -> Keyword:
+def keyword_id(name: String, line: UInt = 0) raises -> Keyword:
     for i in range(KEYWORD_COUNT):
         if name == SPELLING[i]:
             return Keyword(i)
@@ -139,7 +194,7 @@ def keyword_id(name: String, line: Int = 0) raises -> Keyword:
 
 
 def check_cardinality(
-    name: String, card: Cardinality, count: Int, line: Int = 0
+    name: String, card: Cardinality, count: Int, line: UInt = 0
 ) raises:
     if card == `0` and count != 0:
         raise Error(
@@ -231,7 +286,7 @@ def scalar_spec(
 ## https://datatracker.ietf.org/doc/html/rfc7950#section-7.1.1
 comptime MODULE_SPEC = YangConstructSpec(
     `module`,
-    validate_yang_identifier,
+    _validate_identifier,
     fields[27](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
@@ -264,7 +319,7 @@ comptime MODULE_SPEC = YangConstructSpec(
 )
 comptime CONTAINER_SPEC = YangConstructSpec(
     `container`,
-    validate_yang_identifier,
+    _validate_identifier,
     fields[5](
         (`description`, `0..1`),
         (`uses`, `0..n`),
@@ -275,7 +330,7 @@ comptime CONTAINER_SPEC = YangConstructSpec(
 )
 comptime LIST_SPEC = YangConstructSpec(
     `list`,
-    validate_yang_identifier,
+    _validate_identifier,
     fields[7](
         (`must`, `0..n`),
         (`key`, `0..1`),
@@ -288,7 +343,7 @@ comptime LIST_SPEC = YangConstructSpec(
 )
 comptime LEAF_SPEC = YangConstructSpec(
     `leaf`,
-    validate_yang_identifier,
+    _validate_identifier,
     fields[5](
         (`when`, `0..1`),
         (`type`, `1`),
@@ -299,7 +354,7 @@ comptime LEAF_SPEC = YangConstructSpec(
 )
 comptime TYPE_SPEC = YangConstructSpec(
     `type`,
-    validate_yang_type_name,
+    _validate_type_name,
     fields[9](
         (`path`, `0..1`),
         (`range-stmt`, `0..1`),
@@ -314,7 +369,7 @@ comptime TYPE_SPEC = YangConstructSpec(
 )
 comptime LENGTH_STMT_SPEC = YangConstructSpec(
     `length`,
-    validate_yang_length,
+    _validate_length,
     fields[3](
         (`description`, `0..1`),
         (`error-message`, `0..1`),
@@ -323,7 +378,7 @@ comptime LENGTH_STMT_SPEC = YangConstructSpec(
 )
 comptime PATTERN_STMT_SPEC = YangConstructSpec(
     `pattern`,
-    validate_yang_pattern_arg,
+    _validate_pattern,
     fields[4](
         (`description`, `0..1`),
         (`error-message`, `0..1`),
@@ -333,7 +388,7 @@ comptime PATTERN_STMT_SPEC = YangConstructSpec(
 )
 comptime GROUPING_SPEC = YangConstructSpec(
     `grouping`,
-    validate_yang_identifier,
+    _validate_identifier,
     fields[5](
         (`description`, `0..1`),
         (`uses`, `0..n`),
@@ -344,12 +399,12 @@ comptime GROUPING_SPEC = YangConstructSpec(
 )
 comptime REVISION_SPEC = YangConstructSpec(
     `revision`,
-    validate_yang_revision_date,
+    _validate_revision_date,
     fields[1]((`description`, `0..1`)),
 )
 comptime MUST_SPEC = YangConstructSpec(
     `must`,
-    validate_yang_expression,
+    _validate_xpath,
     fields[2](
         (`error-message`, `0..1`),
         (`description`, `0..1`),
@@ -359,59 +414,55 @@ comptime MUST_SPEC = YangConstructSpec(
 
 def build_spec_table() -> YangConstructSpec.Table:
     var specs = YangConstructSpec.Table(
-        fill=scalar_spec(`<INVALID>`, validate_yang_identifier)
+        fill=scalar_spec(`<INVALID>`, _validate_identifier)
     )
     specs[`module`] = MODULE_SPEC
-    specs[`yang-version`] = scalar_spec(`yang-version`, validate_yang_version)
-    specs[Int(`namespace`)] = scalar_spec(`namespace`, validate_yang_string)
-    specs[Int(`prefix`)] = scalar_spec(`prefix`, validate_yang_identifier)
-    specs[Int(`organization`)] = scalar_spec(
-        `organization`, validate_yang_string
-    )
-    specs[Int(`contact`)] = scalar_spec(`contact`, validate_yang_string)
-    specs[Int(`description`)] = scalar_spec(`description`, validate_yang_string)
+    specs[`yang-version`] = scalar_spec(`yang-version`, _validate_yang_version)
+    specs[Int(`namespace`)] = scalar_spec(`namespace`, _validate_string)
+    specs[Int(`prefix`)] = scalar_spec(`prefix`, _validate_identifier)
+    specs[Int(`organization`)] = scalar_spec(`organization`, _validate_string)
+    specs[Int(`contact`)] = scalar_spec(`contact`, _validate_string)
+    specs[Int(`description`)] = scalar_spec(`description`, _validate_string)
     specs[Int(`revision`)] = REVISION_SPEC
     specs[Int(`grouping`)] = GROUPING_SPEC
-    specs[Int(`uses`)] = scalar_spec(`uses`, validate_yang_qname)
+    specs[Int(`uses`)] = scalar_spec(`uses`, _validate_qname)
     specs[Int(`container`)] = CONTAINER_SPEC
     specs[Int(`list`)] = LIST_SPEC
-    specs[Int(`key`)] = scalar_spec(`key`, validate_yang_identifier)
+    specs[Int(`key`)] = scalar_spec(`key`, _validate_identifier)
     specs[Int(`leaf`)] = LEAF_SPEC
     specs[Int(`type`)] = TYPE_SPEC
-    specs[Int(`range-stmt`)] = scalar_spec(`range-stmt`, validate_yang_range)
-    specs[Int(`path`)] = scalar_spec(`path`, validate_yang_path)
-    specs[Int(`default`)] = scalar_spec(`default`, validate_yang_string)
+    specs[Int(`range-stmt`)] = scalar_spec(`range-stmt`, _validate_range)
+    specs[Int(`path`)] = scalar_spec(`path`, _validate_path)
+    specs[Int(`default`)] = scalar_spec(`default`, _validate_string)
     specs[Int(`must`)] = MUST_SPEC
-    specs[Int(`error-message`)] = scalar_spec(
-        `error-message`, validate_yang_string
-    )
-    specs[Int(`when`)] = scalar_spec(`when`, validate_yang_expression)
-    specs[Int(`anydata`)] = scalar_spec(`anydata`, validate_yang_identifier)
-    specs[Int(`anyxml`)] = scalar_spec(`anyxml`, validate_yang_identifier)
-    specs[Int(`augment`)] = scalar_spec(`augment`, validate_yang_path)
-    specs[Int(`choice`)] = scalar_spec(`choice`, validate_yang_identifier)
-    specs[Int(`deviation`)] = scalar_spec(`deviation`, validate_yang_path)
-    specs[Int(`extension`)] = scalar_spec(`extension`, validate_yang_identifier)
-    specs[Int(`feature`)] = scalar_spec(`feature`, validate_yang_identifier)
-    specs[Int(`identity`)] = scalar_spec(`identity`, validate_yang_identifier)
-    specs[Int(`import`)] = scalar_spec(`import`, validate_yang_identifier)
-    specs[Int(`include`)] = scalar_spec(`include`, validate_yang_identifier)
-    specs[Int(`leaf-list`)] = scalar_spec(`leaf-list`, validate_yang_identifier)
+    specs[Int(`error-message`)] = scalar_spec(`error-message`, _validate_string)
+    specs[Int(`when`)] = scalar_spec(`when`, _validate_xpath)
+    specs[Int(`anydata`)] = scalar_spec(`anydata`, _validate_identifier)
+    specs[Int(`anyxml`)] = scalar_spec(`anyxml`, _validate_identifier)
+    specs[Int(`augment`)] = scalar_spec(`augment`, _validate_path)
+    specs[Int(`choice`)] = scalar_spec(`choice`, _validate_identifier)
+    specs[Int(`deviation`)] = scalar_spec(`deviation`, _validate_path)
+    specs[Int(`extension`)] = scalar_spec(`extension`, _validate_identifier)
+    specs[Int(`feature`)] = scalar_spec(`feature`, _validate_identifier)
+    specs[Int(`identity`)] = scalar_spec(`identity`, _validate_identifier)
+    specs[Int(`import`)] = scalar_spec(`import`, _validate_identifier)
+    specs[Int(`include`)] = scalar_spec(`include`, _validate_identifier)
+    specs[Int(`leaf-list`)] = scalar_spec(`leaf-list`, _validate_identifier)
     specs[Int(`notification`)] = scalar_spec(
-        `notification`, validate_yang_identifier
+        `notification`, _validate_identifier
     )
-    specs[Int(`reference`)] = scalar_spec(`reference`, validate_yang_string)
-    specs[Int(`rpc`)] = scalar_spec(`rpc`, validate_yang_identifier)
-    specs[Int(`typedef`)] = scalar_spec(`typedef`, validate_yang_identifier)
+    specs[Int(`reference`)] = scalar_spec(`reference`, _validate_string)
+    specs[Int(`rpc`)] = scalar_spec(`rpc`, _validate_identifier)
+    specs[Int(`typedef`)] = scalar_spec(`typedef`, _validate_identifier)
     specs[Int(`length`)] = LENGTH_STMT_SPEC
     specs[Int(`pattern`)] = PATTERN_STMT_SPEC
-    specs[Int(`modifier`)] = scalar_spec(`modifier`, validate_yang_modifier)
+    specs[Int(`modifier`)] = scalar_spec(`modifier`, _validate_modifier)
     specs[Int(`fraction-digits`)] = scalar_spec(
-        `fraction-digits`, validate_yang_fraction_digits
+        `fraction-digits`, _validate_fraction_digits
     )
-    specs[Int(`enum`)] = scalar_spec(`enum`, validate_yang_identifier)
-    specs[Int(`bit`)] = scalar_spec(`bit`, validate_yang_identifier)
-    specs[Int(`base`)] = scalar_spec(`base`, validate_yang_qname)
+    specs[Int(`enum`)] = scalar_spec(`enum`, _validate_identifier)
+    specs[Int(`bit`)] = scalar_spec(`bit`, _validate_identifier)
+    specs[Int(`base`)] = scalar_spec(`base`, _validate_qname)
     return specs
 
 

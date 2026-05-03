@@ -1,4 +1,5 @@
-## Argument validators for table-driven YANG construct validation.
+## YANG statement argument types and `YangArgument::validate` for construct
+## validation (table-driven specs in `spec.mojo`).
 ##
 ## Includes RFC 7950 §9.4 (`length`, `pattern`, `modifier`) argument checks.
 
@@ -22,7 +23,7 @@ trait YangArgumentHost:
     def argument_keyword(read self) -> String:
         ...
 
-    def argument_line(read self) -> Int:
+    def argument_line(read self) -> UInt:
         ...
 
     def set_argument(mut self, var argument: YangArgumentValue):
@@ -90,6 +91,32 @@ struct StringArgument(Movable, YangArgument):
         node.set_argument(YangArgumentValue(StringArgument(argument^)))
 
 
+## `yang-version` statement; stores a `StringArgument` payload (1 or 1.1).
+@fieldwise_init
+struct YangVersionArgument(Movable, YangArgument):
+    var text: String
+
+    def get_text(read self) -> String:
+        return self.text.copy()
+
+    @staticmethod
+    def validate(mut node: YangConstruct) raises -> None:
+        var argument = node.argument_text()
+        if argument != "1" and argument != "1.1":
+            raise Error(
+                (
+                    (
+                        "line " + String(node.argument_line()) + ": "
+                    ) if node.argument_line()
+                    > 0 else ""
+                )
+                + "`"
+                + node.argument_keyword()
+                + "` expected YANG version 1 or 1.1"
+            )
+        node.set_argument(YangArgumentValue(StringArgument(argument^)))
+
+
 @fieldwise_init
 struct IdentifierArgument(Movable, YangArgument):
     var text: String
@@ -129,9 +156,7 @@ struct QNameArgument(Movable, YangArgument):
                 )
             )
         else:
-            node.set_argument(
-                YangArgumentValue(IdentifierArgument(argument^))
-            )
+            node.set_argument(YangArgumentValue(IdentifierArgument(argument^)))
 
 
 @fieldwise_init
@@ -161,9 +186,7 @@ struct XPathExpressionArgument(Movable, YangArgument):
         var argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(node, "expected non-empty expression")
-        node.set_argument(
-            YangArgumentValue(XPathExpressionArgument(argument^))
-        )
+        node.set_argument(YangArgumentValue(XPathExpressionArgument(argument^)))
 
 
 @fieldwise_init
@@ -222,7 +245,9 @@ struct PatternArgument(Movable, YangArgument):
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if _strip_spaces(argument).byte_length() == 0:
-            raise _argument_error(node, "expected non-empty XSD regular expression")
+            raise _argument_error(
+                node, "expected non-empty XSD regular expression"
+            )
         node.set_argument(YangArgumentValue(PatternArgument(argument^)))
 
 
@@ -355,7 +380,7 @@ struct YangPatternSpec(Copyable, ImplicitlyCopyable, Movable):
 comptime _LENGTH_MAX: Int64 = 9223372036854775807
 
 
-def _line_prefix(line: Int) -> String:
+def _line_prefix(line: UInt) -> String:
     if line > 0:
         return "line " + String(line) + ": "
     return ""
@@ -371,7 +396,7 @@ def _strip_spaces(read s: String) -> String:
     return out^
 
 
-def _length_lower_bound(read tok: String, line: Int) raises -> Int64:
+def _length_lower_bound(read tok: String, line: UInt) raises -> Int64:
     var t = _strip_spaces(tok)
     if t == "min":
         return 0
@@ -389,7 +414,7 @@ def _length_lower_bound(read tok: String, line: Int) raises -> Int64:
     return n
 
 
-def _length_upper_bound(read tok: String, line: Int) raises -> Int64:
+def _length_upper_bound(read tok: String, line: UInt) raises -> Int64:
     var t = _strip_spaces(tok)
     if t == "max":
         return _LENGTH_MAX
@@ -408,7 +433,7 @@ def _length_upper_bound(read tok: String, line: Int) raises -> Int64:
 
 
 def try_parse_length_segments(
-    read argument: String, line: Int
+    read argument: String, line: UInt
 ) raises -> List[LengthSegment]:
     ## Parse RFC 7950 `length-arg` (§9.4.4, ABNF `length-arg` in §14).
     var out = List[LengthSegment]()

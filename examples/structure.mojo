@@ -1,6 +1,6 @@
 ## Minimal compile-time field metadata for YANG-style statements.
 ##
-##   pixi run mojo examples/structure.mojo
+##   pixi run mojo -I . -I examples examples/structure.mojo
 
 from std.collections import Dict, List
 from std.iter import Iterable, Iterator

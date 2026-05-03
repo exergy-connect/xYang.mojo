@@ -37,6 +37,7 @@
 from std.memory import ArcPointer
 
 import xyang.json.parser as json_parser
+import xyang.yang.ast.util as ast_util
 from xyang.yang.arguments import _strip_spaces
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
@@ -45,22 +46,33 @@ from xyang.yang.spec import MODULE_SPEC, build_spec_table, validate_construct
 comptime Arc = ArcPointer
 
 
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
+comptime `^b` = ast_util.to_byte["^"]()
+comptime `$b` = ast_util.to_byte["$"]()
 
 
-comptime `^b` = _to_byte["^"]()
-comptime `$b` = _to_byte["$"]()
+def _parse_ascii_uint64(read s: String) -> Int64:
+    ## Decimal digits only; returns -1 on empty or invalid (no `atol` / no raises).
+    var b = s.as_bytes()
+    var n = len(b)
+    if n == 0:
+        return -1
+    var acc: Int64 = 0
+    comptime d0 = ast_util.to_byte["0"]()
+    comptime d9 = ast_util.to_byte["9"]()
+    for i in range(n):
+        var c = b[i]
+        if c < d0 or c > d9:
+            return -1
+        acc = acc * 10 + Int64(c - d0)
+    return acc
+
 
 ## --- `YangConstruct` tree helpers (keyword + argument + children) ---
 
 
 @always_inline
 def _stmt(
-    keyword: String, argument: String = "", line: Int = 0
+    keyword: String, argument: String = "", line: UInt = 0
 ) -> YangConstruct:
     var node = YangConstruct(keyword, line)
     if argument.byte_length() > 0:
@@ -323,6 +335,13 @@ def _type_from_schema(
         var maxv = _json_scalar(schema, "maximum")
         if minv and maxv and minv.value() == "0" and maxv.value() == "255":
             return _stmt("type", "uint8")
+        if minv and maxv:
+            var lo = _parse_ascii_uint64(minv.value())
+            var hi = _parse_ascii_uint64(maxv.value())
+            if lo >= 0 and hi >= 0 and lo <= hi and hi <= 65535:
+                var t16 = _stmt("type", "uint16")
+                _append_range_from_schema(t16, schema)
+                return t16^
         var t = _stmt("type", "int32")
         _append_range_from_schema(t, schema)
         return t^

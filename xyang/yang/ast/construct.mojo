@@ -29,17 +29,19 @@ comptime Arc = ArcPointer
 
 
 @fieldwise_init
-struct YangConstruct(ImplicitlyDestructible, Movable, Writable, YangArgumentHost):
+struct YangConstruct(
+    ImplicitlyDestructible, Movable, Writable, YangArgumentHost
+):
     comptime StatementList = List[Arc[YangConstruct]]
 
     var keyword: String
     var argument: YangArgumentValue
     var children: Self.StatementList
-    var line: Int
+    var line: UInt
     # Keyword id of the YangConstructSpec that validated this node.
     var spec: Keyword
 
-    def __init__(out self, keyword: String, line: Int = 0):
+    def __init__(out self, keyword: String, line: UInt = 0):
         self.keyword = keyword
         self.argument = YangArgumentValue(NoArgument())
         self.children = Self.StatementList()
@@ -55,7 +57,7 @@ struct YangConstruct(ImplicitlyDestructible, Movable, Writable, YangArgumentHost
     def argument_keyword(read self) -> String:
         return self.keyword.copy()
 
-    def argument_line(read self) -> Int:
+    def argument_line(read self) -> UInt:
         return self.line
 
     def set_argument(mut self, var argument: YangArgumentValue):

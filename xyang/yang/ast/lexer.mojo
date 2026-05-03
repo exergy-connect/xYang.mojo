@@ -23,39 +23,26 @@
 
 from std.memory import Span
 
+import xyang.yang.ast.util as ast_util
+
 
 comptime ByteView = Span[Byte, _]
 
 
-@always_inline
-def _to_byte[s: StaticString]() -> Byte:
-    comptime assert s.byte_length() == 1, "expected one character string"
-    comptime byte = s.as_bytes()[0]
-    return byte
+comptime `"` = ast_util.to_byte['"']()
+comptime `'` = ast_util.to_byte["'"]()
+comptime `{` = ast_util.to_byte["{"]()
+comptime `}` = ast_util.to_byte["}"]()
+comptime `;` = ast_util.to_byte[";"]()
+comptime `+` = ast_util.to_byte["+"]()
+comptime `/` = ast_util.to_byte["/"]()
+comptime `*` = ast_util.to_byte["*"]()
+comptime ` ` = ast_util.to_byte[" "]()
 
-
-comptime `"` = _to_byte['"']()
-comptime `'` = _to_byte["'"]()
-comptime `{` = _to_byte["{"]()
-comptime `}` = _to_byte["}"]()
-comptime `;` = _to_byte[";"]()
-comptime `+` = _to_byte["+"]()
-comptime `/` = _to_byte["/"]()
-comptime `*` = _to_byte["*"]()
-comptime ` ` = _to_byte[" "]()
-
-comptime `\n` = _to_byte["\n"]()
-comptime `\t` = _to_byte["\t"]()
-comptime `\\` = _to_byte["\\"]()
-comptime `\r` = _to_byte["\r"]()
-
-
-@always_inline
-def token_table[*tokens: Byte]() -> InlineArray[Bool, 256]:
-    var t = InlineArray[Bool, 256](fill=False)
-    comptime for i in range(len(tokens)):
-        t[tokens[i]] = True
-    return t^
+comptime `\n` = ast_util.to_byte["\n"]()
+comptime `\t` = ast_util.to_byte["\t"]()
+comptime `\\` = ast_util.to_byte["\\"]()
+comptime `\r` = ast_util.to_byte["\r"]()
 
 
 @fieldwise_init
@@ -87,9 +74,9 @@ struct AstToken(Copyable):
 
     def text_slice[
         origin: ImmutOrigin
-    ](
-        self, source: ByteView[origin], strip_quotes: Bool = True
-    ) -> StringSlice[origin]:
+    ](self, source: ByteView[origin], strip_quotes: Bool = True) -> StringSlice[
+        origin
+    ]:
         var start = self.start
         var end = self.start + self.length
         if strip_quotes and self.type == Self.STRING and self.length >= 2:
@@ -120,11 +107,12 @@ struct AstLexer[origin: ImmutOrigin]:
         return self.pos >= len(self.input)
 
     def skip_ws_and_comments(mut self):
-        comptime WHITESPACE_SCAN_STOP = token_table[` `, `\n`, `\t`, `\r`]()
+        comptime WHITESPACE = ast_util.ASCIISet[` `, `\n`, `\t`, `\r`]()
+        comptime LINE_COMMENT_END = ast_util.ASCIISet[`\n`, `\r`]()
 
         while not self.eof():
             var ch = self.input[self.pos]
-            if WHITESPACE_SCAN_STOP[Int(ch)]:
+            if ch in WHITESPACE:
                 if ch == `\n`:
                     self.line += 1
                 self.pos += 1
@@ -134,7 +122,7 @@ struct AstLexer[origin: ImmutOrigin]:
                     self.pos += 2
                     while not self.eof():
                         var line_ch = self.input[self.pos]
-                        if line_ch == `\n` or line_ch == `\r`:
+                        if line_ch in LINE_COMMENT_END:
                             break
                         self.pos += 1
                 elif next_ch == `*`:
@@ -157,14 +145,14 @@ struct AstLexer[origin: ImmutOrigin]:
                 return
 
     def scan_identifier(mut self) raises -> Int:
-        comptime IDENTIFIER_SCAN_STOP = token_table[
+        comptime IDENTIFIER_STOP = ast_util.ASCIISet[
             ` `, `\n`, `\t`, `\r`, `{`, `}`, `;`, `+`, `"`, `'`
         ]()
 
         var start = self.pos
         while not self.eof():
             var ch = self.input[self.pos]
-            if IDENTIFIER_SCAN_STOP[Int(ch)]:
+            if ch in IDENTIFIER_STOP:
                 break
             self.pos += 1
 
