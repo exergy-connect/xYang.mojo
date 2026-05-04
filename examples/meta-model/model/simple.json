@@ -1,0 +1,29 @@
+{
+  "data-model": {
+    "consolidated": false,
+    "name": "simple_catalog",
+    "version": "26.05.04.1",
+    "author": "xYang.mojo examples",
+    "description": "Minimal sample: one entity, primary key plus a string attribute. Suitable for smoke tests and tutorials.",
+    "entities": [
+      {
+        "name": "product",
+        "brief": "Sellable item",
+        "description": "A single product row identified by an integer primary key and human-readable title.",
+        "primary_key": "id",
+        "fields": [
+          {
+            "name": "id",
+            "description": "Stable numeric identifier for the product.",
+            "type": { "primitive": "integer" }
+          },
+          {
+            "name": "title",
+            "description": "Display name shown in catalog listings.",
+            "type": { "primitive": "string" }
+          }
+        ]
+      }
+    ]
+  }
+}

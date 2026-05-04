@@ -67,6 +67,10 @@ struct YangConstruct(
     def set_argument(mut self, var argument: YangArgumentValue):
         self.argument = argument^
 
+    def update_argument[T: Movable](mut self, var inner: T):
+        ## Keep `argument.text`; replace only the validated `YangArgumentPayload`.
+        self.argument.update_payload(inner^)
+
     def set_raw_argument(mut self, var text: String):
         self.set_argument(YangArgumentValue(text^))
 

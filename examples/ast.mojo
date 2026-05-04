@@ -60,12 +60,16 @@ def is_name_token(tok: AstToken) -> Bool:
     return tok.type == AstToken.IDENTIFIER
 
 
-def parse_module[origin: ImmutOrigin](
-    mut lexer: AstLexer[origin]
-) raises -> YangConstruct:
+def parse_module[
+    origin: ImmutOrigin
+](mut lexer: AstLexer[origin]) raises -> YangConstruct:
     var tok = lexer.next_token()
     if tok.type == AstToken.EOF:
-        raise Error("line " + String(lexer.line) + ": Expected module statement, got EOF")
+        raise Error(
+            "line "
+            + String(lexer.line)
+            + ": Expected module statement, got EOF"
+        )
     if not is_name_token(tok):
         raise Error(
             "Expected module statement keyword, got `"
@@ -74,7 +78,9 @@ def parse_module[origin: ImmutOrigin](
             + String(tok.line)
         )
 
-    var module = parse_statement_after_keyword(lexer, tok.text(lexer.input), tok.line)
+    var module = parse_statement_after_keyword(
+        lexer, tok.text(lexer.input), tok.line
+    )
     if module.keyword != "module":
         raise Error(
             "line "
@@ -118,14 +124,18 @@ def parse_block[
             )
         children.append(
             Arc[YangConstruct](
-                parse_statement_after_keyword(lexer, tok.text(lexer.input), tok.line),
+                parse_statement_after_keyword(
+                    lexer, tok.text(lexer.input), tok.line
+                ),
             ),
         )
 
 
 def parse_statement_after_keyword[
     origin: ImmutOrigin
-](mut lexer: AstLexer[origin], keyword: String, line: Int) raises -> YangConstruct:
+](
+    mut lexer: AstLexer[origin], keyword: String, line: Int
+) raises -> YangConstruct:
     var statement = YangConstruct(keyword, line)
     var tok = lexer.next_token()
 
@@ -177,7 +187,7 @@ def parse_argument[
 
 def main() raises:
     var source: String
-    with open("examples/meta-model.yang", "r") as f:
+    with open("examples/meta-model/meta-model.yang", "r") as f:
         source = f.read()
     var lexer = AstLexer(source.as_bytes())
     var module = parse_module(lexer)

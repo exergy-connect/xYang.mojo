@@ -14,7 +14,7 @@ from ..arguments import (
     _strip_spaces,
     length_allows_scalar_count,
     try_parse_length_segments,
-    try_parse_range_bounds,
+    try_parse_range_segments,
 )
 from ..keyword import Keyword
 
@@ -93,7 +93,7 @@ struct YangModule(Movable & Iterable):
     def _populate_from_validated_tree(
         mut self, read tree: YangConstruct
     ) raises:
-        from ..spec import `container`, `grouping`, `revision`
+        from ..spec import `container`, `grouping`, `revision`, `typedef`
 
         self.fields[tree.spec] = tree.argument_text()
         for child in tree.children:
@@ -104,6 +104,8 @@ struct YangModule(Movable & Iterable):
                 self.revisions.append(arg)
             elif kw == `grouping`:
                 _insert_unique(self.groupings, arg, child)
+            elif kw == `typedef`:
+                _insert_unique(self.typedefs, arg, child)
             elif kw == `container`:
                 _insert_unique(self.top_containers, arg, child)
             else:
@@ -311,18 +313,41 @@ struct YangModule(Movable & Iterable):
                 return Optional[Arc[YangConstruct]](child.copy())
         return Optional[Arc[YangConstruct]]()
 
-    def leaf_type(read self, read leaf: YangConstruct) -> String:
+    def leaf_effective_type_stmt(
+        read self, read leaf: YangConstruct
+    ) raises -> Optional[Arc[YangConstruct]]:
         from ..spec import `type`
 
-        var ty = self.find_child(leaf, `type`)
-        if ty and ty.value()[].has_argument():
-            return ty.value()[].argument_text()
+        var cur_ty = self.find_child(leaf, `type`)
+        if not cur_ty:
+            return Optional[Arc[YangConstruct]]()
+        comptime _MAX_TYPEDEF_STEPS = 128
+        for _ in range(_MAX_TYPEDEF_STEPS):
+            ref cur = cur_ty.value()[]
+            if not cur.has_argument():
+                return cur_ty.copy()
+            var nm = cur.argument_text()
+            var td = self.typedef(nm)
+            if not td:
+                return cur_ty.copy()
+            var inner_ty = self.find_child(td.value()[], `type`)
+            if not inner_ty:
+                return cur_ty.copy()
+            cur_ty = inner_ty.copy()
+        raise Error("typedef chain too deep or cyclic")
+
+    def leaf_type(read self, read leaf: YangConstruct) raises -> String:
+        var eff = self.leaf_effective_type_stmt(leaf)
+        if not eff:
+            return ""
+        if eff.value()[].has_argument():
+            return eff.value()[].argument_text()
         return ""
 
-    def leaf_range(read self, read leaf: YangConstruct) -> String:
-        from ..spec import `range-stmt`, `type`
+    def leaf_range(read self, read leaf: YangConstruct) raises -> String:
+        from ..spec import `range-stmt`
 
-        var ty = self.find_child(leaf, `type`)
+        var ty = self.leaf_effective_type_stmt(leaf)
         if not ty:
             return ""
         var range_stmt = self.find_child(ty.value()[], `range-stmt`)
@@ -330,18 +355,20 @@ struct YangModule(Movable & Iterable):
             return range_stmt.value()[].argument_text()
         return ""
 
-    def leaf_range_bounds(
+    def leaf_range_segments(
         read self, read leaf: YangConstruct
-    ) raises -> Optional[RangeBounds]:
+    ) raises -> List[RangeBounds]:
         var text = self.leaf_range(leaf)
         if text.byte_length() == 0:
-            return Optional[RangeBounds]()
-        return try_parse_range_bounds(text)
+            return List[RangeBounds]()
+        return try_parse_range_segments(text, 0)
 
-    def leaf_length_argument(read self, read leaf: YangConstruct) -> String:
-        from ..spec import `length`, `type`
+    def leaf_length_argument(
+        read self, read leaf: YangConstruct
+    ) raises -> String:
+        from ..spec import `length`
 
-        var ty = self.find_child(leaf, `type`)
+        var ty = self.leaf_effective_type_stmt(leaf)
         if not ty:
             return ""
         var ln = self.find_child(ty.value()[], `length`)
@@ -360,10 +387,10 @@ struct YangModule(Movable & Iterable):
     def leaf_pattern_specs(
         read self, read leaf: YangConstruct
     ) raises -> List[YangPatternSpec]:
-        from ..spec import `modifier`, `pattern`, `type`
+        from ..spec import `modifier`, `pattern`
 
         var out = List[YangPatternSpec]()
-        var ty = self.find_child(leaf, `type`)
+        var ty = self.leaf_effective_type_stmt(leaf)
         if not ty:
             return out^
         for ch in ty.value()[].children:

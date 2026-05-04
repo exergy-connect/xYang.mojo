@@ -31,7 +31,7 @@ trait YangArgumentHost:
     def argument_line(read self) -> UInt:
         ...
 
-    def set_argument(mut self, var argument: YangArgumentValue):
+    def update_argument[T: Movable](mut self, var inner: T):
         ...
 
 
@@ -63,14 +63,15 @@ struct NoArgument(Movable, YangArgument):
         return
 
 
+@fieldwise_init
 struct StringArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    ## Canonical string payload (e.g. description text, `yang-version` literal).
+    var content: String
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        node.set_argument(YangArgumentValue(argument^, StringArgument()))
+        node.update_argument(StringArgument(argument.copy()))
 
 
 ## `yang-version` statement; stores a `StringArgument` payload (1 or 1.1).
@@ -93,23 +94,25 @@ struct YangVersionArgument(Movable, YangArgument):
                 + node.argument_keyword()
                 + "` expected YANG version 1 or 1.1"
             )
-        node.set_argument(YangArgumentValue(argument^, StringArgument()))
+        node.update_argument(StringArgument(argument.copy()))
 
 
+@fieldwise_init
 struct IdentifierArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    var name: String
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_identifier(argument):
             raise _argument_error(node, "expected identifier argument")
-        node.set_argument(YangArgumentValue(argument^, IdentifierArgument()))
+        node.update_argument(IdentifierArgument(argument.copy()))
 
 
 @fieldwise_init
 struct QNameArgument(Movable, YangArgument):
+    ## Full `prefix:local` spelling plus parsed parts.
+    var qualified_name: String
     var prefix: String
     var local_name: String
 
@@ -124,15 +127,11 @@ struct QNameArgument(Movable, YangArgument):
         if len(parts) == 2:
             var prefix = String(parts[0])
             var local_name = String(parts[1])
-            node.set_argument(
-                YangArgumentValue(
-                    argument^, QNameArgument(prefix^, local_name^)
-                )
+            node.update_argument(
+                QNameArgument(argument.copy(), prefix^, local_name^)
             )
         else:
-            node.set_argument(
-                YangArgumentValue(argument^, IdentifierArgument())
-            )
+            node.update_argument(IdentifierArgument(argument.copy()))
 
 
 @fieldwise_init
@@ -143,7 +142,7 @@ struct PathArgument(Movable, YangArgument):
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var parsed = parse_yang_path(argument, node.argument_line())
-        node.set_argument(YangArgumentValue(argument^, PathArgument(parsed^)))
+        node.update_argument(PathArgument(parsed^))
 
 
 @fieldwise_init
@@ -157,79 +156,76 @@ struct XPathExpressionArgument(Movable, YangArgument):
             raise _argument_error(node, "expected non-empty expression")
         var line = node.argument_line()
         var root = parse_xpath_expression(argument, line)
-        node.set_argument(
-            YangArgumentValue(
-                argument^,
-                XPathExpressionArgument(root^),
-            )
-        )
+        node.update_argument(XPathExpressionArgument(root^))
 
 
+@fieldwise_init
 struct RevisionDateArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    var date: String
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_revision_date(argument):
             raise _argument_error(node, "expected revision date YYYY-MM-DD")
-        node.set_argument(YangArgumentValue(argument^, RevisionDateArgument()))
+        node.update_argument(RevisionDateArgument(argument.copy()))
 
 
+@fieldwise_init
 struct RangeArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    var segments: List[RangeBounds]
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        var parsed = try_parse_range_bounds(argument)
-        if not parsed:
-            raise _argument_error(node, "expected basic range expression")
-        node.set_argument(YangArgumentValue(argument^, RangeArgument()))
+        var segs = try_parse_range_segments(argument, node.argument_line())
+        if len(segs) < 1:
+            raise _argument_error(node, "expected valid `range` expression")
+        node.update_argument(RangeArgument(segs^))
 
 
+@fieldwise_init
 struct LengthArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    var segments: List[LengthSegment]
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        _ = try_parse_length_segments(argument, node.argument_line())
-        node.set_argument(YangArgumentValue(argument^, LengthArgument()))
+        var segs = try_parse_length_segments(argument, node.argument_line())
+        node.update_argument(LengthArgument(segs^))
 
 
+@fieldwise_init
 struct PatternArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    var regex: String
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        if _strip_spaces(argument).byte_length() == 0:
+        var stripped = _strip_spaces(argument)
+        if stripped.byte_length() == 0:
             raise _argument_error(
                 node, "expected non-empty XSD regular expression"
             )
-        node.set_argument(YangArgumentValue(argument^, PatternArgument()))
+        node.update_argument(PatternArgument(stripped^))
 
 
+@fieldwise_init
 struct ModifierArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    ## True when the argument is `invert-match` (RFC 7950 §9.4.6).
+    var invert_match: Bool
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if _strip_spaces(argument) != "invert-match":
             raise _argument_error(node, "expected argument `invert-match`")
-        node.set_argument(YangArgumentValue(argument^, ModifierArgument()))
+        node.update_argument(ModifierArgument(True))
 
 
 @fieldwise_init
 struct FractionDigitsArgument(Movable, YangArgument):
-    var value: Int
+    var digits: Int
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -242,26 +238,24 @@ struct FractionDigitsArgument(Movable, YangArgument):
             raise _argument_error(
                 node, "must be between 1 and 18 (RFC 7950 §9.3)"
             )
-        node.set_argument(
-            YangArgumentValue(argument^, FractionDigitsArgument(Int(n)))
-        )
+        node.update_argument(FractionDigitsArgument(Int(n)))
 
 
+@fieldwise_init
 struct TypeNameArgument(Movable, YangArgument):
-    def __init__(out self):
-        pass
+    var name: String
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_supported_type_name(argument):
             raise _argument_error(node, "expected basic YANG type name")
-        node.set_argument(YangArgumentValue(argument^, TypeNameArgument()))
+        node.update_argument(TypeNameArgument(argument.copy()))
 
 
 @fieldwise_init
 struct BoolArgument(Movable, YangArgument):
-    var value: Bool
+    var truth: Bool
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -269,7 +263,64 @@ struct BoolArgument(Movable, YangArgument):
         if argument != "true" and argument != "false":
             raise _argument_error(node, "expected boolean argument")
         var truth = argument == "true"
-        node.set_argument(YangArgumentValue(argument^, BoolArgument(truth)))
+        node.update_argument(BoolArgument(truth))
+
+
+@fieldwise_init
+struct MinElementsArgument(Movable, YangArgument):
+    var count: Int
+
+    @staticmethod
+    def validate(mut node: YangConstruct) raises -> None:
+        var argument = node.argument_text()
+        var t = _strip_spaces(argument)
+        if t.byte_length() == 0:
+            raise _argument_error(node, "expected non-negative integer")
+        var n = atol(t)
+        if n < 0:
+            raise _argument_error(node, "`min-elements` must be non-negative")
+        node.update_argument(MinElementsArgument(Int(n)))
+
+
+@fieldwise_init
+struct MaxElementsArgument(Movable, YangArgument):
+    ## Non-negative count, or `-1` when the argument is `unbounded`.
+    var count: Int
+
+    @staticmethod
+    def validate(mut node: YangConstruct) raises -> None:
+        var argument = node.argument_text()
+        var t = _strip_spaces(argument)
+        if t.byte_length() == 0:
+            raise _argument_error(
+                node, "expected non-negative integer or unbounded"
+            )
+        if t == "unbounded":
+            node.update_argument(MaxElementsArgument(-1))
+            return
+        var n = atol(t)
+        if n < 0:
+            raise _argument_error(node, "`max-elements` must be non-negative")
+        node.update_argument(MaxElementsArgument(Int(n)))
+
+
+@fieldwise_init
+struct StatusArgument(Movable, YangArgument):
+    var state: String
+
+    @staticmethod
+    def validate(mut node: YangConstruct) raises -> None:
+        var argument = node.argument_text()
+        var t = _strip_spaces(argument)
+        if t != "current" and t != "deprecated" and t != "obsolete":
+            raise _argument_error(
+                node,
+                (
+                    "expected `current`, `deprecated`, or `obsolete` (RFC 7950"
+                    " §7.21.2)"
+                ),
+            )
+        node.update_argument(StatusArgument(t.copy()))
 
 
 comptime YangArgumentPayload = Variant[
@@ -287,6 +338,9 @@ comptime YangArgumentPayload = Variant[
     FractionDigitsArgument,
     TypeNameArgument,
     BoolArgument,
+    MinElementsArgument,
+    MaxElementsArgument,
+    StatusArgument,
 ]
 
 
@@ -308,11 +362,16 @@ struct YangArgumentValue(Movable):
     def get[T: AnyType](ref self) -> ref[self.payload] T:
         return self.payload[T]
 
+    def update_payload[T: Movable](mut self, var inner: T):
+        ## Replace the typed argument while preserving lexer/source `text`.
+        self.payload = YangArgumentPayload(inner^)
+
 
 @fieldwise_init
 struct RangeBounds(Copyable, ImplicitlyCopyable, Movable):
-    var lo: Int64
-    var hi: Int64
+    ## Inclusive numeric bounds (`min` / `max` map to extreme `Float64` values).
+    var lo: Float64
+    var hi: Float64
 
 
 ## One inclusive segment from a `length` argument (RFC 7950 §9.4.4).
@@ -330,6 +389,9 @@ struct YangPatternSpec(Copyable, ImplicitlyCopyable, Movable):
 
 
 comptime _LENGTH_MAX: Int64 = 9223372036854775807
+## `range` statement: `min` / `max` keywords (RFC 7950 §9.2.4) as wide finite bounds.
+comptime _RANGE_F64_MIN: Float64 = -1.7976931348623157e308
+comptime _RANGE_F64_MAX: Float64 = 1.7976931348623157e308
 
 
 def _line_prefix(line: UInt) -> String:
@@ -453,12 +515,89 @@ def length_allows_scalar_count(
     return False
 
 
+def _range_lower_bound_f64(read tok: String, line: UInt) raises -> Float64:
+    var t = _strip_spaces(tok)
+    if t == "min":
+        return _RANGE_F64_MIN
+    if t == "max":
+        raise Error(
+            _line_prefix(line) + "`range` `max` cannot be a lower bound"
+        )
+    if t.byte_length() == 0:
+        raise Error(_line_prefix(line) + "`range` empty lower bound")
+    return Float64(t)
+
+
+def _range_upper_bound_f64(read tok: String, line: UInt) raises -> Float64:
+    var t = _strip_spaces(tok)
+    if t == "max":
+        return _RANGE_F64_MAX
+    if t == "min":
+        raise Error(
+            _line_prefix(line) + "`range` `min` cannot be an upper bound"
+        )
+    if t.byte_length() == 0:
+        raise Error(_line_prefix(line) + "`range` empty upper bound")
+    return Float64(t)
+
+
+def _parse_one_range_segment(
+    read seg: String, line: UInt
+) raises -> RangeBounds:
+    ## One `lower..upper` piece (RFC 7950 §9.2.4); bounds may be decimal.
+    var part = _strip_spaces(seg)
+    var parts = part.split("..")
+    if len(parts) != 2:
+        raise Error(
+            _line_prefix(line)
+            + "`range` segment `"
+            + part
+            + "` must contain exactly one `..`"
+        )
+    var lo = _range_lower_bound_f64(String(parts[0]), line)
+    var hi = _range_upper_bound_f64(String(parts[1]), line)
+    if lo > hi:
+        raise Error(
+            _line_prefix(line) + "`range` lower bound exceeds upper bound"
+        )
+    return RangeBounds(lo, hi)
+
+
+def try_parse_range_segments(
+    read argument: String, line: UInt = 0
+) raises -> List[RangeBounds]:
+    ## Parse `range-arg`: `|` alternatives, each `lower..upper` (§9.2.4).
+    var out = List[RangeBounds]()
+    var norm = _strip_spaces(argument)
+    if norm.byte_length() == 0:
+        return out^
+    var raw_parts = norm.split("|")
+    for i in range(len(raw_parts)):
+        var piece = _strip_spaces(String(raw_parts[i]))
+        if piece.byte_length() == 0:
+            raise Error(_line_prefix(line) + "`range` empty `|` segment")
+        out.append(_parse_one_range_segment(piece, line))
+    for i in range(1, len(out)):
+        if out[i - 1].lo > out[i].lo:
+            raise Error(
+                _line_prefix(line)
+                + "`range` alternatives must be in ascending order (RFC 7950"
+                " §9.2.4)"
+            )
+        if out[i - 1].hi >= out[i].lo:
+            raise Error(
+                _line_prefix(line)
+                + "`range` alternatives must be disjoint (RFC 7950 §9.2.4)"
+            )
+    return out^
+
+
 def try_parse_range_bounds(
     read argument: String,
+    line: UInt = 0,
 ) raises -> Optional[RangeBounds]:
-    var parts = argument.split("..")
-    if len(parts) != 2:
+    ## First alternative only; prefer `try_parse_range_segments` for unions.
+    var segs = try_parse_range_segments(argument, line)
+    if len(segs) < 1:
         return Optional[RangeBounds]()
-    var lo = Int64(atol(String(parts[0]).strip()))
-    var hi = Int64(atol(String(parts[1]).strip()))
-    return Optional[RangeBounds](RangeBounds(lo, hi))
+    return Optional[RangeBounds](segs[0].copy())

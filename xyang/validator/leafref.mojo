@@ -1,64 +1,267 @@
-## Leafref path resolution against a JSON document tree.
+## Leafref path resolution against a JSON document tree (RFC 7950 §9.9.2).
+##
+## Context node for ``path`` is the leafref leaf; leading ``../`` ascends the
+## instance path built during validation. List predicates use ``current()`` as
+## each candidate list entry (§9.9.2).
 
-from std.collections import Dict
+from std.collections import Dict, List
+from std.memory import ArcPointer
 
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
+import xyang.yang.ast.util as ast_util
+from xyang.yang.path import (
+    YangPath,
+    YangPathKeyExpression,
+    YangPathPredicate,
+    YangPathStep,
+    YangQName,
+    parse_yang_path,
+)
 from xyang.yang.spec import `container`, `leaf`, `list`
 
 
+comptime Arc = ArcPointer
 comptime TargetSet = Dict[String, Bool]
+comptime `_slash` = ast_util.to_byte["/"]()
+comptime `[` = ast_util.to_byte["["]()
+comptime `]` = ast_util.to_byte["]"]()
+comptime `_0` = ast_util.to_byte["0"]()
+comptime `_9` = ast_util.to_byte["9"]()
 
 
-def path_segment_name(segment: String) -> String:
-    var base = String(segment.strip())
-    var predicate_parts = base.split("[")
-    if len(predicate_parts) > 0:
-        base = String(predicate_parts[0])
-    var prefix_parts = base.split(":")
-    if len(prefix_parts) == 2:
-        return String(prefix_parts[1])
-    return base^
+def _parent_instance_path(read p: String) -> String:
+    if p.byte_length() == 0:
+        return ""
+    var b = p.as_bytes()
+    var i = len(b) - 1
+    while i > 0:
+        if b[i] == `_slash`:
+            return String(StringSlice(unsafe_from_utf8=b[0:i]))
+        i -= 1
+    return ""
 
 
-def path_segments(path: String) -> List[String]:
-    var out = List[String]()
-    var raw_segments = path.split("/")
-    for i in range(len(raw_segments)):
-        var segment = path_segment_name(String(raw_segments[i]))
-        if segment.byte_length() > 0 and segment != ".":
-            out.append(segment^)
-    return out^
+def _ancestor_rev_chain(read leaf_parent_path: String) -> List[String]:
+    var rev = List[String]()
+    var cur = leaf_parent_path.copy()
+    while True:
+        rev.append(cur.copy())
+        if cur.byte_length() == 0:
+            break
+        cur = _parent_instance_path(cur)
+    return rev^
 
 
-def collect_path_values_at(
-    read node: JsonValue,
-    read segments: List[String],
-    index: Int,
+def _parse_ascii_int(read s: String) raises -> Int:
+    var b = s.as_bytes()
+    if len(b) == 0:
+        raise Error("empty list index in instance path")
+    var n = 0
+    for i in range(len(b)):
+        if b[i] < `_0` or b[i] > `_9`:
+            raise Error("non-digit in list index")
+        n = n * 10 + Int(b[i] - `_0`)
+    return n
+
+
+def _parse_step_segment(read seg: String) raises -> Tuple[String, Optional[Int]]:
+    var b = seg.as_bytes()
+    var bracket = -1
+    for i in range(len(b)):
+        if b[i] == `[`:
+            bracket = i
+            break
+    if bracket < 0:
+        return Tuple[String, Optional[Int]](String(seg), Optional[Int]())
+    var base = String(StringSlice(unsafe_from_utf8=b[0:bracket]))
+    var close = -1
+    for j in range(bracket + 1, len(b)):
+        if b[j] == `]`:
+            close = j
+            break
+    if close < 0:
+        raise Error("invalid instance path segment `" + seg + "`")
+    var inside = String(StringSlice(unsafe_from_utf8=b[bracket + 1 : close]))
+    var ix = _parse_ascii_int(inside)
+    return Tuple[String, Optional[Int]](
+        base^, Optional[Int](ix)
+    )
+
+
+def _instance_path_segments(read path: String) raises -> List[String]:
+    var segs = List[String]()
+    var raw = path.split("/")
+    for i in range(len(raw)):
+        var seg = String(String(raw[i]).strip())
+        if seg.byte_length() > 0:
+            segs.append(seg^)
+    return segs^
+
+
+def _json_arc_at_path(read root: JsonValue, read path: String) raises -> Arc[JsonValue]:
+    var segs = _instance_path_segments(path)
+    if len(segs) == 0:
+        raise Error("empty instance path")
+    var p0 = _parse_step_segment(segs[0])
+    var nm0 = p0[0]
+    var ix0 = p0[1]
+    var slot0 = json_get(root, nm0)
+    if not slot0:
+        raise Error("instance path missing key `" + nm0 + "`")
+    ref node0 = slot0.value()[]
+    var cur_arc: Arc[JsonValue]
+    if ix0:
+        if node0.kind != JsonValue.ARRAY:
+            raise Error("expected JSON array in instance path segment")
+        var ixv = ix0.value()
+        if ixv < 0 or ixv >= len(node0.array_values):
+            raise Error("list index out of range in instance path")
+        cur_arc = node0.array_values[ixv].copy()
+    else:
+        cur_arc = slot0.value().copy()
+    for sidx in range(1, len(segs)):
+        ref node = cur_arc[]
+        var ps = _parse_step_segment(segs[sidx])
+        var nm = ps[0]
+        var ix = ps[1]
+        if ix:
+            if node.kind != JsonValue.OBJECT:
+                raise Error("expected JSON object in instance path")
+            var slot = json_get(node, nm)
+            if not slot:
+                raise Error("instance path missing key `" + nm + "`")
+            ref arrw = slot.value()[]
+            if arrw.kind != JsonValue.ARRAY:
+                raise Error("expected JSON array in instance path")
+            var jx = ix.value()
+            if jx < 0 or jx >= len(arrw.array_values):
+                raise Error("list index out of range in instance path")
+            cur_arc = arrw.array_values[jx].copy()
+        else:
+            if node.kind != JsonValue.OBJECT:
+                raise Error("expected JSON object in instance path")
+            var slot = json_get(node, nm)
+            if not slot:
+                raise Error("instance path missing key `" + nm + "`")
+            cur_arc = slot.value().copy()
+    return cur_arc^
+
+
+def _join_path(read parent: String, read tail: String) -> String:
+    if parent.byte_length() == 0:
+        return "/" + tail
+    return parent + "/" + tail
+
+
+def _chain_qnames_scalar(
+    read cur: JsonValue, read segments: List[YangQName], seg_idx: Int
+) raises -> String:
+    if seg_idx >= len(segments):
+        return json_scalar_text(cur)
+    var nxt = json_get(cur, segments[seg_idx].local_name)
+    if not nxt:
+        raise Error(
+            "missing key in leafref key-expression: `" + segments[seg_idx].local_name + "`"
+        )
+    return _chain_qnames_scalar(nxt.value()[], segments, seg_idx + 1)
+
+
+def _evaluate_key_expression(
+    read root: JsonValue,
+    read expr: YangPathKeyExpression,
+    read path_to_current: String,
+) raises -> String:
+    var rev = _ancestor_rev_chain(path_to_current)
+    if expr.parent_steps >= len(rev):
+        raise Error("leafref key-expression has too many parent steps")
+    var start_path = rev[expr.parent_steps]
+    if start_path.byte_length() == 0:
+        return _chain_qnames_scalar(root, expr.segments, 0)
+    var start_arc = _json_arc_at_path(root, start_path)
+    return _chain_qnames_scalar(start_arc[], expr.segments, 0)
+
+
+def _predicate_matches(
+    read root: JsonValue,
+    read pred: YangPathPredicate,
+    read candidate_path: String,
+    read candidate_obj: JsonValue,
+) raises -> Bool:
+    var key_local = pred.key.local_name
+    var want = _evaluate_key_expression(root, pred.target, candidate_path)
+    if candidate_obj.kind != JsonValue.OBJECT:
+        return False
+    var got_slot = json_get(candidate_obj, key_local)
+    if not got_slot:
+        return False
+    return json_scalar_text(got_slot.value()[]) == want
+
+
+def _collect_resolved_values_from_object(
+    read root: JsonValue,
+    read start: JsonValue,
+    read steps: List[YangPathStep],
+    step_index: Int,
+    read path_to_start: String,
     mut out: List[String],
-):
-    if node.kind == JsonValue.ARRAY:
-        for i in range(len(node.array_values)):
-            collect_path_values_at(node.array_values[i][], segments, index, out)
+) raises:
+    if step_index >= len(steps):
+        out.append(json_scalar_text(start))
         return
-
-    if index >= len(segments):
-        out.append(json_scalar_text(node))
+    var step = steps[step_index].copy()
+    var local = step.node.local_name
+    if start.kind != JsonValue.OBJECT:
         return
-
-    if node.kind != JsonValue.OBJECT:
+    var child_slot = json_get(start, local)
+    if not child_slot:
         return
+    ref child = child_slot.value()[]
+    if child.kind == JsonValue.ARRAY:
+        for i in range(len(child.array_values)):
+            ref elem = child.array_values[i][]
+            var cand_path = _join_path(
+                path_to_start, local + "[" + String(i) + "]"
+            )
+            var ok = True
+            for pr in step.predicates:
+                if not _predicate_matches(root, pr, cand_path, elem):
+                    ok = False
+                    break
+            if ok:
+                _collect_resolved_values_from_object(
+                    root, elem, steps, step_index + 1, cand_path, out
+                )
+        return
+    var down = _join_path(path_to_start, local)
+    _collect_resolved_values_from_object(root, child, steps, step_index + 1, down, out)
 
-    var child = json_get(node, segments[index])
-    if child:
-        collect_path_values_at(child.value()[], segments, index + 1, out)
 
-
-def collect_path_values(read root: JsonValue, path: String) -> List[String]:
+def collect_leafref_target_values(
+    read root: JsonValue,
+    read yang_path: YangPath,
+    read leaf_parent_path: String,
+) raises -> List[String]:
     var out = List[String]()
-    var segments = path_segments(path)
-    collect_path_values_at(root, segments, 0, out)
+    if yang_path.absolute:
+        _collect_resolved_values_from_object(
+            root, root, yang_path.segments, 0, "", out
+        )
+        return out^
+    var rev = _ancestor_rev_chain(leaf_parent_path)
+    if yang_path.parent_steps >= len(rev):
+        raise Error("leafref path has too many leading `../` steps")
+    var start_path = rev[yang_path.parent_steps]
+    if start_path.byte_length() == 0:
+        _collect_resolved_values_from_object(
+            root, root, yang_path.segments, 0, "", out
+        )
+    else:
+        var start_arc = _json_arc_at_path(root, start_path)
+        _collect_resolved_values_from_object(
+            root, start_arc[], yang_path.segments, 0, start_path, out
+        )
     return out^
 
 
@@ -69,15 +272,23 @@ struct LeafrefCache:
         self.target_sets = Dict[String, TargetSet]()
 
     def contains(
-        mut self, read root: JsonValue, target_path: String, value: String
+        mut self,
+        read root: JsonValue,
+        read path_argument: String,
+        read leaf_parent_path: String,
+        read value: String,
     ) raises -> Bool:
-        if target_path not in self.target_sets:
-            var values = collect_path_values(root, target_path)
+        var key = path_argument + "\x1f" + leaf_parent_path
+        if key not in self.target_sets:
+            var parsed = parse_yang_path(path_argument, 0)
+            var values = collect_leafref_target_values(
+                root, parsed, leaf_parent_path
+            )
             var target_set = TargetSet()
             for i in range(len(values)):
                 target_set[values[i]] = True
-            self.target_sets[target_path] = target_set^
-        return value in self.target_sets[target_path]
+            self.target_sets[key] = target_set^
+        return value in self.target_sets[key]
 
 
 def check_leafrefs_in_object(
@@ -114,7 +325,7 @@ def check_leafrefs_in_object(
         ):
             var target_path = module.leafref_path(data_child.value()[])
             var actual = json_scalar_text(slot)
-            if not cache.contains(root, target_path, actual):
+            if not cache.contains(root, target_path, path, actual):
                 var pfx = String()
                 if json_path.byte_length() > 0:
                     pfx += json_path + " "

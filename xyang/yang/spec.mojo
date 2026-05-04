@@ -77,96 +77,134 @@ def _validate_yang_version(mut node: YangConstruct) raises -> None:
     yarg.YangVersionArgument.validate(node)
 
 
+@always_inline
+def _validate_bool(mut node: YangConstruct) raises -> None:
+    yarg.BoolArgument.validate(node)
+
+
+@always_inline
+def _validate_min_elements(mut node: YangConstruct) raises -> None:
+    yarg.MinElementsArgument.validate(node)
+
+
+@always_inline
+def _validate_max_elements(mut node: YangConstruct) raises -> None:
+    yarg.MaxElementsArgument.validate(node)
+
+
+@always_inline
+def _validate_status(mut node: YangConstruct) raises -> None:
+    yarg.StatusArgument.validate(node)
+
+
+## Keyword ids match `SPELLING` indices; both lists are alphabetical (invalid
+## sentinel first, then lexicographic YANG spellings including hyphens).
 comptime `anydata`: Keyword = 1
 comptime `anyxml`: Keyword = 2
 comptime `augment`: Keyword = 3
-comptime `choice`: Keyword = 4
-comptime `contact`: Keyword = 5
-comptime `container`: Keyword = 6
-comptime `default`: Keyword = 7
-comptime `description`: Keyword = 8
-comptime `deviation`: Keyword = 9
-comptime `error-message`: Keyword = 10
-comptime `extension`: Keyword = 11
-comptime `feature`: Keyword = 12
-comptime `grouping`: Keyword = 13
-comptime `identity`: Keyword = 14
-comptime `import`: Keyword = 15
-comptime `include`: Keyword = 16
-comptime `key`: Keyword = 17
-comptime `leaf`: Keyword = 18
-comptime `leaf-list`: Keyword = 19
-comptime `list`: Keyword = 20
-comptime `module`: Keyword = 21
-comptime `must`: Keyword = 22
-comptime `namespace`: Keyword = 23
-comptime `notification`: Keyword = 24
-comptime `organization`: Keyword = 25
-comptime `path`: Keyword = 26
-comptime `prefix`: Keyword = 27
-comptime `range-stmt`: Keyword = 28
-comptime `reference`: Keyword = 29
-comptime `revision`: Keyword = 30
-comptime `rpc`: Keyword = 31
-comptime `type`: Keyword = 32
-comptime `typedef`: Keyword = 33
-comptime `uses`: Keyword = 34
-comptime `when`: Keyword = 35
-comptime `yang-version`: Keyword = 36
-comptime `length`: Keyword = 37
-comptime `pattern`: Keyword = 38
-comptime `modifier`: Keyword = 39
-comptime `fraction-digits`: Keyword = 40
-comptime `enum`: Keyword = 41
-comptime `bit`: Keyword = 42
-comptime `base`: Keyword = 43
+comptime `base`: Keyword = 4
+comptime `bit`: Keyword = 5
+comptime `case`: Keyword = 6
+comptime `choice`: Keyword = 7
+comptime `config`: Keyword = 8
+comptime `contact`: Keyword = 9
+comptime `container`: Keyword = 10
+comptime `default`: Keyword = 11
+comptime `description`: Keyword = 12
+comptime `deviation`: Keyword = 13
+comptime `enum`: Keyword = 14
+comptime `error-message`: Keyword = 15
+comptime `extension`: Keyword = 16
+comptime `feature`: Keyword = 17
+comptime `fraction-digits`: Keyword = 18
+comptime `grouping`: Keyword = 19
+comptime `identity`: Keyword = 20
+comptime `if-feature`: Keyword = 21
+comptime `import`: Keyword = 22
+comptime `include`: Keyword = 23
+comptime `key`: Keyword = 24
+comptime `leaf`: Keyword = 25
+comptime `leaf-list`: Keyword = 26
+comptime `length`: Keyword = 27
+comptime `list`: Keyword = 28
+comptime `mandatory`: Keyword = 29
+comptime `max-elements`: Keyword = 30
+comptime `min-elements`: Keyword = 31
+comptime `modifier`: Keyword = 32
+comptime `module`: Keyword = 33
+comptime `must`: Keyword = 34
+comptime `namespace`: Keyword = 35
+comptime `notification`: Keyword = 36
+comptime `organization`: Keyword = 37
+comptime `path`: Keyword = 38
+comptime `pattern`: Keyword = 39
+comptime `prefix`: Keyword = 40
+comptime `presence`: Keyword = 41
+comptime `range-stmt`: Keyword = 42
+comptime `reference`: Keyword = 43
+comptime `revision`: Keyword = 44
+comptime `rpc`: Keyword = 45
+comptime `status`: Keyword = 46
+comptime `type`: Keyword = 47
+comptime `typedef`: Keyword = 48
+comptime `uses`: Keyword = 49
+comptime `when`: Keyword = 50
+comptime `yang-version`: Keyword = 51
 
-comptime KEYWORD_COUNT: Int = 44
+comptime KEYWORD_COUNT: Int = 52
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "<INVALID>",
     "anydata",
     "anyxml",
     "augment",
+    "base",
+    "bit",
+    "case",
     "choice",
+    "config",
     "contact",
     "container",
     "default",
     "description",
     "deviation",
+    "enum",
     "error-message",
     "extension",
     "feature",
+    "fraction-digits",
     "grouping",
     "identity",
+    "if-feature",
     "import",
     "include",
     "key",
     "leaf",
     "leaf-list",
+    "length",
     "list",
+    "mandatory",
+    "max-elements",
+    "min-elements",
+    "modifier",
     "module",
     "must",
     "namespace",
     "notification",
     "organization",
     "path",
+    "pattern",
     "prefix",
+    "presence",
     "range",
     "reference",
     "revision",
     "rpc",
+    "status",
     "type",
     "typedef",
     "uses",
     "when",
     "yang-version",
-    "length",
-    "pattern",
-    "modifier",
-    "fraction-digits",
-    "enum",
-    "bit",
-    "base",
 ]
 
 comptime Cardinality = UInt8
@@ -320,36 +358,70 @@ comptime MODULE_SPEC = YangConstructSpec(
 comptime CONTAINER_SPEC = YangConstructSpec(
     `container`,
     _validate_identifier,
-    fields[5](
+    fields[9](
+        (`must`, `0..n`),
         (`description`, `0..1`),
+        (`presence`, `0..1`),
         (`uses`, `0..n`),
         (`container`, `0..n`),
         (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
         (`list`, `0..n`),
+        (`choice`, `0..n`),
     ),
 )
 comptime LIST_SPEC = YangConstructSpec(
     `list`,
     _validate_identifier,
-    fields[7](
+    fields[11](
         (`must`, `0..n`),
         (`key`, `0..1`),
+        (`min-elements`, `0..1`),
+        (`max-elements`, `0..1`),
         (`description`, `0..1`),
         (`uses`, `0..n`),
         (`container`, `0..n`),
         (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
         (`list`, `0..n`),
+        (`choice`, `0..n`),
     ),
 )
 comptime LEAF_SPEC = YangConstructSpec(
     `leaf`,
     _validate_identifier,
-    fields[5](
+    fields[6](
         (`when`, `0..1`),
         (`type`, `1`),
         (`must`, `0..n`),
         (`default`, `0..1`),
         (`description`, `0..1`),
+        (`mandatory`, `0..1`),
+    ),
+)
+comptime LEAF_LIST_SPEC = YangConstructSpec(
+    `leaf-list`,
+    _validate_identifier,
+    fields[8](
+        (`when`, `0..1`),
+        (`type`, `1`),
+        (`must`, `0..n`),
+        (`default`, `0..1`),
+        (`description`, `0..1`),
+        (`mandatory`, `0..1`),
+        (`min-elements`, `0..1`),
+        (`max-elements`, `0..1`),
+    ),
+)
+## RFC 7950: typedef has `type` plus optional documentation / default.
+comptime TYPEDEF_SPEC = YangConstructSpec(
+    `typedef`,
+    _validate_identifier,
+    fields[4](
+        (`type`, `1`),
+        (`default`, `0..1`),
+        (`description`, `0..1`),
+        (`reference`, `0..1`),
     ),
 )
 comptime TYPE_SPEC = YangConstructSpec(
@@ -365,6 +437,15 @@ comptime TYPE_SPEC = YangConstructSpec(
         (`bit`, `0..n`),
         (`type`, `0..n`),
         (`base`, `0..n`),
+    ),
+)
+## `enum` name { description?; reference?; value?; status?; } — allow common docs.
+comptime ENUM_STMT_SPEC = YangConstructSpec(
+    `enum`,
+    _validate_identifier,
+    fields[2](
+        (`description`, `0..1`),
+        (`reference`, `0..1`),
     ),
 )
 comptime LENGTH_STMT_SPEC = YangConstructSpec(
@@ -389,12 +470,59 @@ comptime PATTERN_STMT_SPEC = YangConstructSpec(
 comptime GROUPING_SPEC = YangConstructSpec(
     `grouping`,
     _validate_identifier,
-    fields[5](
+    fields[7](
         (`description`, `0..1`),
         (`uses`, `0..n`),
         (`container`, `0..n`),
         (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
         (`list`, `0..n`),
+        (`choice`, `0..n`),
+    ),
+)
+## RFC 7950 §7.9.1, The choice's Substatements.
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.9.1
+comptime CHOICE_SPEC = YangConstructSpec(
+    `choice`,
+    _validate_identifier,
+    fields[16](
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`case`, `0..n`),
+        (`choice`, `0..n`),
+        (`config`, `0..1`),
+        (`container`, `0..n`),
+        (`default`, `0..1`),
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
+        (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
+        (`list`, `0..n`),
+        (`mandatory`, `0..1`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`when`, `0..1`),
+    ),
+)
+## RFC 7950 §7.9.2.1, The case's Substatements.
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.9.2.1
+comptime CASE_SPEC = YangConstructSpec(
+    `case`,
+    _validate_identifier,
+    fields[12](
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`choice`, `0..n`),
+        (`container`, `0..n`),
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
+        (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
+        (`list`, `0..n`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`uses`, `0..n`),
+        (`when`, `0..1`),
     ),
 )
 comptime REVISION_SPEC = YangConstructSpec(
@@ -440,29 +568,41 @@ def build_spec_table() -> YangConstructSpec.Table:
     specs[Int(`anydata`)] = scalar_spec(`anydata`, _validate_identifier)
     specs[Int(`anyxml`)] = scalar_spec(`anyxml`, _validate_identifier)
     specs[Int(`augment`)] = scalar_spec(`augment`, _validate_path)
-    specs[Int(`choice`)] = scalar_spec(`choice`, _validate_identifier)
+    specs[Int(`choice`)] = CHOICE_SPEC
+    specs[Int(`case`)] = CASE_SPEC
+    specs[Int(`config`)] = scalar_spec(`config`, _validate_bool)
+    specs[Int(`if-feature`)] = scalar_spec(`if-feature`, _validate_string)
+    specs[Int(`status`)] = scalar_spec(`status`, _validate_status)
     specs[Int(`deviation`)] = scalar_spec(`deviation`, _validate_path)
     specs[Int(`extension`)] = scalar_spec(`extension`, _validate_identifier)
     specs[Int(`feature`)] = scalar_spec(`feature`, _validate_identifier)
     specs[Int(`identity`)] = scalar_spec(`identity`, _validate_identifier)
     specs[Int(`import`)] = scalar_spec(`import`, _validate_identifier)
     specs[Int(`include`)] = scalar_spec(`include`, _validate_identifier)
-    specs[Int(`leaf-list`)] = scalar_spec(`leaf-list`, _validate_identifier)
+    specs[Int(`leaf-list`)] = LEAF_LIST_SPEC
     specs[Int(`notification`)] = scalar_spec(
         `notification`, _validate_identifier
     )
     specs[Int(`reference`)] = scalar_spec(`reference`, _validate_string)
     specs[Int(`rpc`)] = scalar_spec(`rpc`, _validate_identifier)
-    specs[Int(`typedef`)] = scalar_spec(`typedef`, _validate_identifier)
+    specs[Int(`typedef`)] = TYPEDEF_SPEC
     specs[Int(`length`)] = LENGTH_STMT_SPEC
     specs[Int(`pattern`)] = PATTERN_STMT_SPEC
     specs[Int(`modifier`)] = scalar_spec(`modifier`, _validate_modifier)
     specs[Int(`fraction-digits`)] = scalar_spec(
         `fraction-digits`, _validate_fraction_digits
     )
-    specs[Int(`enum`)] = scalar_spec(`enum`, _validate_identifier)
+    specs[Int(`enum`)] = ENUM_STMT_SPEC
     specs[Int(`bit`)] = scalar_spec(`bit`, _validate_identifier)
     specs[Int(`base`)] = scalar_spec(`base`, _validate_qname)
+    specs[Int(`mandatory`)] = scalar_spec(`mandatory`, _validate_bool)
+    specs[Int(`min-elements`)] = scalar_spec(
+        `min-elements`, _validate_min_elements
+    )
+    specs[Int(`max-elements`)] = scalar_spec(
+        `max-elements`, _validate_max_elements
+    )
+    specs[Int(`presence`)] = scalar_spec(`presence`, _validate_string)
     return specs
 
 

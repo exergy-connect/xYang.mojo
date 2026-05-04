@@ -118,16 +118,45 @@ def _atom_end_no_quant(read pat: String, pi: Int) raises -> Int:
     return pi + 1
 
 
-def _quant_next_pi(read pat: String, atom_end: Int) -> Int:
+def _parse_brace_exact(
+    read pat: String, brace_pi: Int
+) raises -> Tuple[Int, Int]:
+    ## `{n}` only: returns `(n, index_after_brace)` or `(0, brace_pi)` if invalid.
+    if brace_pi >= pat.byte_length() or _bytes_at(pat, brace_pi) != ord("{"):
+        return (0, brace_pi)
+    var i = brace_pi + 1
+    var n = 0
+    var seen = False
+    var pl = pat.byte_length()
+    while i < pl:
+        var b = _bytes_at(pat, i)
+        if b >= ord("0") and b <= ord("9"):
+            seen = True
+            n = n * 10 + Int(b - ord("0"))
+            i += 1
+            continue
+        if b == ord("}"):
+            if not seen or n < 1:
+                return (0, brace_pi)
+            return (n, i + 1)
+        return (0, brace_pi)
+    return (0, brace_pi)
+
+
+def _quant_next_pi(read pat: String, atom_end: Int) raises -> Int:
     if atom_end >= pat.byte_length():
         return atom_end
     var q = _bytes_at(pat, atom_end)
     if q == ord("*") or q == ord("+") or q == ord("?"):
         return atom_end + 1
+    if q == ord("{"):
+        var br = _parse_brace_exact(pat, atom_end)
+        if br[0] > 0:
+            return br[1]
     return atom_end
 
 
-def _quant_kind(read pat: String, atom_end: Int) -> Int:
+def _quant_kind(read pat: String, atom_end: Int) raises -> Int:
     if atom_end >= pat.byte_length():
         return 0
     var q = _bytes_at(pat, atom_end)
@@ -137,6 +166,10 @@ def _quant_kind(read pat: String, atom_end: Int) -> Int:
         return 2
     if q == ord("?"):
         return 3
+    if q == ord("{"):
+        var br = _parse_brace_exact(pat, atom_end)
+        if br[0] > 0:
+            return 4
     return 0
 
 
@@ -161,9 +194,14 @@ def _literal_matches(
         return False
     var pch = _bytes_at(pat, pi)
     if pch == ord("\\") and pi + 1 < pat.byte_length():
-        pch = _bytes_at(pat, pi + 1)
-    var dec = _utf8_decode_scalar(val, vi)
-    return Int32(pch) == dec[0]
+        var esc = _bytes_at(pat, pi + 1)
+        var dec = _utf8_decode_scalar(val, vi)
+        var cp = dec[0]
+        if esc == ord("d"):
+            return cp >= Int32(ord("0")) and cp <= Int32(ord("9"))
+        pch = esc
+    var dec2 = _utf8_decode_scalar(val, vi)
+    return Int32(pch) == dec2[0]
 
 
 def _literal_advance(read pat: String, pi: Int) -> Int:
@@ -183,6 +221,16 @@ def _match_from(
     var qk = _quant_kind(pat, a_end)
 
     if _bytes_at(pat, pi) == ord("["):
+        if qk == 4:
+            var n_times = _parse_brace_exact(pat, a_end)[0]
+            var j4 = vi
+            for _ in range(n_times):
+                if j4 >= val.byte_length() or not _class_matches(
+                    pat, pi, val, j4
+                ):
+                    return False
+                j4 += _utf8_decode_scalar(val, j4)[1]
+            return _match_from(pat, next_pi, val, j4)
         if qk == 1:
             var j = vi
             while True:
@@ -219,6 +267,14 @@ def _match_from(
             )
 
     if _bytes_at(pat, pi) == ord("."):
+        if qk == 4:
+            var n_dot = _parse_brace_exact(pat, a_end)[0]
+            var jfd4 = vi
+            for _ in range(n_dot):
+                if not _dot_matches(val, jfd4):
+                    return False
+                jfd4 += _utf8_decode_scalar(val, jfd4)[1]
+            return _match_from(pat, next_pi, val, jfd4)
         if qk == 1:
             var jd = vi
             while True:
@@ -249,6 +305,15 @@ def _match_from(
             return _match_from(
                 pat, next_pi, val, vi + _utf8_decode_scalar(val, vi)[1]
             )
+
+    if qk == 4:
+        var n_lit = _parse_brace_exact(pat, a_end)[0]
+        var jn = vi
+        for _ in range(n_lit):
+            if not _literal_matches(pat, pi, val, jn):
+                return False
+            jn += _utf8_decode_scalar(val, jn)[1]
+        return _match_from(pat, next_pi, val, jn)
 
     if not _literal_matches(pat, pi, val, vi):
         return False

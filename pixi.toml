@@ -45,4 +45,4 @@ cmd = "build/xyang"
 
 [tasks.convert]
 depends-on = ["build-xyang-bin"]
-cmd = "build/xyang convert examples/meta-model.yang -o examples/meta-model.yang.json"
+cmd = "build/xyang convert examples/meta-model/meta-model.yang -o examples/meta-model/meta-model.yang.json"

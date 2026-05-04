@@ -1,0 +1,58 @@
+{
+  "data-model": {
+    "consolidated": false,
+    "name": "medium_orders",
+    "version": "26.05.04.1",
+    "author": "xYang.mojo examples",
+    "description": "Two related entities: customers and orders, linked by a scalar foreign key on the child entity.",
+    "entities": [
+      {
+        "name": "customer",
+        "brief": "Buyer account",
+        "description": "Customer master data keyed by integer id.",
+        "primary_key": "id",
+        "rate_of_change": "monthly",
+        "validation": "strict",
+        "storage": "INDEXED_KV",
+        "fields": [
+          {
+            "name": "id",
+            "description": "Primary key for the customer.",
+            "type": { "primitive": "integer" }
+          },
+          {
+            "name": "name",
+            "description": "Customer display name.",
+            "type": { "primitive": "string" }
+          }
+        ]
+      },
+      {
+        "name": "order",
+        "brief": "Purchase order",
+        "description": "Order header referencing the owning customer by foreign key to customer.id.",
+        "primary_key": "id",
+        "fields": [
+          {
+            "name": "id",
+            "description": "Primary key for the order.",
+            "type": { "primitive": "integer" }
+          },
+          {
+            "name": "customer_id",
+            "description": "References customer.id (primary key of customer).",
+            "type": {
+              "primitive": "integer",
+              "foreignKeys": [{ "entity": "customer" }]
+            }
+          },
+          {
+            "name": "placed_at",
+            "description": "When the order was submitted (ISO-like datetime string in instance data).",
+            "type": { "primitive": "datetime" }
+          }
+        ]
+      }
+    ]
+  }
+}

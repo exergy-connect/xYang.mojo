@@ -4,6 +4,8 @@ import xyang.yang.ast.util as ast_util
 
 comptime `-` = ast_util.to_byte["-"]()
 comptime `_` = ast_util.to_byte["_"]()
+comptime `.` = ast_util.to_byte["."]()
+
 comptime ALPHA = (
     ast_util.BitSet.range[ast_util.to_byte["a"](), ast_util.to_byte["z"]()]()
     | ast_util.BitSet.range[ast_util.to_byte["A"](), ast_util.to_byte["Z"]()]()
@@ -26,19 +28,18 @@ def is_digit(ch: Byte) -> Bool:
 def is_alpha(ch: Byte) -> Bool:
     return ch in ALPHA
 
-
-@always_inline
-def is_identifier_char(ch: Byte) -> Bool:
-    comptime IDENTIFIER_CHAR = (
-        ALPHA | DIGIT | ast_util.BitSet.chars[`-`, `_`]()
-    )
-    return ch in IDENTIFIER_CHAR
-
-
 @always_inline
 def is_identifier_start_char(ch: Byte) -> Bool:
     return ch in IDENTIFIER_START_CHAR
 
+
+@always_inline
+def is_identifier_char(ch: Byte) -> Bool:
+    # identifier = (ALPHA / "_") *(ALPHA / DIGIT / "_" / "-" / ".")
+    comptime IDENTIFIER_CHAR = (
+        ALPHA | DIGIT | ast_util.BitSet.chars[`_`, `-`, `.`]()
+    )
+    return ch in IDENTIFIER_CHAR
 
 def is_identifier(text: StringSlice) -> Bool:
     var bytes = text.as_bytes()

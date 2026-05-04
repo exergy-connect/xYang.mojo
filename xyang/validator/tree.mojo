@@ -125,18 +125,21 @@ def validate_leaf_value(
                 path,
                 ": uint16 value out of range",
             )
-        var rb = module.leaf_range_bounds(leaf)
-        if rb:
-            var b = rb.value()
-            if value.int_value < b.lo or value.int_value > b.hi:
+        var segs = module.leaf_range_segments(leaf)
+        if len(segs) > 0:
+            var fv = Float64(value.int_value)
+            var ok = False
+            for i in range(len(segs)):
+                var b = segs[i]
+                if fv >= b.lo and fv <= b.hi:
+                    ok = True
+                    break
+            if not ok:
                 _raise_json_path_error(
                     json_path,
                     value.source_line,
                     path,
-                    ": value outside range "
-                    + String(b.lo)
-                    + ".."
-                    + String(b.hi),
+                    ": value outside `range` restriction",
                 )
         return
     if ty == "leafref":

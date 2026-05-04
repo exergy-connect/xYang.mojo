@@ -281,7 +281,7 @@ comptime YangModule = CompositeFieldDefinition[
 
 def main() raises:
     var source: String
-    with open("examples/meta-model.yang", "r") as f:
+    with open("examples/meta-model/meta-model.yang", "r") as f:
         source = f.read()
     var lexer = AstLexer(source.as_bytes())
     var construct = parse_module(lexer)

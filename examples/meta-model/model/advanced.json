@@ -1,0 +1,138 @@
+{
+  "data-model": {
+    "consolidated": false,
+    "name": "advanced_org_chart",
+    "version": "26.05.04.1",
+    "author": "xYang.mojo examples",
+    "description": "Richer sample: alternate key and FK by field, reusable field_definition, closed enum with default, composite array, scalar entity reference, and a computed numeric field.",
+    "change_history": 5,
+    "include_x_fields": true,
+    "entities": [
+      {
+        "name": "department",
+        "brief": "Org unit",
+        "description": "Department with business code as alternate unique key for foreign references.",
+        "primary_key": "id",
+        "fields": [
+          {
+            "name": "id",
+            "description": "Surrogate primary key.",
+            "type": { "primitive": "integer" }
+          },
+          {
+            "name": "code",
+            "description": "Short stable department code; unique across rows for FK targeting.",
+            "type": { "primitive": "string", "min": 2, "max": 16 },
+            "unique": true
+          }
+        ]
+      },
+      {
+        "name": "employee",
+        "brief": "Staff member",
+        "description": "Employee belongs to a department via FK to department.code (alternate key).",
+        "primary_key": "id",
+        "fields": [
+          {
+            "name": "id",
+            "description": "Employee primary key.",
+            "type": { "primitive": "integer" }
+          },
+          {
+            "name": "name",
+            "description": "Full name.",
+            "type": { "primitive": "string" }
+          },
+          {
+            "name": "dept_code",
+            "description": "Matches department.code on the department entity.",
+            "type": {
+              "primitive": "string",
+              "foreignKeys": [{ "entity": "department", "field": "code" }]
+            }
+          }
+        ]
+      },
+      {
+        "name": "project",
+        "brief": "Deliverable",
+        "description": "Project uses a reusable priority definition, optional milestones array, owning employee, and a computed roll-up.",
+        "primary_key": "id",
+        "field_definitions": [
+          {
+            "name": "priority_level",
+            "description": "Shared closed enumeration for priority.",
+            "type": { "enum": ["low", "medium", "high"] },
+            "default": "low"
+          }
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "description": "Project id.",
+            "type": { "primitive": "integer" }
+          },
+          {
+            "name": "name",
+            "description": "Project title.",
+            "type": { "primitive": "string" }
+          },
+          {
+            "name": "priority",
+            "description": "Uses priority_level; default medium overrides the definition default low.",
+            "type": { "definition": "priority_level" },
+            "default": "medium"
+          },
+          {
+            "name": "owner",
+            "description": "Responsible employee (scalar entity reference).",
+            "type": { "entity": "employee" }
+          },
+          {
+            "name": "milestones",
+            "description": "Ordered checkpoints; each element is a small composite.",
+            "type": {
+              "array": {
+                "composite": [
+                  {
+                    "name": "label",
+                    "description": "Milestone name.",
+                    "type": { "primitive": "string" }
+                  },
+                  {
+                    "name": "due",
+                    "description": "Target date for the milestone.",
+                    "type": {
+                      "primitive": "date",
+                      "minDate": "2026-01-01",
+                      "maxDate": "2030-12-31"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "budget_hours",
+            "description": "Planned effort in hours.",
+            "type": { "primitive": "integer", "min": 0, "max": 100000 }
+          },
+          {
+            "name": "logged_hours",
+            "description": "Hours booked so far.",
+            "type": { "primitive": "integer", "min": 0, "max": 100000 }
+          },
+          {
+            "name": "remaining_hours",
+            "description": "budget_hours minus logged_hours (computed).",
+            "type": { "primitive": "integer" },
+            "computed": {
+              "operation": "subtraction",
+              "fields": [{ "field": "budget_hours" }, { "field": "logged_hours" }]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
