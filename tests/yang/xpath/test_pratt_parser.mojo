@@ -2,14 +2,7 @@
 ## Uses parse_xpath(expression_string); frees tree after each test.
 
 from std.testing import assert_equal, assert_true, TestSuite
-from xyang.yang.xpath.pratt_parser import (
-    Expr,
-    ExprContext,
-    ExprStringifier,
-    accept,
-    parse_refine_path,
-    parse_xpath,
-)
+import xyang.yang.xpath.pratt_parser as xp
 
 
 # -----------------------------
@@ -17,16 +10,9 @@ from xyang.yang.xpath.pratt_parser import (
 # -----------------------------
 
 
-def _free_expr(ptr: Expr.ExprPointer):
-    """Release the expression tree rooted at ptr."""
-    ptr[].free_tree()
-    ptr.destroy_pointee()
-    ptr.free()
-
-
-def _val(ref node: Expr, source: String) raises -> String:
+def _val(ref node: xp.XPathExpr, source: String) -> String:
     """Return the lexeme for node.value from the given source expression."""
-    return node.value.text(source)
+    return node.value.text(source.as_bytes())
 
 
 # -----------------------------
@@ -36,45 +22,34 @@ def _val(ref node: Expr, source: String) raises -> String:
 
 def test_parse_number() raises:
     var ex = "42"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.NUMBER)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.NUMBER)
     assert_equal(_val(ptr[], ex), "42")
-    assert_equal(len(ptr[].args), 0)
-    assert_equal(len(ptr[].steps), 0)
-    _free_expr(ptr)
-
+    assert_true(ptr[].payload.isa[xp.XPathAtom]())
 
 def test_parse_string() raises:
     var ex = "'hello'"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.STRING)
-    assert_equal(ptr[].value.text(ex, strip_quotes=True), "hello")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.STRING)
+    assert_equal(ptr[].value.text(ex.as_bytes(), strip_quotes=True), "hello")
 
 def test_parse_name() raises:
     var ex = "foo"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.NAME)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.NAME)
     assert_equal(_val(ptr[], ex), "foo")
-    _free_expr(ptr)
-
 
 def test_parse_dot() raises:
     var ex = "."
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.NAME)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.NAME)
     assert_equal(_val(ptr[], ex), ".")
-    _free_expr(ptr)
-
 
 def test_parse_dotdot() raises:
     var ex = ".."
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.NAME)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.NAME)
     assert_equal(_val(ptr[], ex), "..")
-    _free_expr(ptr)
-
 
 # -----------------------------
 # Parenthesized expression
@@ -83,27 +58,28 @@ def test_parse_dotdot() raises:
 
 def test_parse_parens() raises:
     var ex = "(7)"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.NUMBER)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.NUMBER)
     assert_equal(_val(ptr[], ex), "7")
-    _free_expr(ptr)
-
 
 def test_parse_parens_comma_list() raises:
     var ex = "../type = ('date','datetime')"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "=")
-    assert_equal(ptr[].right[].kind, Expr.BINARY)
-    assert_equal(_val(ptr[].right[], ex), ",")
-    assert_equal(ptr[].right[].left[].kind, Expr.STRING)
-    assert_equal(ptr[].right[].right[].kind, Expr.STRING)
-    assert_equal(ptr[].right[].left[].value.text(ex, strip_quotes=True), "date")
+    ref root_bin = ptr[].payload[xp.XPathBinaryOp]
+    assert_equal(root_bin.right[].kind(), xp.XPathExpr.BINARY)
+    assert_equal(_val(root_bin.right[], ex), ",")
+    ref comma = root_bin.right[].payload[xp.XPathBinaryOp]
+    assert_equal(comma.left[].kind(), xp.XPathExpr.STRING)
+    assert_equal(comma.right[].kind(), xp.XPathExpr.STRING)
     assert_equal(
-        ptr[].right[].right[].value.text(ex, strip_quotes=True), "datetime"
+        comma.left[].value.text(ex.as_bytes(), strip_quotes=True), "date"
     )
-    _free_expr(ptr)
-
+    assert_equal(
+        comma.right[].value.text(ex.as_bytes(), strip_quotes=True),
+        "datetime",
+    )
 
 # -----------------------------
 # Binary operators and precedence
@@ -112,67 +88,60 @@ def test_parse_parens_comma_list() raises:
 
 def test_parse_binary_plus() raises:
     var ex = "1 + 2"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "+")
-    assert_equal(ptr[].left[].kind, Expr.NUMBER)
-    assert_equal(_val(ptr[].left[], ex), "1")
-    assert_equal(ptr[].right[].kind, Expr.NUMBER)
-    assert_equal(_val(ptr[].right[], ex), "2")
-    _free_expr(ptr)
-
+    ref b = ptr[].payload[xp.XPathBinaryOp]
+    assert_equal(b.left[].kind(), xp.XPathExpr.NUMBER)
+    assert_equal(_val(b.left[], ex), "1")
+    assert_equal(b.right[].kind(), xp.XPathExpr.NUMBER)
+    assert_equal(_val(b.right[], ex), "2")
 
 def test_parse_binary_and() raises:
     var ex = "a and b"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "and")
-    assert_equal(_val(ptr[].left[], ex), "a")
-    assert_equal(_val(ptr[].right[], ex), "b")
-    _free_expr(ptr)
-
+    ref b = ptr[].payload[xp.XPathBinaryOp]
+    assert_equal(_val(b.left[], ex), "a")
+    assert_equal(_val(b.right[], ex), "b")
 
 def test_parse_binary_or() raises:
     var ex = "x or y"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "or")
-    _free_expr(ptr)
-
 
 def test_parse_binary_equals() raises:
     var ex = "1 = 1"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "=")
-    _free_expr(ptr)
-
 
 def test_parse_binary_precedence_plus_times() raises:
     # 3 + 4 * 5  =>  binary(+, 3, binary(*, 4, 5))
     var ex = "3 + 4 * 5"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "+")
-    assert_equal(_val(ptr[].left[], ex), "3")
-    assert_equal(ptr[].right[].kind, Expr.BINARY)
-    assert_equal(_val(ptr[].right[], ex), "*")
-    assert_equal(_val(ptr[].right[].left[], ex), "4")
-    assert_equal(_val(ptr[].right[].right[], ex), "5")
-    _free_expr(ptr)
-
+    ref outer = ptr[].payload[xp.XPathBinaryOp]
+    assert_equal(_val(outer.left[], ex), "3")
+    assert_equal(outer.right[].kind(), xp.XPathExpr.BINARY)
+    assert_equal(_val(outer.right[], ex), "*")
+    ref inner = outer.right[].payload[xp.XPathBinaryOp]
+    assert_equal(_val(inner.left[], ex), "4")
+    assert_equal(_val(inner.right[], ex), "5")
 
 def test_parse_binary_precedence_parens() raises:
     # (1 + 2) * 3
     var ex = "(1 + 2) * 3"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "*")
-    assert_equal(ptr[].left[].kind, Expr.BINARY)
-    assert_equal(_val(ptr[].left[], ex), "+")
-    assert_equal(_val(ptr[].right[], ex), "3")
-    _free_expr(ptr)
-
+    ref outer = ptr[].payload[xp.XPathBinaryOp]
+    assert_equal(outer.left[].kind(), xp.XPathExpr.BINARY)
+    assert_equal(_val(outer.left[], ex), "+")
+    assert_equal(_val(outer.right[], ex), "3")
 
 # -----------------------------
 # Function calls
@@ -181,34 +150,30 @@ def test_parse_binary_precedence_parens() raises:
 
 def test_parse_call_no_args() raises:
     var ex = "f()"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.CALL)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.CALL)
     assert_equal(_val(ptr[], ex), "f")
-    assert_equal(len(ptr[].args), 0)
-    _free_expr(ptr)
-
+    assert_equal(len(ptr[].payload[xp.XPathCall].args), 0)
 
 def test_parse_call_one_arg() raises:
     var ex = "string(1)"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.CALL)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.CALL)
     assert_equal(_val(ptr[], ex), "string")
-    assert_equal(len(ptr[].args), 1)
-    assert_equal(ptr[].args[0][].kind, Expr.NUMBER)
-    assert_equal(_val(ptr[].args[0][], ex), "1")
-    _free_expr(ptr)
-
+    ref c = ptr[].payload[xp.XPathCall]
+    assert_equal(len(c.args), 1)
+    assert_equal(c.args[0][].kind(), xp.XPathExpr.NUMBER)
+    assert_equal(_val(c.args[0][], ex), "1")
 
 def test_parse_call_two_args() raises:
     var ex = "substring(x, 2)"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.CALL)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.CALL)
     assert_equal(_val(ptr[], ex), "substring")
-    assert_equal(len(ptr[].args), 2)
-    assert_equal(_val(ptr[].args[0][], ex), "x")
-    assert_equal(_val(ptr[].args[1][], ex), "2")
-    _free_expr(ptr)
-
+    ref c = ptr[].payload[xp.XPathCall]
+    assert_equal(len(c.args), 2)
+    assert_equal(_val(c.args[0][], ex), "x")
+    assert_equal(_val(c.args[1][], ex), "2")
 
 # -----------------------------
 # Location paths and steps
@@ -217,93 +182,89 @@ def test_parse_call_two_args() raises:
 
 def test_parse_path_one_step() raises:
     var ex = "/a"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps), 1)
-    assert_equal(ptr[].steps[0][].kind, Expr.STEP)
-    assert_equal(_val(ptr[].steps[0][], ex), "a")
-    assert_equal(len(ptr[].steps[0][].args), 0)
-    _free_expr(ptr)
-
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 1)
+    assert_equal(p.steps[0][].kind(), xp.XPathExpr.STEP)
+    assert_equal(_val(p.steps[0][], ex), "a")
+    assert_equal(len(p.steps[0][].payload[xp.XPathStep].predicates), 0)
 
 def test_parse_path_two_steps() raises:
     var ex = "/a/b"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps), 2)
-    assert_equal(_val(ptr[].steps[0][], ex), "a")
-    assert_equal(_val(ptr[].steps[1][], ex), "b")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 2)
+    assert_equal(_val(p.steps[0][], ex), "a")
+    assert_equal(_val(p.steps[1][], ex), "b")
 
 def test_parse_path_three_steps() raises:
     var ex = "/foo/bar/baz"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps), 3)
-    assert_equal(_val(ptr[].steps[0][], ex), "foo")
-    assert_equal(_val(ptr[].steps[1][], ex), "bar")
-    assert_equal(_val(ptr[].steps[2][], ex), "baz")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 3)
+    assert_equal(_val(p.steps[0][], ex), "foo")
+    assert_equal(_val(p.steps[1][], ex), "bar")
+    assert_equal(_val(p.steps[2][], ex), "baz")
 
 def test_parse_refine_path_prefixed_relative() raises:
     var ex = "if:interfaces/if:interface"
-    var ptr = parse_refine_path(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps), 2)
-    assert_equal(_val(ptr[].steps[0][], ex), "if:interfaces")
-    assert_equal(_val(ptr[].steps[1][], ex), "if:interface")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_refine_path(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 2)
+    assert_equal(_val(p.steps[0][], ex), "if:interfaces")
+    assert_equal(_val(p.steps[1][], ex), "if:interface")
 
 def test_parse_refine_path_prefixed_absolute() raises:
     var ex = "/if:interfaces/if:interface"
-    var ptr = parse_refine_path(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps), 2)
-    assert_equal(_val(ptr[].steps[0][], ex), "if:interfaces")
-    assert_equal(_val(ptr[].steps[1][], ex), "if:interface")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_refine_path(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 2)
+    assert_equal(_val(p.steps[0][], ex), "if:interfaces")
+    assert_equal(_val(p.steps[1][], ex), "if:interface")
 
 def test_parse_step_with_one_predicate() raises:
     # /a[1]
     var ex = "/a[1]"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps), 1)
-    assert_equal(_val(ptr[].steps[0][], ex), "a")
-    assert_equal(len(ptr[].steps[0][].args), 1)
-    assert_equal(ptr[].steps[0][].args[0][].kind, Expr.NUMBER)
-    assert_equal(_val(ptr[].steps[0][].args[0][], ex), "1")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 1)
+    ref st = p.steps[0][].payload[xp.XPathStep]
+    assert_equal(_val(p.steps[0][], ex), "a")
+    assert_equal(len(st.predicates), 1)
+    assert_equal(st.predicates[0][].kind(), xp.XPathExpr.NUMBER)
+    assert_equal(_val(st.predicates[0][], ex), "1")
 
 def test_parse_step_with_predicate_expression() raises:
     # /a[. = "x"]
     var ex = '/a[. = "x"]'
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps[0][].args), 1)
-    ref pred = ptr[].steps[0][].args[0][]
-    assert_equal(pred.kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    ref st = p.steps[0][].payload[xp.XPathStep]
+    assert_equal(len(st.predicates), 1)
+    ref pred = st.predicates[0][]
+    assert_equal(pred.kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(pred, ex), "=")
-    assert_equal(_val(pred.left[], ex), ".")
-    assert_equal(pred.right[].value.text(ex, strip_quotes=True), "x")
-    _free_expr(ptr)
-
+    ref pb = pred.payload[xp.XPathBinaryOp]
+    assert_equal(_val(pb.left[], ex), ".")
+    assert_equal(pb.right[].value.text(ex.as_bytes(), strip_quotes=True), "x")
 
 def test_parse_path_with_two_predicates() raises:
     # /a[1][2]
     var ex = "/a[1][2]"
-    var ptr = parse_xpath(ex)
-    assert_equal(len(ptr[].steps), 1)
-    assert_equal(len(ptr[].steps[0][].args), 2)
-    assert_equal(_val(ptr[].steps[0][].args[0][], ex), "1")
-    assert_equal(_val(ptr[].steps[0][].args[1][], ex), "2")
-    _free_expr(ptr)
-
+    var ptr = xp.parse_xpath(ex)
+    ref p = ptr[].payload[xp.XPathPath]
+    assert_equal(len(p.steps), 1)
+    ref st = p.steps[0][].payload[xp.XPathStep]
+    assert_equal(len(st.predicates), 2)
+    assert_equal(_val(st.predicates[0][], ex), "1")
+    assert_equal(_val(st.predicates[1][], ex), "2")
 
 # -----------------------------
 # Path with function call in predicate (integration)
@@ -313,17 +274,18 @@ def test_parse_path_with_two_predicates() raises:
 def test_parse_path_position_predicate() raises:
     # /a[position() = 1]
     var ex = "/a[position() = 1]"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(len(ptr[].steps[0][].args), 1)
-    ref pred = ptr[].steps[0][].args[0][]
-    assert_equal(pred.kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    ref p = ptr[].payload[xp.XPathPath]
+    ref st = p.steps[0][].payload[xp.XPathStep]
+    assert_equal(len(st.predicates), 1)
+    ref pred = st.predicates[0][]
+    assert_equal(pred.kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(pred, ex), "=")
-    assert_equal(pred.left[].kind, Expr.CALL)
-    assert_equal(_val(pred.left[], ex), "position")
-    assert_equal(_val(pred.right[], ex), "1")
-    _free_expr(ptr)
-
+    ref pb = pred.payload[xp.XPathBinaryOp]
+    assert_equal(pb.left[].kind(), xp.XPathExpr.CALL)
+    assert_equal(_val(pb.left[], ex), "position")
+    assert_equal(_val(pb.right[], ex), "1")
 
 # -----------------------------
 # String input (incremental tokenizer: parser pulls next_token repeatedly)
@@ -332,60 +294,60 @@ def test_parse_path_position_predicate() raises:
 
 def test_parse_xpath_string_number() raises:
     var ex = "42"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.NUMBER)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.NUMBER)
     assert_equal(_val(ptr[], ex), "42")
-    _free_expr(ptr)
-
 
 def test_parse_xpath_string_binary() raises:
     var ex = "1 + 2"
-    var ptr = parse_xpath(ex)
-    assert_equal(ptr[].kind, Expr.BINARY)
+    var ptr = xp.parse_xpath(ex)
+    assert_equal(ptr[].kind(), xp.XPathExpr.BINARY)
     assert_equal(_val(ptr[], ex), "+")
-    assert_equal(_val(ptr[].left[], ex), "1")
-    assert_equal(_val(ptr[].right[], ex), "2")
-    _free_expr(ptr)
-
+    ref b = ptr[].payload[xp.XPathBinaryOp]
+    assert_equal(_val(b.left[], ex), "1")
+    assert_equal(_val(b.right[], ex), "2")
 
 # -----------------------------
-# Visitor (ExprStringifier + accept)
+# Visitor (XPathExprStringifier + accept)
 # -----------------------------
 
 
 def test_visitor_stringifier_number() raises:
-    var ptr = parse_xpath("42")
-    var ctx = ExprContext("42")
-    var s = ExprStringifier()
-    assert_equal(accept(s, ptr, ctx), "42")
-    _free_expr(ptr)
+    var text = String("42")
+    var ctx = xp.XPathContext(text.as_bytes())
+    var ptr = xp.parse_xpath("42")
+    var s = xp.XPathExprStringifier()
+    xp.accept(s, ptr, ctx)
+    assert_equal(s.result, "42")
 
 
 def test_visitor_stringifier_binary() raises:
-    var ptr = parse_xpath("1 + 2")
-    var ctx = ExprContext("1 + 2")
-    var s = ExprStringifier()
-    assert_equal(accept(s, ptr, ctx), "(1 + 2)")
-    _free_expr(ptr)
+    var text = String("1 + 2")
+    var ctx = xp.XPathContext(text.as_bytes())
+    var ptr = xp.parse_xpath("1 + 2")
+    var s = xp.XPathExprStringifier()
+    xp.accept(s, ptr, ctx)
+    assert_equal(s.result, "(1 + 2)")
 
 
 def test_visitor_stringifier_path() raises:
     # Leading slash triggers location path (PATH kind); "a/b" alone would be binary "/"
-    var ptr = parse_xpath("/a/b")
-    var ctx = ExprContext("/a/b")
-    var s = ExprStringifier()
-    assert_equal(ptr[].kind, Expr.PATH)
-    assert_equal(accept(s, ptr, ctx), "a/b")
-    _free_expr(ptr)
+    var text = String("/a/b")
+    var ctx = xp.XPathContext(text.as_bytes())
+    var ptr = xp.parse_xpath("/a/b")
+    var s = xp.XPathExprStringifier()
+    assert_equal(ptr[].kind(), xp.XPathExpr.PATH)
+    xp.accept(s, ptr, ctx)
+    assert_equal(s.result, "a/b")
 
 
 def test_visitor_stringifier_call() raises:
-    var ptr = parse_xpath("f(1, 2)")
-    var ctx = ExprContext("f(1, 2)")
-    var s = ExprStringifier()
-    assert_equal(accept(s, ptr, ctx), "f(1, 2)")
-    _free_expr(ptr)
-
+    var text = String("f(1, 2)")
+    var ctx = xp.XPathContext(text.as_bytes())
+    var ptr = xp.parse_xpath("f(1, 2)")
+    var s = xp.XPathExprStringifier()
+    xp.accept(s, ptr, ctx)
+    assert_equal(s.result, "f(1, 2)")
 
 # -----------------------------
 # Runner

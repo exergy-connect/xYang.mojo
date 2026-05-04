@@ -2,22 +2,24 @@
 
 import xyang.yang.ast.util as ast_util
 
-comptime `0b` = ast_util.to_byte["0"]()
-comptime `9b` = ast_util.to_byte["9"]()
 comptime `-` = ast_util.to_byte["-"]()
-
-comptime a_b = ast_util.to_byte["a"]()
-comptime z_b = ast_util.to_byte["z"]()
-comptime A_b = ast_util.to_byte["A"]()
-comptime Z_b = ast_util.to_byte["Z"]()
-
+comptime `_` = ast_util.to_byte["_"]()
 comptime ALPHA = (
-    ast_util.BitSet.range[a_b, z_b]() | ast_util.BitSet.range[A_b, Z_b]()
+    ast_util.BitSet.range[ast_util.to_byte["a"](), ast_util.to_byte["z"]()]()
+    | ast_util.BitSet.range[ast_util.to_byte["A"](), ast_util.to_byte["Z"]()]()
 )
 
+comptime IDENTIFIER_START_CHAR = ALPHA | ast_util.BitSet.chars[`_`]()
 
+comptime DIGIT = ast_util.BitSet.range[
+    ast_util.to_byte["0"](),
+    ast_util.to_byte["9"](),
+]()
+
+
+@always_inline
 def is_digit(ch: Byte) -> Bool:
-    return ch >= `0b` and ch <= `9b`
+    return ch in DIGIT
 
 
 @always_inline
@@ -25,20 +27,24 @@ def is_alpha(ch: Byte) -> Bool:
     return ch in ALPHA
 
 
+@always_inline
 def is_identifier_char(ch: Byte) -> Bool:
-    return (
-        is_alpha(ch)
-        or is_digit(ch)
-        or ch == `-`
-        or ch == ast_util.to_byte["_"]()
+    comptime IDENTIFIER_CHAR = (
+        ALPHA | DIGIT | ast_util.BitSet.chars[`-`, `_`]()
     )
+    return ch in IDENTIFIER_CHAR
+
+
+@always_inline
+def is_identifier_start_char(ch: Byte) -> Bool:
+    return ch in IDENTIFIER_START_CHAR
 
 
 def is_identifier(text: StringSlice) -> Bool:
     var bytes = text.as_bytes()
     if len(bytes) == 0:
         return False
-    if not is_alpha(bytes[0]) and bytes[0] != ast_util.to_byte["_"]():
+    if not is_identifier_start_char(bytes[0]):
         return False
     for i in range(1, len(bytes)):
         if not is_identifier_char(bytes[i]):

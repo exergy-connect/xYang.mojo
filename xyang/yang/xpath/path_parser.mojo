@@ -11,7 +11,7 @@ struct QName(Copyable):
     var local_name: String
 
     def has_prefix(self) -> Bool:
-        return len(self.prefix) > 0
+        return self.prefix.byte_length() > 0
 
     def text(self) -> String:
         if self.has_prefix():
@@ -55,10 +55,12 @@ def _qname_from_path_segment(segment: String) raises -> QName:
         raise Error("Invalid path: at most one ':' per segment")
 
     var prefix = String(segment[byte=0:colon_at].strip())
-    var local_name = String(segment[byte = colon_at + 1 : len(segment)].strip())
-    if len(prefix) == 0:
+    var local_name = String(
+        segment[byte = colon_at + 1 : segment.byte_length()].strip()
+    )
+    if prefix.byte_length() == 0:
         raise Error("Invalid path: empty prefix before ':'")
-    if len(local_name) == 0:
+    if local_name.byte_length() == 0:
         raise Error("Invalid path: empty local name after ':'")
     return QName(prefix=prefix, local_name=local_name)
 
@@ -71,7 +73,7 @@ def parse_qname(segment: String) raises -> QName:
 def _qname_for_slashed_path_token(read part: String) raises -> QName:
     """One slash-separated path step (outer per-step trim only)."""
     var segment = String(part.strip())
-    if len(segment) == 0:
+    if segment.byte_length() == 0:
         raise Error(
             "Invalid path: empty segment (adjacent '/' or trailing '/')"
         )
@@ -105,7 +107,7 @@ def parse_path(expression: StringSlice) raises -> Path:
     var trimmed = expression.strip()
     if trimmed.startswith("/"):
         absolute = True
-        trimmed = trimmed[byte = 1 : len(trimmed)]
+        trimmed = trimmed[byte = 1 : trimmed.byte_length()]
     var parts = List[String]()
     for p in trimmed.split("/"):
         parts.append(String(p))

@@ -16,7 +16,7 @@ from xyang.yang.identifiers import (
 from xyang.yang.path import YangPath
 from xyang.yang.path import parse_yang_path
 from xyang.yang.xpath.api import parse_xpath_expression
-from xyang.yang.xpath.pratt_parser import Expr
+from xyang.yang.xpath.pratt_parser import XPathExpr
 
 comptime Arc = ArcPointer
 
@@ -148,7 +148,7 @@ struct PathArgument(Movable, YangArgument):
 
 @fieldwise_init
 struct XPathExpressionArgument(Movable, YangArgument):
-    var root: Arc[Expr]
+    var root: Arc[XPathExpr]
 
     @staticmethod
     def validate(mut node: YangConstruct) raises -> None:
@@ -156,13 +156,11 @@ struct XPathExpressionArgument(Movable, YangArgument):
         if argument.byte_length() == 0:
             raise _argument_error(node, "expected non-empty expression")
         var line = node.argument_line()
-        var ptr = parse_xpath_expression(argument, line)
-        var owned = ptr.take_pointee()
-        ptr.free()
+        var root = parse_xpath_expression(argument, line)
         node.set_argument(
             YangArgumentValue(
                 argument^,
-                XPathExpressionArgument(Arc[Expr](owned^)),
+                XPathExpressionArgument(root^),
             )
         )
 

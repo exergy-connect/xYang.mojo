@@ -55,7 +55,7 @@ def accept[V: ASTVisitor](visitor: V, node: ASTNodeVariant, ctx: Context) -> Str
 
 struct XPathEvaluator(ASTVisitor):
     def visit_literal(self, node: LiteralNode, ctx: Context) -> String:
-        return node.value.text(ctx.expression)
+        return node.value.text(ctx.expression.as_bytes())
 
     def visit_path(self, node: PathNode, ctx: Context) -> String:
         return node.to_string(ctx.expression)
@@ -63,10 +63,18 @@ struct XPathEvaluator(ASTVisitor):
     def visit_binary_op(self, node: BinaryOpNode, ctx: Context) -> String:
         var left_val = accept(self, node.left[], ctx)
         var right_val = accept(self, node.right[], ctx)
-        return "(" + left_val + " " + node.operator + " " + right_val + ")"
+        return (
+            "("
+            + left_val
+            + " "
+            + node.operator.text(ctx.expression.as_bytes())
+            + " "
+            + right_val
+            + ")"
+        )
 
     def visit_function_call(self, node: FunctionCallNode, ctx: Context) -> String:
-        var out = node.name + "("
+        var out = node.name.text(ctx.expression.as_bytes()) + "("
         for i in range(len(node.args)):
             if i > 0:
                 out += ", "
@@ -104,7 +112,7 @@ struct PathNode(Movable):
         for i in range(len(self.segments)):
             if i > 0:
                 out += "/"
-            out += self.segments[i][].step.text(source)
+            out += self.segments[i][].step.text(source.as_bytes())
         return out
 
 

@@ -1,6 +1,6 @@
 # Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
 # 1. Ignore everything
-*
+# *
 
 # 2. Allow directories (required so Cursor can "look" inside folders)
 !*/
@@ -22,3 +22,4 @@ node_modules/
 dist/
 build/
 attic/
+.pixi/

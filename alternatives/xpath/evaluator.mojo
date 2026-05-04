@@ -180,20 +180,22 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
     ) raises -> EvalResult:
         var tt = node.value.type
         if tt == Token.STRING:
-            return EvalResult(node.value.text(ctx.expression, strip_quotes=True))
+            return EvalResult(
+                node.value.text(ctx.expression.as_bytes(), strip_quotes=True)
+            )
         if tt == Token.NUMBER or tt == Token.FLOAT_NUMBER:
-            var v = node.value.text(ctx.expression)
+            var v = node.value.text(ctx.expression.as_bytes())
             try:
                 return EvalResult(Float64(atol(v)))
             except:
                 return EvalResult(Float64(0.0))
         if tt == Token.IDENTIFIER:
-            var text = node.value.text(ctx.expression).lower()
+            var text = node.value.text(ctx.expression.as_bytes()).lower()
             if text == "true":
                 return EvalResult(True)
             if text == "false":
                 return EvalResult(False)
-        return EvalResult(node.value.text(ctx.expression))
+        return EvalResult(node.value.text(ctx.expression.as_bytes()))
 
     def visit_path(
         self, ref node: PathNode, ctx: EvalContext, current: Arc[XPathNode]
@@ -205,7 +207,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
             nodes.append(current.copy())
         for i in range(len(node.segments)):
             ref seg = node.segments[i][]
-            var step_name = seg.step.text(ctx.expression)
+            var step_name = seg.step.text(ctx.expression.as_bytes())
             var next_nodes = List[Arc[XPathNode]]()
             if step_name == ".":
                 next_nodes = nodes.copy()
@@ -245,7 +247,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
     def visit_binary_op(
         self, ref node: BinaryOpNode, ctx: EvalContext, current: Arc[XPathNode]
     ) raises -> EvalResult:
-        var op = node.operator.text(ctx.expression)
+        var op = node.operator.text(ctx.expression.as_bytes())
         if op == "or":
             var left = eval_accept(self, node.left, ctx, current)
             if _yang_bool(left):
@@ -299,7 +301,7 @@ struct AltXPathEvaluator(AltExprEvalVisitor):
     def visit_function_call(
         self, ref node: FunctionCallNode, ctx: EvalContext, current: Arc[XPathNode]
     ) raises -> EvalResult:
-        var name = node.name.text(ctx.expression)
+        var name = node.name.text(ctx.expression.as_bytes())
         if name == "current":
             var single = List[Arc[XPathNode]]()
             single.append(ctx.current.copy())

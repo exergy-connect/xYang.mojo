@@ -1,25 +1,71 @@
 from std.collections import List
-from std.memory import ArcPointer, UnsafePointer, alloc
+from std.memory import ArcPointer, Span
+from std.utils import Variant
 from xyang.yang.xpath.token import Token
 from xyang.yang.xpath.tokenizer import XPathTokenizer
-from std.sys.intrinsics import likely, unlikely
 
 comptime Arc = ArcPointer
+comptime ByteView = Span[Byte, _]
 
 # -----------------------------
-# AST Nodes (self-referential via UnsafePointer per Mojo docs)
-# https://docs.modular.com/mojo/manual/structs/reference/
+# AST payload nodes (Variant members)
 # -----------------------------
 
 
-struct Expr(Movable):
-    """AST node for expressions and path steps (step = kind 'step', value = name, args = predicates).
-    Uses UnsafePointer per https://docs.modular.com/mojo/manual/structs/reference/.
+@fieldwise_init
+struct XPathAtom(Movable):
+    """Leaf expression: number, string, or name; semantics come from `XPathExpr.value`.
     """
 
-    comptime _DEBUG_LOG = "/tmp/expr-pratt-debug.log"
+    pass
 
-    comptime ExprPointer = UnsafePointer[Self, MutExternalOrigin]
+
+@fieldwise_init
+struct XPathBinaryOp(Movable):
+    """Infix operator: operator token lives on the enclosing `XPathExpr.value`.
+    """
+
+    var left: Arc[XPathExpr]
+    var right: Arc[XPathExpr]
+
+
+@fieldwise_init
+struct XPathCall(Movable):
+    """Function call: callee name token is `XPathExpr.value`."""
+
+    var args: List[Arc[XPathExpr]]
+
+
+@fieldwise_init
+struct XPathPath(Movable):
+    """Location path: ordered steps (each step is an `XPathExpr` with `XPathStep` payload).
+    """
+
+    var steps: List[Arc[XPathExpr]]
+
+
+@fieldwise_init
+struct XPathStep(Movable):
+    """Axis/step name is `XPathExpr.value`; bracket predicates only."""
+
+    var predicates: List[Arc[XPathExpr]]
+
+
+comptime XPathPayload = Variant[
+    XPathAtom,
+    XPathBinaryOp,
+    XPathCall,
+    XPathPath,
+    XPathStep,
+]
+
+# -----------------------------
+# XPathExpr (tree nodes owned via Arc; children in payload also use Arc)
+# -----------------------------
+
+
+struct XPathExpr(Movable):
+    """AST node: span token `value` plus a `payload` variant for structure."""
 
     comptime Kind = UInt8
     comptime NUMBER: Self.Kind = 0
@@ -30,282 +76,244 @@ struct Expr(Movable):
     comptime PATH: Self.Kind = 5
     comptime STEP: Self.Kind = 6
 
-    ## Node variant (Expr.NUMBER, Expr.STRING, …).
-    var kind: Self.Kind
-    ## Span-based token for literal/name/op/call/step; use .value.text(source) to get lexeme. For PATH, a sentinel token (length 0).
     var value: Token
-    ## Left operand of a binary expression (e.g. lhs of "a + b"). Unused (empty) for other kinds.
-    var left: Self.ExprPointer
-    ## Right operand of a binary expression (e.g. rhs of "a + b"). Unused (empty) for other kinds.
-    var right: Self.ExprPointer
-    ## For "call": function arguments. For "step": predicates (e.g. [1], [. = "x"]). Unused for other kinds.
-    var args: List[Arc[Expr]]
-    ## For "path" only: ordered list of steps (each step is an Expr with kind "step"). Unused for other kinds.
-    var steps: List[Arc[Expr]]
+    var payload: XPathPayload
 
-    def __init__(
-        out self,
-        kind: Self.Kind,
-        value: Token,
-        left: Self.ExprPointer,
-        right: Self.ExprPointer,
-        var args: List[Arc[Expr]],
-        var steps: List[Arc[Expr]],
-    ):
-        self.kind = kind
-        self.value = value.copy()
-        self.left = left
-        self.right = right
-        self.args = args^
-        self.steps = steps^
+    def __init__(out self, var value: Token, var payload: XPathPayload):
+        self.value = value^
+        self.payload = payload^
+
+    def kind(read self) -> Self.Kind:
+        if self.payload.isa[XPathBinaryOp]():
+            return Self.BINARY
+        if self.payload.isa[XPathCall]():
+            return Self.CALL
+        if self.payload.isa[XPathPath]():
+            return Self.PATH
+        if self.payload.isa[XPathStep]():
+            return Self.STEP
+        var ty = self.value.type
+        if ty == Token.NUMBER or ty == Token.FLOAT_NUMBER:
+            return Self.NUMBER
+        if ty == Token.STRING:
+            return Self.STRING
+        return Self.NAME
 
     @staticmethod
-    def number(v: Token) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
-        ptr.init_pointee_move(
-            Self(
-                Self.NUMBER,
-                v,
-                Self.ExprPointer(),
-                Self.ExprPointer(),
-                List[Arc[Expr]](),
-                List[Arc[Expr]](),
-            )
-        )
-        return ptr
+    def number(var v: Token) -> Arc[Self]:
+        var node = Self(v^, XPathPayload(XPathAtom()))
+        return Arc[Self](node^)
 
     @staticmethod
-    def string(v: Token) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
-        ptr.init_pointee_move(
-            Self(
-                Self.STRING,
-                v,
-                Self.ExprPointer(),
-                Self.ExprPointer(),
-                List[Arc[Expr]](),
-                List[Arc[Expr]](),
-            )
-        )
-        return ptr
+    def string(var v: Token) -> Arc[Self]:
+        var node = Self(v^, XPathPayload(XPathAtom()))
+        return Arc[Self](node^)
 
     @staticmethod
-    def name(v: Token) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
-        ptr.init_pointee_move(
-            Self(
-                Self.NAME,
-                v,
-                Self.ExprPointer(),
-                Self.ExprPointer(),
-                List[Arc[Expr]](),
-                List[Arc[Expr]](),
-            )
-        )
-        return ptr
+    def name(var v: Token) -> Arc[Self]:
+        var node = Self(v^, XPathPayload(XPathAtom()))
+        return Arc[Self](node^)
 
     @staticmethod
     def binary(
-        op: Token, lhs: Self.ExprPointer, rhs: Self.ExprPointer
-    ) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
-        ptr.init_pointee_move(
-            Self(
-                Self.BINARY,
-                op,
-                lhs,
-                rhs,
-                List[Arc[Expr]](),
-                List[Arc[Expr]](),
-            )
+        var op: Token, var lhs: Arc[Self], var rhs: Arc[Self]
+    ) -> Arc[Self]:
+        var node = Self(
+            op^,
+            XPathPayload(XPathBinaryOp(lhs^, rhs^)),
         )
-        return ptr
+        return Arc[Self](node^)
 
     @staticmethod
-    def call(name: Token, var args: List[Arc[Expr]]) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
-        ptr.init_pointee_move(
-            Self(
-                Self.CALL,
-                name,
-                Self.ExprPointer(),
-                Self.ExprPointer(),
-                args^,
-                List[Arc[Expr]](),
-            )
+    def call(var name: Token, var args: List[Arc[Self]]) -> Arc[Self]:
+        var node = Self(
+            name^,
+            XPathPayload(XPathCall(args^)),
         )
-        return ptr
+        return Arc[Self](node^)
 
     @staticmethod
-    def path(var steps: List[Arc[Expr]]) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
+    def path(var steps: List[Arc[Self]]) -> Arc[Self]:
         var empty_tok = Token(type=Token.EOF, start=0, length=0, line=0)
-        ptr.init_pointee_move(
-            Self(
-                Self.PATH,
-                empty_tok,
-                Self.ExprPointer(),
-                Self.ExprPointer(),
-                List[Arc[Expr]](),
-                steps^,
-            )
+        var node = Self(
+            empty_tok^,
+            XPathPayload(XPathPath(steps^)),
         )
-        return ptr
+        return Arc[Self](node^)
 
     @staticmethod
-    def step(name: Token, var predicates: List[Arc[Expr]]) -> Self.ExprPointer:
-        var ptr = alloc[Self](1)
-        ptr.init_pointee_move(
-            Self(
-                Self.STEP,
-                name,
-                Self.ExprPointer(),
-                Self.ExprPointer(),
-                predicates^,
-                List[Arc[Expr]](),
-            )
+    def step(var name: Token, var predicates: List[Arc[Self]]) -> Arc[Self]:
+        var node = Self(
+            name^,
+            XPathPayload(XPathStep(predicates^)),
         )
-        return ptr
-
-    ## Recursively free this node and all children. Call on the pointee (ptr[]).
-    def free_tree(self):
-        if self.left:
-            self.left[].free_tree()
-            self.left.destroy_pointee()
-            self.left.free()
-        if self.right:
-            self.right[].free_tree()
-            self.right.destroy_pointee()
-            self.right.free()
-        # for i in range(len(self.args)):  # TODO: fix this
-        #     self.args[i][].free_tree()
-        # for i in range(len(self.steps)):
-        #     self.steps[i][].free_tree()
+        return Arc[Self](node^)
 
 
 # -----------------------------
-# Visitor pattern for Expr
+# Visitor pattern for XPathExpr (stateful visitor + ``XPathContext`` for token spans).
 # -----------------------------
 
 
-struct ExprContext:
-    """Context passed to Expr visitors (e.g. source expression for token resolution).
+struct XPathContext[origin: ImmutOrigin](Movable):
+    """UTF-8 expression buffer view for ``Token.text`` / span-based lexemes (``ByteView`` = ``Span[Byte, origin]``).
     """
 
-    var expression: String
+    var source: ByteView[Self.origin]
 
-    def __init__(out self, expression: String = ""):
-        self.expression = expression
-
-
-## Visitor for walking the Expr AST. Implement this to evaluate or transform the tree.
-## Use accept(visitor, node, ctx) to dispatch; inside visit_* recurse by calling accept(visitor, child_ref, ctx).
-trait ExprVisitor:
-    def visit_number(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
-
-    def visit_string(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
-
-    def visit_name(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
-
-    def visit_binary(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
-
-    def visit_call(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
-
-    def visit_path(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
-
-    def visit_step(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return ""
+    def __init__(out self, source: ByteView[Self.origin]):
+        self.source = source
 
 
-## Dispatch to the appropriate visitor method. Recurse from within visit_* by calling this again with child refs (e.g. node.left[], node.args[i][]).
-def accept[
-    V: ExprVisitor
-](visitor: V, ref node: Expr, ctx: ExprContext) raises -> String:
-    if node.kind == Expr.PATH:
-        return visitor.visit_path(node, ctx)
-    if node.kind == Expr.STEP:
-        return visitor.visit_step(node, ctx)
-    if node.kind == Expr.NUMBER:
-        return visitor.visit_number(node, ctx)
-    if node.kind == Expr.STRING:
-        return visitor.visit_string(node, ctx)
-    if node.kind == Expr.NAME:
-        return visitor.visit_name(node, ctx)
-    if node.kind == Expr.BINARY:
-        return visitor.visit_binary(node, ctx)
-    if node.kind == Expr.CALL:
-        return visitor.visit_call(node, ctx)
-    return ""
+## Walk ``XPathExpr`` by implementing ``visit_*`` on the enclosing ``expr`` (``expr.value`` holds span tokens; use ``expr.payload[...]`` when structure is needed).
+## Dispatch with ``accept(mut visitor, node, ctx)``; recurse with the same ``ref ctx``.
+trait XPathExprVisitor:
+    def visit_number[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
+
+    def visit_string[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
+
+    def visit_name[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
+
+    def visit_binary[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
+
+    def visit_call[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
+
+    def visit_path[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
+
+    def visit_step[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ...
 
 
-## Convenience: dispatch from root pointer. Use when you have the result of parse_xpath().
-def accept[
-    V: ExprVisitor
-](visitor: V, root: Expr.ExprPointer, ctx: ExprContext) raises -> String:
-    return accept(visitor, root[], ctx)
+def accept[V: XPathExprVisitor, origin: ImmutOrigin](
+    mut visitor: V, ref node: XPathExpr, ref ctx: XPathContext[origin]
+) raises -> None:
+    if node.kind() == XPathExpr.PATH:
+        visitor.visit_path(node, ctx)
+        return
+    if node.kind() == XPathExpr.STEP:
+        visitor.visit_step(node, ctx)
+        return
+    if node.kind() == XPathExpr.NUMBER:
+        visitor.visit_number(node, ctx)
+        return
+    if node.kind() == XPathExpr.STRING:
+        visitor.visit_string(node, ctx)
+        return
+    if node.kind() == XPathExpr.NAME:
+        visitor.visit_name(node, ctx)
+        return
+    if node.kind() == XPathExpr.BINARY:
+        visitor.visit_binary(node, ctx)
+        return
+    if node.kind() == XPathExpr.CALL:
+        visitor.visit_call(node, ctx)
+        return
 
 
-struct ExprStringifier(ExprVisitor):
-    """Concrete visitor that produces a readable string representation of the Expr tree.
+def accept[V: XPathExprVisitor, origin: ImmutOrigin](
+    mut visitor: V, root: Arc[XPathExpr], ref ctx: XPathContext[origin]
+) raises -> None:
+    accept(visitor, root[], ctx)
+
+
+struct XPathExprStringifier(XPathExprVisitor):
+    """Readable XPath text; build ``XPathContext`` from the parse source, then read ``result`` after ``accept``.
     """
+
+    var result: String
 
     def __init__(out self):
-        pass
+        self.result = ""
 
-    def visit_number(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return node.value.text(ctx.expression)
+    def visit_number[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        self.result = expr.value.text(ctx.source)
 
-    def visit_string(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return '"' + node.value.text(ctx.expression, strip_quotes=True) + '"'
+    def visit_string[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        self.result = (
+            '"' + expr.value.text(ctx.source, strip_quotes=True) + '"'
+        )
 
-    def visit_name(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        return node.value.text(ctx.expression)
+    def visit_name[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        self.result = expr.value.text(ctx.source)
 
-    def visit_binary(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        var left_val = ""
-        var right_val = ""
-        if node.left:
-            left_val = accept(self, node.left[], ctx)
-        if node.right:
-            right_val = accept(self, node.right[], ctx)
-        return (
+    def visit_binary[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ref bin = expr.payload[XPathBinaryOp]
+        accept(self, bin.left[], ctx)
+        var left_val = self.result
+        accept(self, bin.right[], ctx)
+        var right_val = self.result
+        self.result = (
             "("
             + left_val
             + " "
-            + node.value.text(ctx.expression)
+            + expr.value.text(ctx.source)
             + " "
             + right_val
             + ")"
         )
 
-    def visit_call(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        var out = node.value.text(ctx.expression) + "("
-        for i in range(len(node.args)):
+    def visit_call[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ref c = expr.payload[XPathCall]
+        var out = expr.value.text(ctx.source) + "("
+        for i in range(len(c.args)):
             if i > 0:
                 out += ", "
-            out += accept(self, node.args[i][], ctx)
+            accept(self, c.args[i][], ctx)
+            out += self.result
         out += ")"
-        return out
+        self.result = out
 
-    def visit_path(self, ref node: Expr, ctx: ExprContext) raises -> String:
+    def visit_path[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ref p = expr.payload[XPathPath]
         var out = ""
-        for i in range(len(node.steps)):
+        for i in range(len(p.steps)):
             if i > 0:
                 out += "/"
-            out += accept(self, node.steps[i][], ctx)
-        return out
+            accept(self, p.steps[i][], ctx)
+            out += self.result
+        self.result = out
 
-    def visit_step(self, ref node: Expr, ctx: ExprContext) raises -> String:
-        var out = node.value.text(ctx.expression)
-        for i in range(len(node.args)):
-            out += "[" + accept(self, node.args[i][], ctx) + "]"
-        return out
+    def visit_step[
+        origin: ImmutOrigin
+    ](mut self, ref expr: XPathExpr, ref ctx: XPathContext[origin]) raises -> None:
+        ref st = expr.payload[XPathStep]
+        var out = expr.value.text(ctx.source)
+        for i in range(len(st.predicates)):
+            accept(self, st.predicates[i][], ctx)
+            out += "[" + self.result + "]"
+        self.result = out
 
 
 # -----------------------------
@@ -357,17 +365,6 @@ struct Parser:
             )
         return self.advance()
 
-    # def expect[ReturnToken: Bool = False](
-    #     mut self,
-    #     t: Token.Type
-    # ) -> Token if ReturnToken else None:
-    #     ref cur = self.current()
-    #     if unlikely(cur.type != t):
-    #         raise Error("Unexpected token type " + Token.type_name(cur.type) + " (expected " + Token.type_name(t) + ")")
-    #     self.skip()
-    #     if ReturnToken:
-    #         return cur.copy()
-
     def skip_or_raise(mut self, t: Token.Type) raises -> None:
         """Skip current token if its type is t; otherwise raise. Does not return the token.
         """
@@ -381,6 +378,16 @@ struct Parser:
             )
         self.skip()
 
+    def expect_step_name(mut self) raises -> Token:
+        var curType = self.current().type
+        if curType != Token.IDENTIFIER and curType != Token.QNAME:
+            raise Error(
+                "Unexpected token type "
+                + Token.type_name(curType)
+                + " (expected IDENTIFIER or QNAME)"
+            )
+        return self.advance()
+
     ## Return the lexeme string for token t (span-based tokens reference expression via tokenizer).
     def _lexeme(ref self, t: Token) raises -> String:
         return self._tokenizer.token_text(t)
@@ -393,7 +400,7 @@ struct Parser:
     # Pratt Expression Parser
     # -----------------------------
 
-    def parse_expression(mut self, min_bp: Int = 0) raises -> Expr.ExprPointer:
+    def parse_expression(mut self, min_bp: Int = 0) raises -> Arc[XPathExpr]:
         var lhs = self.parse_prefix()
 
         while True:
@@ -406,13 +413,11 @@ struct Parser:
             if lbp < min_bp or lbp == 0:
                 break
 
-            # Copy only when we know this token is consumed as an infix op.
-            var op_tok = tok.copy()
-            self.skip()
+            var op_tok = self.advance()
 
             var rhs = self.parse_expression(rbp)
 
-            lhs = Expr.binary(op_tok, lhs, rhs)
+            lhs = XPathExpr.binary(op_tok^, lhs, rhs)
 
         return lhs
 
@@ -420,39 +425,50 @@ struct Parser:
     # Prefix Expressions
     # -----------------------------
 
-    def parse_prefix(mut self) raises -> Expr.ExprPointer:
+    def parse_prefix(mut self) raises -> Arc[XPathExpr]:
         var tok = self.advance()
 
         if tok.type == Token.NUMBER or tok.type == Token.FLOAT_NUMBER:
-            return Expr.number(tok.copy())
+            return XPathExpr.number(tok^)
 
         if tok.type == Token.STRING:
-            return Expr.string(tok.copy())
+            return XPathExpr.string(tok^)
 
-        if tok.type == Token.IDENTIFIER:
+        if (
+            tok.type == Token.IDENTIFIER
+            or tok.type == Token.QNAME
+            or tok.type == Token.KW_OR
+            or tok.type == Token.KW_AND
+            or tok.type == Token.KW_DIV
+            or tok.type == Token.KW_MOD
+        ):
             if self.current().type == Token.PAREN_OPEN:
-                return self.parse_function_call(tok)
-            return self._name_or_step_with_predicates(tok)
+                if tok.type == Token.IDENTIFIER or tok.type == Token.QNAME:
+                    return self.parse_function_call(tok^)
+                raise Error("Unexpected '(' after " + Token.type_name(tok.type))
+            return self._name_or_step_with_predicates(tok^)
 
         if tok.type == Token.PAREN_OPEN:
+            _ = tok^
             var expr = self.parse_expression()
             # Accept parenthesized comma lists used by some x-yang `must` rules,
             # e.g. ../type = ('date','datetime').
             while self.current().type == Token.COMMA:
                 var comma_tok = self.expect(Token.COMMA)
                 var rhs = self.parse_expression()
-                expr = Expr.binary(comma_tok.copy(), expr, rhs)
+                expr = XPathExpr.binary(comma_tok^, expr, rhs)
             self.skip_or_raise(Token.PAREN_CLOSE)
             return expr
 
         if tok.type == Token.SLASH:
+            _ = tok^
             return self.parse_location_path()
 
         if tok.type == Token.DOT:
-            return self._name_or_step_with_predicates(tok)
+            return self._name_or_step_with_predicates(tok^)
 
         if tok.type == Token.DOTDOT:
-            return self._name_or_step_with_predicates(tok)
+            return self._name_or_step_with_predicates(tok^)
 
         raise Error("Unexpected token")
 
@@ -461,27 +477,25 @@ struct Parser:
     # -----------------------------
 
     def infix_binding_power(self, tok: Token) raises -> Tuple[Int, Int]:
-        var op = self._lexeme(tok)
-
-        if op == "or":
+        var ty = tok.type
+        if ty == Token.KW_OR:
             return Tuple[Int, Int](1, 2)
-
-        if op == "and":
+        if ty == Token.KW_AND:
             return Tuple[Int, Int](3, 4)
 
-        if op == "=" or op == "!=":
+        if ty == Token.EQ or ty == Token.NE:
             return Tuple[Int, Int](5, 6)
 
-        if op == "<" or op == ">":
+        if ty == Token.LT or ty == Token.GT or ty == Token.LE or ty == Token.GE:
             return Tuple[Int, Int](7, 8)
 
-        if op == "+" or op == "-":
+        if ty == Token.PLUS or ty == Token.MINUS:
             return Tuple[Int, Int](9, 10)
 
-        if op == "*" or op == "div" or op == "mod":
+        if ty == Token.STAR or ty == Token.KW_DIV or ty == Token.KW_MOD:
             return Tuple[Int, Int](11, 12)
 
-        if op == "/" or op == "//":
+        if ty == Token.SLASH:
             return Tuple[Int, Int](13, 14)
 
         return Tuple[Int, Int](0, 0)
@@ -491,81 +505,77 @@ struct Parser:
     # -----------------------------
 
     def _name_or_step_with_predicates(
-        mut self, tok: Token
-    ) raises -> Expr.ExprPointer:
-        var predicates = List[Arc[Expr]]()
+        mut self, var tok: Token
+    ) raises -> Arc[XPathExpr]:
+        var predicates = List[Arc[XPathExpr]]()
         while self.current().type == Token.BRACKET_OPEN:
-            var pred_ptr = self.parse_predicate()
-            predicates.append(Arc[Expr](pred_ptr.take_pointee()))
-            pred_ptr.free()
+            var pred_arc = self.parse_predicate()
+            predicates.append(pred_arc^)
         if len(predicates) > 0:
-            return Expr.step(tok.copy(), predicates^)
-        return Expr.name(tok.copy())
+            return XPathExpr.step(tok^, predicates^)
+        return XPathExpr.name(tok^)
 
     # -----------------------------
     # Function Calls
     # -----------------------------
 
     def parse_function_call(
-        mut self, name_tok: Token
-    ) raises -> Expr.ExprPointer:
+        mut self, var name_tok: Token
+    ) raises -> Arc[XPathExpr]:
         self.skip_or_raise(Token.PAREN_OPEN)
 
-        var args = List[Arc[Expr]]()
+        var args = List[Arc[XPathExpr]]()
 
         if self.current().type != Token.PAREN_CLOSE:
             while True:
-                var ptr = self.parse_expression()
-                args.append(Arc[Expr](ptr.take_pointee()))
-                ptr.free()
+                var arg_arc = self.parse_expression()
+                args.append(arg_arc^)
 
                 if not self.match(Token.COMMA):
                     break
 
         self.skip_or_raise(Token.PAREN_CLOSE)
 
-        return Expr.call(name_tok.copy(), args^)
+        return XPathExpr.call(name_tok^, args^)
 
     # -----------------------------
     # Location Paths
     # -----------------------------
 
-    def parse_location_path(mut self) raises -> Expr.ExprPointer:
-        var steps = List[Arc[Expr]]()
+    def parse_location_path(mut self) raises -> Arc[XPathExpr]:
+        var steps = List[Arc[XPathExpr]]()
 
         while True:
-            var step_ptr = self.parse_step()
-            steps.append(Arc[Expr](step_ptr.take_pointee()))
-            step_ptr.free()
+            var step_arc = self.parse_step()
+            steps.append(step_arc^)
 
             if self.current().type != Token.SLASH:
                 break
 
             self.skip()
 
-        return Expr.path(steps^)
+        return XPathExpr.path(steps^)
 
     # -----------------------------
     # Path Steps
     # -----------------------------
 
-    def parse_step(mut self) raises -> Expr.ExprPointer:
-        var tok = self.expect(Token.IDENTIFIER)
+    def parse_step(mut self) raises -> Arc[XPathExpr]:
+        var tok = self.expect_step_name()
 
-        var predicates = List[Arc[Expr]]()
+        var predicates = List[Arc[XPathExpr]]()
 
         while self.current().type == Token.BRACKET_OPEN:
-            var pred_ptr = self.parse_predicate()
-            predicates.append(Arc[Expr](pred_ptr.take_pointee()))
-            pred_ptr.free()
+            var pred_arc = self.parse_predicate()
+            predicates.append(pred_arc^)
 
-        return Expr.step(tok.copy(), predicates^)
+        return XPathExpr.step(tok^, predicates^)
 
     # -----------------------------
     # Predicates
     # -----------------------------
 
-    def parse_predicate(mut self) raises -> Expr.ExprPointer:
+    def parse_predicate(mut self) raises -> Arc[XPathExpr]:
         self.skip_or_raise(Token.BRACKET_OPEN)
 
         var expr = self.parse_expression()
@@ -580,34 +590,31 @@ struct Parser:
 # -----------------------------
 
 
-def parse_xpath(read expression: String) raises -> Expr.ExprPointer:
-    """Parse an XPath expression string. Parser pulls tokens incrementally from the tokenizer.
-    """
+def parse_xpath(read expression: String) raises -> Arc[XPathExpr]:
+    """Parse an XPath expression string. Root is returned as an owning Arc."""
     var tokenizer = XPathTokenizer(expression)
     var parser = Parser(tokenizer^)
     return parser.parse_expression()
 
 
-def parse_refine_path(read expression: String) raises -> Expr.ExprPointer:
-    """Parse a refine-style schema path (supports prefixed identifiers like mod:name).
+def parse_refine_path(read expression: String) raises -> Arc[XPathExpr]:
+    """Parse a refine-style schema path (supports prefixed identifiers like mod:name). Root is an owning Arc.
     """
     var tokenizer = XPathTokenizer(expression)
     var parser = Parser(tokenizer^)
 
-    var steps = List[Arc[Expr]]()
+    var steps = List[Arc[XPathExpr]]()
 
     if parser.current().type == Token.SLASH:
         parser.skip()
 
-    var first_step_ptr = parser.parse_step()
-    steps.append(Arc[Expr](first_step_ptr.take_pointee()))
-    first_step_ptr.free()
+    var first_step = parser.parse_step()
+    steps.append(first_step^)
 
     while parser.current().type == Token.SLASH:
         parser.skip()
-        var step_ptr = parser.parse_step()
-        steps.append(Arc[Expr](step_ptr.take_pointee()))
-        step_ptr.free()
+        var step_arc = parser.parse_step()
+        steps.append(step_arc^)
 
     parser.skip_or_raise(Token.EOF)
-    return Expr.path(steps^)
+    return XPathExpr.path(steps^)

@@ -4,7 +4,7 @@ from std.testing import assert_equal, assert_true, TestSuite
 
 from xyang.yang.arguments import XPathExpressionArgument
 from xyang.yang.ast.construct import YangConstruct
-from xyang.yang.xpath.pratt_parser import Expr
+from xyang.yang.xpath.pratt_parser import XPathExpr
 
 
 def test_xpath_expression_argument_validate_stores_text_and_ast() raises:
@@ -14,7 +14,7 @@ def test_xpath_expression_argument_validate_stores_text_and_ast() raises:
     assert_equal(node.argument_text(), String("1 + 2"))
     assert_true(node.argument.isa[XPathExpressionArgument]())
     ref x = node.argument.get[XPathExpressionArgument]()
-    assert_equal(x.root[].kind, Expr.BINARY)
+    assert_equal(x.root[].kind(), XPathExpr.BINARY)
 
 
 def main() raises:

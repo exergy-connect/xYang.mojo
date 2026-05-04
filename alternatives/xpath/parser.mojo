@@ -69,12 +69,12 @@ struct XPathParser:
         return self.current_token.type
 
     ## Lexeme for token t (span-based tokens use expression).
-    def _token_text(self, t: Token) raises -> String:
-        return t.text(self.expression)
+    def _token_text(self, t: Token) -> String:
+        return t.text(self.expression.as_bytes())
 
     ## Lexeme with quotes stripped; for STRING tokens.
-    def _token_string_value(self, t: Token) raises -> String:
-        return t.text(self.expression, strip_quotes=True)
+    def _token_string_value(self, t: Token) -> String:
+        return t.text(self.expression.as_bytes(), strip_quotes=True)
 
     ## Consume and return the current token if it matches expected_type.
     ## Expect current token to match expected_type; advance. No token copy returned.
@@ -151,14 +151,13 @@ struct XPathParser:
         var cacheable: Bool
         (left, cacheable) = self._parse_additive()
         ref t = self._current()
-        var op_str = self._token_text(t)
-        if t.type == Token.OPERATOR and (
-            op_str == "="
-            or op_str == "!="
-            or op_str == "<"
-            or op_str == ">"
-            or op_str == "<="
-            or op_str == ">="
+        if (
+            t.type == Token.EQ
+            or t.type == Token.NE
+            or t.type == Token.LT
+            or t.type == Token.GT
+            or t.type == Token.LE
+            or t.type == Token.GE
         ):
             var op_tok = self._current().copy()
             self._advance()
@@ -181,8 +180,7 @@ struct XPathParser:
         (left, cacheable) = self._parse_multiplicative()
         while True:
             ref t = self._current()
-            var op_str = self._token_text(t)
-            if t.type == Token.OPERATOR and (op_str == "+" or op_str == "-"):
+            if t.type == Token.PLUS or t.type == Token.MINUS:
                 var op_tok = self._current().copy()
                 self._advance()
                 var right: ASTNode
@@ -216,7 +214,7 @@ struct XPathParser:
                     right = ASTNode(path^)
                 ))
                 cacheable = cacheable and rc
-            elif t.type == Token.OPERATOR and self._token_text(t) == "*":
+            elif t.type == Token.STAR:
                 var op_tok = self._current().copy()
                 self._advance()
                 var right: ASTNode
@@ -235,7 +233,7 @@ struct XPathParser:
 
     def _parse_unary(mut self) raises -> Self.ParseResult:
         ref t = self._current()
-        if t.type == Token.OPERATOR and self._token_text(t) == "-":
+        if t.type == Token.MINUS:
             var op_tok = self._current().copy()
             self._advance()
             var operand: ASTNode
@@ -248,7 +246,7 @@ struct XPathParser:
                 right = operand
             ))
             return (ASTNode(root^), False)
-        if t.type == Token.OPERATOR and self._token_text(t) == "+":
+        if t.type == Token.PLUS:
             self._advance()
             return self._parse_unary()
         if self._is_keyword("not"):
