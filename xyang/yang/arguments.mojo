@@ -103,7 +103,7 @@ struct IdentifierArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if not is_identifier(argument):
             raise _argument_error(node, "expected identifier argument")
         node.update_argument(IdentifierArgument(argument.copy()))
@@ -111,14 +111,12 @@ struct IdentifierArgument(Movable, YangArgument):
 
 @fieldwise_init
 struct QNameArgument(Movable, YangArgument):
-    ## Full `prefix:local` spelling plus parsed parts.
-    var qualified_name: String
     var prefix: String
     var local_name: String
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if not is_qname(argument):
             raise _argument_error(
                 node, "expected identifier or prefixed identifier"
@@ -128,7 +126,7 @@ struct QNameArgument(Movable, YangArgument):
             var prefix = String(parts[0])
             var local_name = String(parts[1])
             node.update_argument(
-                QNameArgument(argument.copy(), prefix^, local_name^)
+                QNameArgument(prefix^, local_name^)
             )
         else:
             node.update_argument(IdentifierArgument(argument.copy()))
@@ -140,7 +138,7 @@ struct PathArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         var parsed = parse_yang_path(argument, node.argument_line())
         node.update_argument(PathArgument(parsed^))
 
@@ -151,7 +149,7 @@ struct XPathExpressionArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(node, "expected non-empty expression")
         var line = node.argument_line()
@@ -165,7 +163,7 @@ struct RevisionDateArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if not is_revision_date(argument):
             raise _argument_error(node, "expected revision date YYYY-MM-DD")
         node.update_argument(RevisionDateArgument(argument.copy()))
@@ -177,7 +175,7 @@ struct RangeArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         var segs = try_parse_range_segments(argument, node.argument_line())
         if len(segs) < 1:
             raise _argument_error(node, "expected valid `range` expression")
@@ -190,7 +188,7 @@ struct LengthArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         var segs = try_parse_length_segments(argument, node.argument_line())
         node.update_argument(LengthArgument(segs^))
 
@@ -201,7 +199,7 @@ struct PatternArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(
                 node, "expected non-empty XSD regular expression"
@@ -216,7 +214,7 @@ struct ModifierArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if argument != "invert-match":
             raise _argument_error(node, "expected argument `invert-match`")
         node.update_argument(ModifierArgument(True))
@@ -228,7 +226,7 @@ struct FractionDigitsArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(node, "expected digit string")
         var n = atol(argument)
@@ -245,7 +243,7 @@ struct BoolArgument(Movable, YangArgument):
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
+        ref argument = node.argument_text()
         if argument != "true" and argument != "false":
             raise _argument_error(node, "expected boolean argument")
         var truth = argument == "true"
@@ -254,23 +252,23 @@ struct BoolArgument(Movable, YangArgument):
 
 @fieldwise_init
 struct MaxElementsArgument(Movable, YangArgument):
-    ## Non-negative count, or `-1` when the argument is `unbounded`.
-    var count: Int
+    ## Positive count, or `0` when the argument is `unbounded`.
+    var count: UInt
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(
-                node, "expected non-negative integer or unbounded"
+                node, "expected positive integer or unbounded"
             )
         if argument == "unbounded":
-            node.update_argument(MaxElementsArgument(-1))
+            node.update_argument(MaxElementsArgument(0))
             return
         var n = atol(argument)
-        if n < 0:
-            raise _argument_error(node, "`max-elements` must be non-negative")
-        node.update_argument(MaxElementsArgument(Int(n)))
+        if n <= 0:
+            raise _argument_error(node, "`max-elements` must be positive")
+        node.update_argument(MaxElementsArgument(UInt(n)))
 
 
 @fieldwise_init
@@ -407,9 +405,6 @@ struct YangPatternSpec(Copyable, ImplicitlyCopyable, Movable):
     var invert: Bool
 
 
-comptime _LENGTH_MAX: Int64 = 9223372036854775807
-
-
 def _line_prefix(line: UInt) -> String:
     if line > 0:
         return "line " + String(line) + ": "
@@ -435,7 +430,7 @@ def _length_lower_bound(read tok: StringSlice, line: UInt) raises -> Int64:
 
 def _length_upper_bound(read tok: StringSlice, line: UInt) raises -> Int64:
     if tok == "max":
-        return _LENGTH_MAX
+        return Int64(Scalar[DType.int64].MAX)
     if tok == "min":
         raise Error(
             _line_prefix(line) + "`length` `min` cannot be an upper bound"
