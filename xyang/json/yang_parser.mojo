@@ -31,8 +31,7 @@
 ## - `_convert_property` — one root or nested property → optional
 ##   `container` / `list` / `leaf` / … node.
 ## - `parse_yang_json` — assemble module header, `$defs`, then properties.
-## - `parse_yang_json_module` — same tree, then `MODULE_SPEC.validate` +
-##   `YangModule._populate_from_validated_tree` for a typed module handle.
+## - `parse_yang_json_module` — same tree, then `YangModule.ingest_construct_tree`.
 
 from std.memory import ArcPointer
 
@@ -41,7 +40,6 @@ import xyang.yang.ast.util as ast_util
 from xyang.yang.arguments import _strip_spaces
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import MODULE_SPEC, build_spec_table
 
 comptime Arc = ArcPointer
 
@@ -636,9 +634,6 @@ def parse_yang_json_module(
     after the raw tree has been built.
     """
     var tree = parse_yang_json(source, source_path)
-    var specs = build_spec_table()
-    MODULE_SPEC.validate(tree, specs)
     var module = YangModule()
-    module._populate_from_validated_tree(tree)
-    module.root = Optional[Arc[YangConstruct]](Arc[YangConstruct](tree^))
+    module.ingest_construct_tree(tree^)
     return module^

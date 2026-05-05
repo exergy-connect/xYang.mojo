@@ -11,6 +11,7 @@ from xyang.yang.runtime_spec import (
     RuleTable,
     YangConstructSpecTrait,
     fields,
+    keyword_spelling,
 )
 
 
@@ -296,164 +297,80 @@ comptime MUST_TYPED_SPEC = YangConstructSpec[
     ),
 ]
 
-comptime MODULE_SPEC = RuntimeConstructSpec.from_comptime[MODULE_TYPED_SPEC]()
-comptime CONTAINER_SPEC = RuntimeConstructSpec.from_comptime[
-    CONTAINER_TYPED_SPEC
-]()
-comptime LIST_SPEC = RuntimeConstructSpec.from_comptime[LIST_TYPED_SPEC]()
-comptime LEAF_SPEC = RuntimeConstructSpec.from_comptime[LEAF_TYPED_SPEC]()
-comptime LEAF_LIST_SPEC = RuntimeConstructSpec.from_comptime[
-    LEAF_LIST_TYPED_SPEC
-]()
-comptime TYPEDEF_SPEC = RuntimeConstructSpec.from_comptime[TYPEDEF_TYPED_SPEC]()
-comptime TYPE_SPEC = RuntimeConstructSpec.from_comptime[TYPE_TYPED_SPEC]()
-comptime ENUM_STMT_SPEC = RuntimeConstructSpec.from_comptime[
-    ENUM_STMT_TYPED_SPEC
-]()
-comptime LENGTH_STMT_SPEC = RuntimeConstructSpec.from_comptime[
-    LENGTH_STMT_TYPED_SPEC
-]()
-comptime PATTERN_STMT_SPEC = RuntimeConstructSpec.from_comptime[
-    PATTERN_STMT_TYPED_SPEC
-]()
-comptime GROUPING_SPEC = RuntimeConstructSpec.from_comptime[
-    GROUPING_TYPED_SPEC
-]()
-comptime CHOICE_SPEC = RuntimeConstructSpec.from_comptime[CHOICE_TYPED_SPEC]()
-comptime CASE_SPEC = RuntimeConstructSpec.from_comptime[CASE_TYPED_SPEC]()
-comptime REVISION_SPEC = RuntimeConstructSpec.from_comptime[
-    REVISION_TYPED_SPEC
-]()
-comptime MUST_SPEC = RuntimeConstructSpec.from_comptime[MUST_TYPED_SPEC]()
 
-
-def build_spec_table() -> RuntimeConstructSpec.Table:
+def build_spec_table() raises -> RuntimeConstructSpec.Table:
     var specs = RuntimeConstructSpec.Table(
         fill=RuntimeConstructSpec.scalar[`<INVALID>`, yarg.NoArgument]()
     )
-    specs[`module`] = MODULE_SPEC
-    specs[`yang-version`] = RuntimeConstructSpec.scalar[
-        `yang-version`, yarg.YangVersionArgument
-    ]()
-    specs[Int(`namespace`)] = RuntimeConstructSpec.scalar[
-        `namespace`, yarg.StringArgument
-    ]()
-    specs[Int(`prefix`)] = RuntimeConstructSpec.scalar[
-        `prefix`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`organization`)] = RuntimeConstructSpec.scalar[
-        `organization`, yarg.StringArgument
-    ]()
-    specs[Int(`contact`)] = RuntimeConstructSpec.scalar[
-        `contact`, yarg.StringArgument
-    ]()
-    specs[Int(`description`)] = RuntimeConstructSpec.scalar[
-        `description`, yarg.StringArgument
-    ]()
-    specs[Int(`revision`)] = REVISION_SPEC
-    specs[Int(`grouping`)] = GROUPING_SPEC
-    specs[Int(`uses`)] = RuntimeConstructSpec.scalar[
-        `uses`, yarg.QNameArgument
-    ]()
-    specs[Int(`container`)] = CONTAINER_SPEC
-    specs[Int(`list`)] = LIST_SPEC
-    specs[Int(`key`)] = RuntimeConstructSpec.scalar[
-        `key`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`leaf`)] = LEAF_SPEC
-    specs[Int(`type`)] = TYPE_SPEC
-    specs[Int(`range-stmt`)] = RuntimeConstructSpec.scalar[
-        `range-stmt`, yarg.RangeArgument
-    ]()
-    specs[Int(`path`)] = RuntimeConstructSpec.scalar[
-        `path`, yarg.PathArgument
-    ]()
-    specs[Int(`default`)] = RuntimeConstructSpec.scalar[
-        `default`, yarg.StringArgument
-    ]()
-    specs[Int(`must`)] = MUST_SPEC
-    specs[Int(`error-message`)] = RuntimeConstructSpec.scalar[
-        `error-message`, yarg.StringArgument
-    ]()
-    specs[Int(`when`)] = RuntimeConstructSpec.scalar[
-        `when`, yarg.XPathExpressionArgument
-    ]()
-    specs[Int(`anydata`)] = RuntimeConstructSpec.scalar[
-        `anydata`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`anyxml`)] = RuntimeConstructSpec.scalar[
-        `anyxml`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`augment`)] = RuntimeConstructSpec.scalar[
-        `augment`, yarg.PathArgument
-    ]()
-    specs[Int(`choice`)] = CHOICE_SPEC
-    specs[Int(`case`)] = CASE_SPEC
-    specs[Int(`config`)] = RuntimeConstructSpec.scalar[
-        `config`, yarg.BoolArgument
-    ]()
-    specs[Int(`if-feature`)] = RuntimeConstructSpec.scalar[
-        `if-feature`, yarg.StringArgument
-    ]()
-    specs[Int(`status`)] = RuntimeConstructSpec.scalar[
-        `status`, yarg.StatusArgument
-    ]()
-    specs[Int(`deviation`)] = RuntimeConstructSpec.scalar[
-        `deviation`, yarg.PathArgument
-    ]()
-    specs[Int(`extension`)] = RuntimeConstructSpec.scalar[
-        `extension`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`feature`)] = RuntimeConstructSpec.scalar[
-        `feature`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`identity`)] = RuntimeConstructSpec.scalar[
-        `identity`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`import`)] = RuntimeConstructSpec.scalar[
-        `import`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`include`)] = RuntimeConstructSpec.scalar[
-        `include`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`leaf-list`)] = LEAF_LIST_SPEC
-    specs[Int(`notification`)] = RuntimeConstructSpec.scalar[
-        `notification`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`reference`)] = RuntimeConstructSpec.scalar[
-        `reference`, yarg.StringArgument
-    ]()
-    specs[Int(`rpc`)] = RuntimeConstructSpec.scalar[
-        `rpc`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`typedef`)] = TYPEDEF_SPEC
-    specs[Int(`length`)] = LENGTH_STMT_SPEC
-    specs[Int(`pattern`)] = PATTERN_STMT_SPEC
-    specs[Int(`modifier`)] = RuntimeConstructSpec.scalar[
-        `modifier`, yarg.ModifierArgument
-    ]()
-    specs[Int(`fraction-digits`)] = RuntimeConstructSpec.scalar[
-        `fraction-digits`, yarg.FractionDigitsArgument
-    ]()
-    specs[Int(`enum`)] = ENUM_STMT_SPEC
-    specs[Int(`bit`)] = RuntimeConstructSpec.scalar[
-        `bit`, yarg.IdentifierArgument
-    ]()
-    specs[Int(`base`)] = RuntimeConstructSpec.scalar[
-        `base`, yarg.QNameArgument
-    ]()
-    specs[Int(`mandatory`)] = RuntimeConstructSpec.scalar[
-        `mandatory`, yarg.BoolArgument
-    ]()
-    specs[Int(`min-elements`)] = RuntimeConstructSpec.scalar[
-        `min-elements`, yarg.MinElementsArgument
-    ]()
-    specs[Int(`max-elements`)] = RuntimeConstructSpec.scalar[
-        `max-elements`, yarg.MaxElementsArgument
-    ]()
-    specs[Int(`presence`)] = RuntimeConstructSpec.scalar[
-        `presence`, yarg.StringArgument
-    ]()
+
+    def add_spec[Spec: YangConstructSpecTrait]() {mut specs}:
+        specs[Spec.KEYWORD] = RuntimeConstructSpec.from_comptime[Spec]()
+
+    def add_scalar_spec[kw: Keyword, arg_t: YangArgument]() {mut specs}:
+        specs[kw] = RuntimeConstructSpec.scalar[kw, arg_t]()
+
+    add_scalar_spec[`anydata`, yarg.IdentifierArgument]()
+    add_scalar_spec[`anyxml`, yarg.IdentifierArgument]()
+    add_scalar_spec[`augment`, yarg.PathArgument]()
+    add_scalar_spec[`base`, yarg.QNameArgument]()
+    add_scalar_spec[`bit`, yarg.IdentifierArgument]()
+    add_spec[CASE_TYPED_SPEC]()
+    add_spec[CHOICE_TYPED_SPEC]()
+    add_scalar_spec[`config`, yarg.BoolArgument]()
+    add_scalar_spec[`contact`, yarg.StringArgument]()
+    add_spec[CONTAINER_TYPED_SPEC]()
+    add_scalar_spec[`default`, yarg.StringArgument]()
+    add_scalar_spec[`description`, yarg.StringArgument]()
+    add_scalar_spec[`deviation`, yarg.PathArgument]()
+    add_spec[ENUM_STMT_TYPED_SPEC]()
+    add_scalar_spec[`error-message`, yarg.StringArgument]()
+    add_scalar_spec[`extension`, yarg.IdentifierArgument]()
+    add_scalar_spec[`feature`, yarg.IdentifierArgument]()
+    add_scalar_spec[`fraction-digits`, yarg.FractionDigitsArgument]()
+    add_spec[GROUPING_TYPED_SPEC]()
+    add_scalar_spec[`identity`, yarg.IdentifierArgument]()
+    add_scalar_spec[`if-feature`, yarg.StringArgument]()
+    add_scalar_spec[`import`, yarg.IdentifierArgument]()
+    add_scalar_spec[`include`, yarg.IdentifierArgument]()
+    add_scalar_spec[`key`, yarg.IdentifierArgument]()
+    add_spec[LEAF_TYPED_SPEC]()
+    add_spec[LEAF_LIST_TYPED_SPEC]()
+    add_spec[LENGTH_STMT_TYPED_SPEC]()
+    add_spec[LIST_TYPED_SPEC]()
+    add_scalar_spec[`mandatory`, yarg.BoolArgument]()
+    add_scalar_spec[`max-elements`, yarg.MaxElementsArgument]()
+    add_scalar_spec[`min-elements`, yarg.MinElementsArgument]()
+    add_scalar_spec[`modifier`, yarg.ModifierArgument]()
+    add_spec[MODULE_TYPED_SPEC]()
+    add_spec[MUST_TYPED_SPEC]()
+    add_scalar_spec[`namespace`, yarg.StringArgument]()
+    add_scalar_spec[`notification`, yarg.IdentifierArgument]()
+    add_scalar_spec[`organization`, yarg.StringArgument]()
+    add_scalar_spec[`path`, yarg.PathArgument]()
+    add_spec[PATTERN_STMT_TYPED_SPEC]()
+    add_scalar_spec[`prefix`, yarg.IdentifierArgument]()
+    add_scalar_spec[`presence`, yarg.StringArgument]()
+    add_scalar_spec[`range-stmt`, yarg.RangeArgument]()
+    add_scalar_spec[`reference`, yarg.StringArgument]()
+    add_spec[REVISION_TYPED_SPEC]()
+    add_scalar_spec[`rpc`, yarg.IdentifierArgument]()
+    add_scalar_spec[`status`, yarg.StatusArgument]()
+    add_spec[TYPE_TYPED_SPEC]()
+    add_spec[TYPEDEF_TYPED_SPEC]()
+    add_scalar_spec[`uses`, yarg.QNameArgument]()
+    add_scalar_spec[`when`, yarg.XPathExpressionArgument]()
+    add_scalar_spec[`yang-version`, yarg.YangVersionArgument]()
+
+    for i in range(len(specs)):
+        var expected_kw = Keyword(i)
+        if specs[i].kw != expected_kw:
+            raise Error(
+                "build_spec_table: missing or wrong spec for `"
+                + keyword_spelling(expected_kw)
+                + "` (index "
+                + String(i)
+                + ")"
+            )
     return specs
 
 

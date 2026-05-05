@@ -83,10 +83,19 @@ struct YangModule(Movable & Iterable):
         origin: ImmutOrigin
     ](mut self, mut lexer: AstLexer[origin]) raises:
         var tree = parse_module(lexer)
-        from ..spec import MODULE_SPEC, build_spec_table
+        self.ingest_construct_tree(tree^)
+
+    def ingest_construct_tree(mut self, var tree: YangConstruct) raises:
+        """Validate a module `YangConstruct` root, index it, and take ownership as `root`.
+
+        Used by the text parser and by JSON (`parse_yang_json_module`) so both
+        front ends share one path: spec validation, `_populate_from_validated_tree`,
+        and `root` assignment.
+        """
+        from ..spec import `module`, build_spec_table
 
         var specs = build_spec_table()
-        MODULE_SPEC.validate(tree, specs)
+        specs[Int(`module`)].validate(tree, specs)
         self._populate_from_validated_tree(tree)
         self.root = Optional[Arc[YangConstruct]](Arc[YangConstruct](tree^))
 
