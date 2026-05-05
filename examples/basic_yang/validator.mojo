@@ -552,10 +552,10 @@ def validate_construct(
             var child_spec_ptr = UnsafePointer(
                 to=child_spec
             ).unsafe_origin_cast[ImmutAnyOrigin]()
-            var specs_ptr = UnsafePointer(to=specs).unsafe_origin_cast[
+            var nested_specs_ptr = UnsafePointer(to=specs).unsafe_origin_cast[
                 ImmutAnyOrigin
             ]()
-            child_spec_ptr[].validate(child_spec_ptr, child[], specs_ptr)
+            child_spec_ptr[].validate(child_spec_ptr, child[], nested_specs_ptr)
 
 
 def validate_construct_callback(

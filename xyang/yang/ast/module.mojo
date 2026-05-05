@@ -83,10 +83,10 @@ struct YangModule(Movable & Iterable):
         origin: ImmutOrigin
     ](mut self, mut lexer: AstLexer[origin]) raises:
         var tree = parse_module(lexer)
-        from ..spec import MODULE_SPEC, build_spec_table, validate_construct
+        from ..spec import MODULE_SPEC, build_spec_table
 
         var specs = build_spec_table()
-        validate_construct(MODULE_SPEC, tree, specs)
+        MODULE_SPEC.validate(tree, specs)
         self._populate_from_validated_tree(tree)
         self.root = Optional[Arc[YangConstruct]](Arc[YangConstruct](tree^))
 

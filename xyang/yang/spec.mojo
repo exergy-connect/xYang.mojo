@@ -1,99 +1,19 @@
-## Table-driven YANG construct specs, keyword indices, and recursive validation.
-
-from std.memory import UnsafePointer
+## Two-layer YANG construct specs: typed compile-time `YangConstructSpecTrait`
+## implementations lowered into monomorphic `RuntimeConstructSpec` table rows.
 
 import xyang.yang.arguments as yarg
 from xyang.yang.ast.construct import YangConstruct
+from xyang.yang.arguments import YangArgument
+from xyang.yang.cardinality import `0`, `1`, `0..1`, `0..n`, `1..n`
 from xyang.yang.keyword import Keyword, `<INVALID>`
-
-comptime ArgumentValidator = def(mut YangConstruct) raises thin -> None
-
-
-## Thin wrappers so `YangConstructSpec` stores monomorphic `ArgumentValidator`
-## callbacks; `YangArgument::parse_and_store` is typed with `YangArgumentHost`, not
-## concrete `YangConstruct`.
-@always_inline
-def _validate_identifier(mut node: YangConstruct) raises -> None:
-    yarg.IdentifierArgument.parse_and_store(node)
+from xyang.yang.runtime_spec import (
+    RuntimeConstructSpec,
+    RuleTable,
+    YangConstructSpecTrait,
+    fields,
+)
 
 
-@always_inline
-def _validate_string(mut node: YangConstruct) raises -> None:
-    yarg.StringArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_qname(mut node: YangConstruct) raises -> None:
-    yarg.QNameArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_length(mut node: YangConstruct) raises -> None:
-    yarg.LengthArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_pattern(mut node: YangConstruct) raises -> None:
-    yarg.PatternArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_revision_date(mut node: YangConstruct) raises -> None:
-    yarg.RevisionDateArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_xpath(mut node: YangConstruct) raises -> None:
-    yarg.XPathExpressionArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_range(mut node: YangConstruct) raises -> None:
-    yarg.RangeArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_path(mut node: YangConstruct) raises -> None:
-    yarg.PathArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_modifier(mut node: YangConstruct) raises -> None:
-    yarg.ModifierArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_fraction_digits(mut node: YangConstruct) raises -> None:
-    yarg.FractionDigitsArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_yang_version(mut node: YangConstruct) raises -> None:
-    yarg.YangVersionArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_bool(mut node: YangConstruct) raises -> None:
-    yarg.BoolArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_min_elements(mut node: YangConstruct) raises -> None:
-    yarg.MinElementsArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_max_elements(mut node: YangConstruct) raises -> None:
-    yarg.MaxElementsArgument.parse_and_store(node)
-
-
-@always_inline
-def _validate_status(mut node: YangConstruct) raises -> None:
-    yarg.StatusArgument.parse_and_store(node)
-
-
-## Keyword ids match `SPELLING` indices; both lists are alphabetical (invalid
-## sentinel first, then lexicographic YANG spellings including hyphens).
 comptime `anydata`: Keyword = 1
 comptime `anyxml`: Keyword = 2
 comptime `augment`: Keyword = 3
@@ -146,183 +66,28 @@ comptime `uses`: Keyword = 49
 comptime `when`: Keyword = 50
 comptime `yang-version`: Keyword = 51
 
-comptime KEYWORD_COUNT: Int = 52
-comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
-    "<INVALID>",
-    "anydata",
-    "anyxml",
-    "augment",
-    "base",
-    "bit",
-    "case",
-    "choice",
-    "config",
-    "contact",
-    "container",
-    "default",
-    "description",
-    "deviation",
-    "enum",
-    "error-message",
-    "extension",
-    "feature",
-    "fraction-digits",
-    "grouping",
-    "identity",
-    "if-feature",
-    "import",
-    "include",
-    "key",
-    "leaf",
-    "leaf-list",
-    "length",
-    "list",
-    "mandatory",
-    "max-elements",
-    "min-elements",
-    "modifier",
-    "module",
-    "must",
-    "namespace",
-    "notification",
-    "organization",
-    "path",
-    "pattern",
-    "prefix",
-    "presence",
-    "range",
-    "reference",
-    "revision",
-    "rpc",
-    "status",
-    "type",
-    "typedef",
-    "uses",
-    "when",
-    "yang-version",
-]
 
-comptime Cardinality = UInt8
-comptime `0`: Cardinality = 0
-comptime `1`: Cardinality = 1
-comptime `0..1`: Cardinality = 2
-comptime `0..n`: Cardinality = 3
-comptime `1..n`: Cardinality = 4
+struct YangConstructSpec[
+    kw: Keyword,
+    arg_t: YangArgument,
+    allowed_fields_table: RuleTable,
+](Movable, YangConstructSpecTrait):
+    comptime KEYWORD: Keyword = Self.kw
+    comptime ARGUMENT_TYPE: YangArgument = Self.arg_t
 
+    @staticmethod
+    def allowed_fields() -> RuleTable:
+        return Self.allowed_fields_table
 
-def keyword_spelling(idx: Keyword) -> String:
-    return SPELLING[Int(idx)]
-
-
-def keyword_id(name: String, line: UInt = 0) raises -> Keyword:
-    for i in range(KEYWORD_COUNT):
-        if name == SPELLING[i]:
-            return Keyword(i)
-    raise Error(
-        ("line " + String(line) + ": " if line > 0 else "")
-        + "Unknown YANG keyword `"
-        + name
-        + "`"
-    )
-
-
-def check_cardinality(
-    name: String, card: Cardinality, count: Int, line: UInt = 0
-) raises:
-    if card == `0` and count != 0:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` must not appear, found "
-            + String(count)
-        )
-    if card == `1` and count != 1:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` must appear exactly once, found "
-            + String(count)
-        )
-    if card == `0..1` and count > 1:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` may appear at most once, found "
-            + String(count)
-        )
-    if card == `1..n` and count < 1:
-        raise Error(
-            ("line " + String(line) + ": " if line > 0 else "")
-            + "`"
-            + name
-            + "` must appear at least once"
-        )
-
-
-@fieldwise_init
-struct FieldRule(Copyable, ImplicitlyCopyable, Movable):
-    var cardinality: Cardinality
-
-
-comptime RuleTable = InlineArray[FieldRule, KEYWORD_COUNT]
-comptime FIELD = Tuple[Keyword, Cardinality]
-
-
-def fields[n: Int](*fieldlist: FIELD) -> RuleTable:
-    var table = InlineArray[FieldRule, KEYWORD_COUNT](fill=FieldRule(`0`))
-    comptime for i in range(n):
-        table[Int(fieldlist[i][0])] = FieldRule(fieldlist[i][1])
-    return table
-
-
-struct YangConstructSpec(Copyable, ImplicitlyCopyable, Movable):
-    """ Table-driven YANG construct specs, keyword indices, and recursive validation. 
-        Does *not* use template parameters, such that we can build a runtime table of specs.
-    """
-    comptime Table = InlineArray[Self, KEYWORD_COUNT]
-    comptime Validate = def(
-        UnsafePointer[Self, ImmutAnyOrigin],
-        mut YangConstruct,
-        UnsafePointer[Self.Table, ImmutAnyOrigin],
-    ) raises thin -> None
-
-    var parent: Keyword
-    var argument_type: ArgumentValidator
-    var allowed_fields: RuleTable
-    var validate: Self.Validate
-
-    def __init__(
-        out self,
-        parent: Keyword,
-        argument_type: ArgumentValidator,
-        allowed_fields: RuleTable,
-        validate: Self.Validate = validate_construct_callback,
-    ):
-        self.parent = parent
-        self.argument_type = argument_type
-        self.allowed_fields = allowed_fields
-        self.validate = validate
-
-
-def scalar_spec(
-    parent: Keyword, argument_type: ArgumentValidator
-) -> YangConstructSpec:
-    return YangConstructSpec(
-        parent,
-        argument_type,
-        fields[0](),
-        validate_scalar_construct_callback,
-    )
+    def __init__(out self):
+        pass
 
 
 ## Source: RFC 7950 section 7.1.1, "The module's Substatements".
 ## https://datatracker.ietf.org/doc/html/rfc7950#section-7.1.1
-comptime MODULE_SPEC = YangConstructSpec(
+comptime MODULE_TYPED_SPEC = YangConstructSpec[
     `module`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[27](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
@@ -352,10 +117,10 @@ comptime MODULE_SPEC = YangConstructSpec(
         (`uses`, `0..n`),
         (`yang-version`, `1`),
     ),
-)
-comptime CONTAINER_SPEC = YangConstructSpec(
+]
+comptime CONTAINER_TYPED_SPEC = YangConstructSpec[
     `container`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[9](
         (`must`, `0..n`),
         (`description`, `0..1`),
@@ -367,10 +132,10 @@ comptime CONTAINER_SPEC = YangConstructSpec(
         (`list`, `0..n`),
         (`choice`, `0..n`),
     ),
-)
-comptime LIST_SPEC = YangConstructSpec(
+]
+comptime LIST_TYPED_SPEC = YangConstructSpec[
     `list`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[11](
         (`must`, `0..n`),
         (`key`, `0..1`),
@@ -384,10 +149,10 @@ comptime LIST_SPEC = YangConstructSpec(
         (`list`, `0..n`),
         (`choice`, `0..n`),
     ),
-)
-comptime LEAF_SPEC = YangConstructSpec(
+]
+comptime LEAF_TYPED_SPEC = YangConstructSpec[
     `leaf`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[6](
         (`when`, `0..1`),
         (`type`, `1`),
@@ -396,10 +161,10 @@ comptime LEAF_SPEC = YangConstructSpec(
         (`description`, `0..1`),
         (`mandatory`, `0..1`),
     ),
-)
-comptime LEAF_LIST_SPEC = YangConstructSpec(
+]
+comptime LEAF_LIST_TYPED_SPEC = YangConstructSpec[
     `leaf-list`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[8](
         (`when`, `0..1`),
         (`type`, `1`),
@@ -410,21 +175,20 @@ comptime LEAF_LIST_SPEC = YangConstructSpec(
         (`min-elements`, `0..1`),
         (`max-elements`, `0..1`),
     ),
-)
-## RFC 7950: typedef has `type` plus optional documentation / default.
-comptime TYPEDEF_SPEC = YangConstructSpec(
+]
+comptime TYPEDEF_TYPED_SPEC = YangConstructSpec[
     `typedef`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[4](
         (`type`, `1`),
         (`default`, `0..1`),
         (`description`, `0..1`),
         (`reference`, `0..1`),
     ),
-)
-comptime TYPE_SPEC = YangConstructSpec(
+]
+comptime TYPE_TYPED_SPEC = YangConstructSpec[
     `type`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[9](
         (`path`, `0..1`),
         (`range-stmt`, `0..1`),
@@ -436,38 +200,37 @@ comptime TYPE_SPEC = YangConstructSpec(
         (`type`, `0..n`),
         (`base`, `0..n`),
     ),
-)
-## `enum` name { description?; reference?; value?; status?; } — allow common docs.
-comptime ENUM_STMT_SPEC = YangConstructSpec(
+]
+comptime ENUM_STMT_TYPED_SPEC = YangConstructSpec[
     `enum`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[2](
         (`description`, `0..1`),
         (`reference`, `0..1`),
     ),
-)
-comptime LENGTH_STMT_SPEC = YangConstructSpec(
+]
+comptime LENGTH_STMT_TYPED_SPEC = YangConstructSpec[
     `length`,
-    _validate_length,
+    yarg.LengthArgument,
     fields[3](
         (`description`, `0..1`),
         (`error-message`, `0..1`),
         (`reference`, `0..1`),
     ),
-)
-comptime PATTERN_STMT_SPEC = YangConstructSpec(
+]
+comptime PATTERN_STMT_TYPED_SPEC = YangConstructSpec[
     `pattern`,
-    _validate_pattern,
+    yarg.PatternArgument,
     fields[4](
         (`description`, `0..1`),
         (`error-message`, `0..1`),
         (`reference`, `0..1`),
         (`modifier`, `0..1`),
     ),
-)
-comptime GROUPING_SPEC = YangConstructSpec(
+]
+comptime GROUPING_TYPED_SPEC = YangConstructSpec[
     `grouping`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[7](
         (`description`, `0..1`),
         (`uses`, `0..n`),
@@ -477,12 +240,10 @@ comptime GROUPING_SPEC = YangConstructSpec(
         (`list`, `0..n`),
         (`choice`, `0..n`),
     ),
-)
-## RFC 7950 §7.9.1, The choice's Substatements.
-## https://datatracker.ietf.org/doc/html/rfc7950#section-7.9.1
-comptime CHOICE_SPEC = YangConstructSpec(
+]
+comptime CHOICE_TYPED_SPEC = YangConstructSpec[
     `choice`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[16](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
@@ -501,12 +262,10 @@ comptime CHOICE_SPEC = YangConstructSpec(
         (`status`, `0..1`),
         (`when`, `0..1`),
     ),
-)
-## RFC 7950 §7.9.2.1, The case's Substatements.
-## https://datatracker.ietf.org/doc/html/rfc7950#section-7.9.2.1
-comptime CASE_SPEC = YangConstructSpec(
+]
+comptime CASE_TYPED_SPEC = YangConstructSpec[
     `case`,
-    _validate_identifier,
+    yarg.IdentifierArgument,
     fields[12](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
@@ -522,91 +281,185 @@ comptime CASE_SPEC = YangConstructSpec(
         (`uses`, `0..n`),
         (`when`, `0..1`),
     ),
-)
-comptime REVISION_SPEC = YangConstructSpec(
+]
+comptime REVISION_TYPED_SPEC = YangConstructSpec[
     `revision`,
-    _validate_revision_date,
+    yarg.RevisionDateArgument,
     fields[1]((`description`, `0..1`)),
-)
-comptime MUST_SPEC = YangConstructSpec(
+]
+comptime MUST_TYPED_SPEC = YangConstructSpec[
     `must`,
-    _validate_xpath,
+    yarg.XPathExpressionArgument,
     fields[2](
         (`error-message`, `0..1`),
         (`description`, `0..1`),
     ),
-)
+]
+
+comptime MODULE_SPEC = RuntimeConstructSpec.from_comptime[MODULE_TYPED_SPEC]()
+comptime CONTAINER_SPEC = RuntimeConstructSpec.from_comptime[
+    CONTAINER_TYPED_SPEC
+]()
+comptime LIST_SPEC = RuntimeConstructSpec.from_comptime[LIST_TYPED_SPEC]()
+comptime LEAF_SPEC = RuntimeConstructSpec.from_comptime[LEAF_TYPED_SPEC]()
+comptime LEAF_LIST_SPEC = RuntimeConstructSpec.from_comptime[
+    LEAF_LIST_TYPED_SPEC
+]()
+comptime TYPEDEF_SPEC = RuntimeConstructSpec.from_comptime[TYPEDEF_TYPED_SPEC]()
+comptime TYPE_SPEC = RuntimeConstructSpec.from_comptime[TYPE_TYPED_SPEC]()
+comptime ENUM_STMT_SPEC = RuntimeConstructSpec.from_comptime[
+    ENUM_STMT_TYPED_SPEC
+]()
+comptime LENGTH_STMT_SPEC = RuntimeConstructSpec.from_comptime[
+    LENGTH_STMT_TYPED_SPEC
+]()
+comptime PATTERN_STMT_SPEC = RuntimeConstructSpec.from_comptime[
+    PATTERN_STMT_TYPED_SPEC
+]()
+comptime GROUPING_SPEC = RuntimeConstructSpec.from_comptime[
+    GROUPING_TYPED_SPEC
+]()
+comptime CHOICE_SPEC = RuntimeConstructSpec.from_comptime[CHOICE_TYPED_SPEC]()
+comptime CASE_SPEC = RuntimeConstructSpec.from_comptime[CASE_TYPED_SPEC]()
+comptime REVISION_SPEC = RuntimeConstructSpec.from_comptime[
+    REVISION_TYPED_SPEC
+]()
+comptime MUST_SPEC = RuntimeConstructSpec.from_comptime[MUST_TYPED_SPEC]()
 
 
-def build_spec_table() -> YangConstructSpec.Table:
-    var specs = YangConstructSpec.Table(
-        fill=scalar_spec(`<INVALID>`, _validate_identifier)
+def build_spec_table() -> RuntimeConstructSpec.Table:
+    var specs = RuntimeConstructSpec.Table(
+        fill=RuntimeConstructSpec.scalar[`<INVALID>`, yarg.NoArgument]()
     )
     specs[`module`] = MODULE_SPEC
-    specs[`yang-version`] = scalar_spec(`yang-version`, _validate_yang_version)
-    specs[Int(`namespace`)] = scalar_spec(`namespace`, _validate_string)
-    specs[Int(`prefix`)] = scalar_spec(`prefix`, _validate_identifier)
-    specs[Int(`organization`)] = scalar_spec(`organization`, _validate_string)
-    specs[Int(`contact`)] = scalar_spec(`contact`, _validate_string)
-    specs[Int(`description`)] = scalar_spec(`description`, _validate_string)
+    specs[`yang-version`] = RuntimeConstructSpec.scalar[
+        `yang-version`, yarg.YangVersionArgument
+    ]()
+    specs[Int(`namespace`)] = RuntimeConstructSpec.scalar[
+        `namespace`, yarg.StringArgument
+    ]()
+    specs[Int(`prefix`)] = RuntimeConstructSpec.scalar[
+        `prefix`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`organization`)] = RuntimeConstructSpec.scalar[
+        `organization`, yarg.StringArgument
+    ]()
+    specs[Int(`contact`)] = RuntimeConstructSpec.scalar[
+        `contact`, yarg.StringArgument
+    ]()
+    specs[Int(`description`)] = RuntimeConstructSpec.scalar[
+        `description`, yarg.StringArgument
+    ]()
     specs[Int(`revision`)] = REVISION_SPEC
     specs[Int(`grouping`)] = GROUPING_SPEC
-    specs[Int(`uses`)] = scalar_spec(`uses`, _validate_qname)
+    specs[Int(`uses`)] = RuntimeConstructSpec.scalar[
+        `uses`, yarg.QNameArgument
+    ]()
     specs[Int(`container`)] = CONTAINER_SPEC
     specs[Int(`list`)] = LIST_SPEC
-    specs[Int(`key`)] = scalar_spec(`key`, _validate_identifier)
+    specs[Int(`key`)] = RuntimeConstructSpec.scalar[
+        `key`, yarg.IdentifierArgument
+    ]()
     specs[Int(`leaf`)] = LEAF_SPEC
     specs[Int(`type`)] = TYPE_SPEC
-    specs[Int(`range-stmt`)] = scalar_spec(`range-stmt`, _validate_range)
-    specs[Int(`path`)] = scalar_spec(`path`, _validate_path)
-    specs[Int(`default`)] = scalar_spec(`default`, _validate_string)
+    specs[Int(`range-stmt`)] = RuntimeConstructSpec.scalar[
+        `range-stmt`, yarg.RangeArgument
+    ]()
+    specs[Int(`path`)] = RuntimeConstructSpec.scalar[
+        `path`, yarg.PathArgument
+    ]()
+    specs[Int(`default`)] = RuntimeConstructSpec.scalar[
+        `default`, yarg.StringArgument
+    ]()
     specs[Int(`must`)] = MUST_SPEC
-    specs[Int(`error-message`)] = scalar_spec(`error-message`, _validate_string)
-    specs[Int(`when`)] = scalar_spec(`when`, _validate_xpath)
-    specs[Int(`anydata`)] = scalar_spec(`anydata`, _validate_identifier)
-    specs[Int(`anyxml`)] = scalar_spec(`anyxml`, _validate_identifier)
-    specs[Int(`augment`)] = scalar_spec(`augment`, _validate_path)
+    specs[Int(`error-message`)] = RuntimeConstructSpec.scalar[
+        `error-message`, yarg.StringArgument
+    ]()
+    specs[Int(`when`)] = RuntimeConstructSpec.scalar[
+        `when`, yarg.XPathExpressionArgument
+    ]()
+    specs[Int(`anydata`)] = RuntimeConstructSpec.scalar[
+        `anydata`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`anyxml`)] = RuntimeConstructSpec.scalar[
+        `anyxml`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`augment`)] = RuntimeConstructSpec.scalar[
+        `augment`, yarg.PathArgument
+    ]()
     specs[Int(`choice`)] = CHOICE_SPEC
     specs[Int(`case`)] = CASE_SPEC
-    specs[Int(`config`)] = scalar_spec(`config`, _validate_bool)
-    specs[Int(`if-feature`)] = scalar_spec(`if-feature`, _validate_string)
-    specs[Int(`status`)] = scalar_spec(`status`, _validate_status)
-    specs[Int(`deviation`)] = scalar_spec(`deviation`, _validate_path)
-    specs[Int(`extension`)] = scalar_spec(`extension`, _validate_identifier)
-    specs[Int(`feature`)] = scalar_spec(`feature`, _validate_identifier)
-    specs[Int(`identity`)] = scalar_spec(`identity`, _validate_identifier)
-    specs[Int(`import`)] = scalar_spec(`import`, _validate_identifier)
-    specs[Int(`include`)] = scalar_spec(`include`, _validate_identifier)
+    specs[Int(`config`)] = RuntimeConstructSpec.scalar[
+        `config`, yarg.BoolArgument
+    ]()
+    specs[Int(`if-feature`)] = RuntimeConstructSpec.scalar[
+        `if-feature`, yarg.StringArgument
+    ]()
+    specs[Int(`status`)] = RuntimeConstructSpec.scalar[
+        `status`, yarg.StatusArgument
+    ]()
+    specs[Int(`deviation`)] = RuntimeConstructSpec.scalar[
+        `deviation`, yarg.PathArgument
+    ]()
+    specs[Int(`extension`)] = RuntimeConstructSpec.scalar[
+        `extension`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`feature`)] = RuntimeConstructSpec.scalar[
+        `feature`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`identity`)] = RuntimeConstructSpec.scalar[
+        `identity`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`import`)] = RuntimeConstructSpec.scalar[
+        `import`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`include`)] = RuntimeConstructSpec.scalar[
+        `include`, yarg.IdentifierArgument
+    ]()
     specs[Int(`leaf-list`)] = LEAF_LIST_SPEC
-    specs[Int(`notification`)] = scalar_spec(
-        `notification`, _validate_identifier
-    )
-    specs[Int(`reference`)] = scalar_spec(`reference`, _validate_string)
-    specs[Int(`rpc`)] = scalar_spec(`rpc`, _validate_identifier)
+    specs[Int(`notification`)] = RuntimeConstructSpec.scalar[
+        `notification`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`reference`)] = RuntimeConstructSpec.scalar[
+        `reference`, yarg.StringArgument
+    ]()
+    specs[Int(`rpc`)] = RuntimeConstructSpec.scalar[
+        `rpc`, yarg.IdentifierArgument
+    ]()
     specs[Int(`typedef`)] = TYPEDEF_SPEC
     specs[Int(`length`)] = LENGTH_STMT_SPEC
     specs[Int(`pattern`)] = PATTERN_STMT_SPEC
-    specs[Int(`modifier`)] = scalar_spec(`modifier`, _validate_modifier)
-    specs[Int(`fraction-digits`)] = scalar_spec(
-        `fraction-digits`, _validate_fraction_digits
-    )
+    specs[Int(`modifier`)] = RuntimeConstructSpec.scalar[
+        `modifier`, yarg.ModifierArgument
+    ]()
+    specs[Int(`fraction-digits`)] = RuntimeConstructSpec.scalar[
+        `fraction-digits`, yarg.FractionDigitsArgument
+    ]()
     specs[Int(`enum`)] = ENUM_STMT_SPEC
-    specs[Int(`bit`)] = scalar_spec(`bit`, _validate_identifier)
-    specs[Int(`base`)] = scalar_spec(`base`, _validate_qname)
-    specs[Int(`mandatory`)] = scalar_spec(`mandatory`, _validate_bool)
-    specs[Int(`min-elements`)] = scalar_spec(
-        `min-elements`, _validate_min_elements
-    )
-    specs[Int(`max-elements`)] = scalar_spec(
-        `max-elements`, _validate_max_elements
-    )
-    specs[Int(`presence`)] = scalar_spec(`presence`, _validate_string)
+    specs[Int(`bit`)] = RuntimeConstructSpec.scalar[
+        `bit`, yarg.IdentifierArgument
+    ]()
+    specs[Int(`base`)] = RuntimeConstructSpec.scalar[
+        `base`, yarg.QNameArgument
+    ]()
+    specs[Int(`mandatory`)] = RuntimeConstructSpec.scalar[
+        `mandatory`, yarg.BoolArgument
+    ]()
+    specs[Int(`min-elements`)] = RuntimeConstructSpec.scalar[
+        `min-elements`, yarg.MinElementsArgument
+    ]()
+    specs[Int(`max-elements`)] = RuntimeConstructSpec.scalar[
+        `max-elements`, yarg.MaxElementsArgument
+    ]()
+    specs[Int(`presence`)] = RuntimeConstructSpec.scalar[
+        `presence`, yarg.StringArgument
+    ]()
     return specs
 
 
-def construct_spec(
-    read node: YangConstruct, read specs: YangConstructSpec.Table
-) raises -> YangConstructSpec:
+def lookup_spec(
+    read node: YangConstruct, read specs: RuntimeConstructSpec.Table
+) raises -> RuntimeConstructSpec:
     if node.spec == `<INVALID>`:
         raise Error(
             ("line " + String(node.line) + ": " if node.line > 0 else "")
@@ -615,109 +468,3 @@ def construct_spec(
             + "` has not been validated"
         )
     return specs[Int(node.spec)]
-
-
-def validate_construct(
-    read spec: YangConstructSpec,
-    mut node: YangConstruct,
-    read specs: YangConstructSpec.Table,
-) raises:
-    var expected_name = keyword_spelling(spec.parent)
-    if node.keyword != expected_name:
-        raise Error(
-            ("line " + String(node.line) + ": " if node.line > 0 else "")
-            + "Expected `"
-            + expected_name
-            + "`, got `"
-            + node.keyword
-            + "`"
-        )
-    if not node.has_argument():
-        raise Error(
-            ("line " + String(node.line) + ": " if node.line > 0 else "")
-            + "Expected argument for `"
-            + expected_name
-            + "`"
-        )
-    spec.argument_type(node)
-
-    var counts = InlineArray[Int, KEYWORD_COUNT](fill=0)
-    for child in node.children:
-        var child_kw = keyword_id(child[].keyword, child[].line)
-        var rule = spec.allowed_fields[Int(child_kw)]
-        if rule.cardinality == `0`:
-            raise Error(
-                (
-                    "line " + String(child[].line) + ": " if child[].line
-                    > 0 else ""
-                )
-                + "Unknown substatement `"
-                + child[].keyword
-                + "` in `"
-                + expected_name
-                + "`"
-            )
-        counts[Int(child_kw)] += 1
-
-    for i in range(KEYWORD_COUNT):
-        check_cardinality(
-            keyword_spelling(Keyword(i)),
-            spec.allowed_fields[i].cardinality,
-            counts[i],
-            node.line,
-        )
-
-    node.spec = spec.parent
-    for child in node.children:
-        var child_kw = keyword_id(child[].keyword, child[].line)
-        ref child_spec = specs[Int(child_kw)]
-        var child_spec_ptr = UnsafePointer(to=child_spec).unsafe_origin_cast[
-            ImmutAnyOrigin
-        ]()
-        var specs_ptr = UnsafePointer(to=specs).unsafe_origin_cast[
-            ImmutAnyOrigin
-        ]()
-        child_spec_ptr[].validate(child_spec_ptr, child[], specs_ptr)
-
-
-def validate_construct_callback(
-    spec_ptr: UnsafePointer[YangConstructSpec, ImmutAnyOrigin],
-    mut node: YangConstruct,
-    specs_ptr: UnsafePointer[YangConstructSpec.Table, ImmutAnyOrigin],
-) raises -> None:
-    validate_construct(spec_ptr[], node, specs_ptr[])
-
-
-def validate_scalar_construct_callback(
-    spec_ptr: UnsafePointer[YangConstructSpec, ImmutAnyOrigin],
-    mut node: YangConstruct,
-    specs_ptr: UnsafePointer[YangConstructSpec.Table, ImmutAnyOrigin],
-) raises -> None:
-    var expected_name = keyword_spelling(spec_ptr[].parent)
-    if node.keyword != expected_name:
-        raise Error(
-            ("line " + String(node.line) + ": " if node.line > 0 else "")
-            + "Expected `"
-            + expected_name
-            + "`, got `"
-            + node.keyword
-            + "`"
-        )
-    if not node.has_argument():
-        raise Error(
-            ("line " + String(node.line) + ": " if node.line > 0 else "")
-            + "Expected argument for `"
-            + expected_name
-            + "`"
-        )
-    spec_ptr[].argument_type(node)
-    for child in node.children:
-        raise Error(
-            ("line " + String(child[].line) + ": " if child[].line > 0 else "")
-            + "Unknown substatement `"
-            + child[].keyword
-            + "` in `"
-            + expected_name
-            + "`"
-        )
-    node.spec = spec_ptr[].parent
