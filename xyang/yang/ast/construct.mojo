@@ -17,7 +17,6 @@ from xyang.yang.arguments import (
     RangeArgument,
     RevisionDateArgument,
     StringArgument,
-    TypeNameArgument,
     XPathExpressionArgument,
     YangArgumentHost,
     YangArgumentValue,

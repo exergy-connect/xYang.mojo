@@ -10,91 +10,86 @@ comptime ArgumentValidator = def(mut YangConstruct) raises thin -> None
 
 
 ## Thin wrappers so `YangConstructSpec` stores monomorphic `ArgumentValidator`
-## callbacks; `YangArgument::validate` is typed with `YangArgumentHost`, not
+## callbacks; `YangArgument::parse_and_store` is typed with `YangArgumentHost`, not
 ## concrete `YangConstruct`.
 @always_inline
 def _validate_identifier(mut node: YangConstruct) raises -> None:
-    yarg.IdentifierArgument.validate(node)
+    yarg.IdentifierArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_string(mut node: YangConstruct) raises -> None:
-    yarg.StringArgument.validate(node)
+    yarg.StringArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_qname(mut node: YangConstruct) raises -> None:
-    yarg.QNameArgument.validate(node)
-
-
-@always_inline
-def _validate_type_name(mut node: YangConstruct) raises -> None:
-    yarg.TypeNameArgument.validate(node)
+    yarg.QNameArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_length(mut node: YangConstruct) raises -> None:
-    yarg.LengthArgument.validate(node)
+    yarg.LengthArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_pattern(mut node: YangConstruct) raises -> None:
-    yarg.PatternArgument.validate(node)
+    yarg.PatternArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_revision_date(mut node: YangConstruct) raises -> None:
-    yarg.RevisionDateArgument.validate(node)
+    yarg.RevisionDateArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_xpath(mut node: YangConstruct) raises -> None:
-    yarg.XPathExpressionArgument.validate(node)
+    yarg.XPathExpressionArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_range(mut node: YangConstruct) raises -> None:
-    yarg.RangeArgument.validate(node)
+    yarg.RangeArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_path(mut node: YangConstruct) raises -> None:
-    yarg.PathArgument.validate(node)
+    yarg.PathArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_modifier(mut node: YangConstruct) raises -> None:
-    yarg.ModifierArgument.validate(node)
+    yarg.ModifierArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_fraction_digits(mut node: YangConstruct) raises -> None:
-    yarg.FractionDigitsArgument.validate(node)
+    yarg.FractionDigitsArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_yang_version(mut node: YangConstruct) raises -> None:
-    yarg.YangVersionArgument.validate(node)
+    yarg.YangVersionArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_bool(mut node: YangConstruct) raises -> None:
-    yarg.BoolArgument.validate(node)
+    yarg.BoolArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_min_elements(mut node: YangConstruct) raises -> None:
-    yarg.MinElementsArgument.validate(node)
+    yarg.MinElementsArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_max_elements(mut node: YangConstruct) raises -> None:
-    yarg.MaxElementsArgument.validate(node)
+    yarg.MaxElementsArgument.parse_and_store(node)
 
 
 @always_inline
 def _validate_status(mut node: YangConstruct) raises -> None:
-    yarg.StatusArgument.validate(node)
+    yarg.StatusArgument.parse_and_store(node)
 
 
 ## Keyword ids match `SPELLING` indices; both lists are alphabetical (invalid
@@ -284,6 +279,9 @@ def fields[n: Int](*fieldlist: FIELD) -> RuleTable:
 
 
 struct YangConstructSpec(Copyable, ImplicitlyCopyable, Movable):
+    """ Table-driven YANG construct specs, keyword indices, and recursive validation. 
+        Does *not* use template parameters, such that we can build a runtime table of specs.
+    """
     comptime Table = InlineArray[Self, KEYWORD_COUNT]
     comptime Validate = def(
         UnsafePointer[Self, ImmutAnyOrigin],
@@ -426,7 +424,7 @@ comptime TYPEDEF_SPEC = YangConstructSpec(
 )
 comptime TYPE_SPEC = YangConstructSpec(
     `type`,
-    _validate_type_name,
+    _validate_identifier,
     fields[9](
         (`path`, `0..1`),
         (`range-stmt`, `0..1`),

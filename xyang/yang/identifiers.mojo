@@ -73,13 +73,3 @@ def is_revision_date(text: String) -> Bool:
         elif not is_digit(bytes[i]):
             return False
     return True
-
-
-def is_supported_type_name(text: String) -> Bool:
-    return (
-        text == "string"
-        or text == "boolean"
-        or text == "uint16"
-        or text == "leafref"
-        or is_qname(text)
-    )

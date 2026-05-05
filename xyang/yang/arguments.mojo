@@ -1,4 +1,4 @@
-## YANG statement argument types and `YangArgument::validate` for construct
+## YANG statement argument types and `YangArgument::parse_and_store` for construct
 ## validation (table-driven specs in `spec.mojo`).
 ##
 ## Includes RFC 7950 §9.4 (`length`, `pattern`, `modifier`) argument checks.
@@ -11,7 +11,6 @@ from xyang.yang.identifiers import (
     is_identifier,
     is_qname,
     is_revision_date,
-    is_supported_type_name,
 )
 from xyang.yang.path import YangPath
 from xyang.yang.path import parse_yang_path
@@ -40,7 +39,7 @@ comptime YangConstruct = Some[YangArgumentHost]
 
 trait YangArgument:
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         ...
 
 
@@ -59,7 +58,7 @@ struct NoArgument(Movable, YangArgument):
         pass
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         return
 
 
@@ -69,7 +68,7 @@ struct StringArgument(Movable, YangArgument):
     var content: String
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         node.update_argument(StringArgument(argument.copy()))
 
@@ -80,7 +79,7 @@ struct YangVersionArgument(Movable, YangArgument):
         pass
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if argument != "1" and argument != "1.1":
             raise Error(
@@ -102,7 +101,7 @@ struct IdentifierArgument(Movable, YangArgument):
     var name: String
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_identifier(argument):
             raise _argument_error(node, "expected identifier argument")
@@ -117,7 +116,7 @@ struct QNameArgument(Movable, YangArgument):
     var local_name: String
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_qname(argument):
             raise _argument_error(
@@ -139,7 +138,7 @@ struct PathArgument(Movable, YangArgument):
     var path: YangPath
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var parsed = parse_yang_path(argument, node.argument_line())
         node.update_argument(PathArgument(parsed^))
@@ -150,7 +149,7 @@ struct XPathExpressionArgument(Movable, YangArgument):
     var root: Arc[XPathExpr]
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if argument.byte_length() == 0:
             raise _argument_error(node, "expected non-empty expression")
@@ -164,7 +163,7 @@ struct RevisionDateArgument(Movable, YangArgument):
     var date: String
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if not is_revision_date(argument):
             raise _argument_error(node, "expected revision date YYYY-MM-DD")
@@ -176,7 +175,7 @@ struct RangeArgument(Movable, YangArgument):
     var segments: List[RangeBounds]
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var segs = try_parse_range_segments(argument, node.argument_line())
         if len(segs) < 1:
@@ -189,7 +188,7 @@ struct LengthArgument(Movable, YangArgument):
     var segments: List[LengthSegment]
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var segs = try_parse_length_segments(argument, node.argument_line())
         node.update_argument(LengthArgument(segs^))
@@ -200,7 +199,7 @@ struct PatternArgument(Movable, YangArgument):
     var regex: String
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var stripped = _strip_spaces(argument)
         if stripped.byte_length() == 0:
@@ -216,7 +215,7 @@ struct ModifierArgument(Movable, YangArgument):
     var invert_match: Bool
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if _strip_spaces(argument) != "invert-match":
             raise _argument_error(node, "expected argument `invert-match`")
@@ -228,7 +227,7 @@ struct FractionDigitsArgument(Movable, YangArgument):
     var digits: Int
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var t = _strip_spaces(argument)
         if t.byte_length() == 0:
@@ -242,23 +241,11 @@ struct FractionDigitsArgument(Movable, YangArgument):
 
 
 @fieldwise_init
-struct TypeNameArgument(Movable, YangArgument):
-    var name: String
-
-    @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
-        if not is_supported_type_name(argument):
-            raise _argument_error(node, "expected basic YANG type name")
-        node.update_argument(TypeNameArgument(argument.copy()))
-
-
-@fieldwise_init
 struct BoolArgument(Movable, YangArgument):
     var truth: Bool
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         if argument != "true" and argument != "false":
             raise _argument_error(node, "expected boolean argument")
@@ -271,7 +258,7 @@ struct MinElementsArgument(Movable, YangArgument):
     var count: Int
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var t = _strip_spaces(argument)
         if t.byte_length() == 0:
@@ -288,7 +275,7 @@ struct MaxElementsArgument(Movable, YangArgument):
     var count: Int
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var t = _strip_spaces(argument)
         if t.byte_length() == 0:
@@ -309,7 +296,7 @@ struct StatusArgument(Movable, YangArgument):
     var state: String
 
     @staticmethod
-    def validate(mut node: YangConstruct) raises -> None:
+    def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
         var t = _strip_spaces(argument)
         if t != "current" and t != "deprecated" and t != "obsolete":
@@ -336,7 +323,6 @@ comptime YangArgumentPayload = Variant[
     PatternArgument,
     ModifierArgument,
     FractionDigitsArgument,
-    TypeNameArgument,
     BoolArgument,
     MinElementsArgument,
     MaxElementsArgument,
