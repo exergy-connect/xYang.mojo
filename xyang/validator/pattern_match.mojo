@@ -4,25 +4,36 @@
 ## `[` character classes `]` (with `^` negation and `a-z` ranges), `*`, `+`,
 ## `?`, `\` escapes for the next byte, and concatenation. Leading `^` and
 ## trailing `$` are stripped when present.
+##
+## Pattern bytes: callers pass a single ``String.as_bytes()`` view for the
+## (already anchor-stripped) pattern; helpers index that span only.
+
+from std.memory import Span
 
 from xyang.yang.arguments import _strip_spaces
 
 
-def _bytes_at(read s: String, i: Int) -> Int:
-    return Int(s.as_bytes()[i])
+comptime PatBytes = Span[Byte, _]
+
+
+@always_inline
+def _pat_byte(read b: PatBytes, i: Int) -> Int:
+    return Int(b[i])
 
 
 def _strip_pattern_anchors(read pat: String) -> String:
-    var p = pat
-    if p.byte_length() >= 1 and _bytes_at(p, 0) == ord("^"):
-        p = String(
-            StringSlice(unsafe_from_utf8=p.as_bytes()[1 : p.byte_length()])
-        )
-    if p.byte_length() >= 1 and _bytes_at(p, p.byte_length() - 1) == ord("$"):
-        p = String(
-            StringSlice(unsafe_from_utf8=p.as_bytes()[0 : p.byte_length() - 1])
-        )
-    return p^
+    ## Strip at most one leading ``^`` and one trailing ``$`` using one UTF-8 scan.
+    var b = pat.as_bytes()
+    var n = len(b)
+    var lo = 0
+    var hi = n
+    if n >= 1 and _pat_byte(b, 0) == ord("^"):
+        lo = 1
+    if hi > lo and _pat_byte(b, hi - 1) == ord("$"):
+        hi -= 1
+    if lo == 0 and hi == n:
+        return pat.copy()
+    return String(StringSlice(unsafe_from_utf8=b[lo:hi]))
 
 
 def _utf8_decode_scalar(
@@ -67,69 +78,69 @@ def _utf8_decode_scalar(
     raise Error("pattern_match: invalid UTF-8 lead byte")
 
 
-def _class_end(read pat: String, start_bracket: Int) raises -> Int:
+def _class_end(
+    read pb: PatBytes, pat_len: Int, start_bracket: Int
+) raises -> Int:
     var i = start_bracket + 1
-    var n = pat.byte_length()
-    if i < n and _bytes_at(pat, i) == ord("]"):
+    if i < pat_len and _pat_byte(pb, i) == ord("]"):
         i += 1
-    while i < n:
-        if _bytes_at(pat, i) == ord("\\") and i + 1 < n:
+    while i < pat_len:
+        if _pat_byte(pb, i) == ord("\\") and i + 1 < pat_len:
             i += 2
             continue
-        if _bytes_at(pat, i) == ord("]"):
+        if _pat_byte(pb, i) == ord("]"):
             return i
         i += 1
     raise Error("pattern_match: unterminated `[` in pattern")
 
 
 def _scalar_in_class(
-    read pat: String, class_start: Int, class_end: Int, cp: Int32
+    read pb: PatBytes, class_start: Int, class_end: Int, cp: Int32
 ) -> Bool:
     var i = class_start + 1
     var neg = False
-    if i <= class_end and _bytes_at(pat, i) == ord("^"):
+    if i <= class_end and _pat_byte(pb, i) == ord("^"):
         neg = True
         i += 1
-    if i <= class_end and _bytes_at(pat, i) == ord("]"):
+    if i <= class_end and _pat_byte(pb, i) == ord("]"):
         i += 1
     var matched = False
     while i < class_end:
-        if i + 2 < class_end and _bytes_at(pat, i + 1) == ord("-"):
-            var lo = _bytes_at(pat, i)
-            var hi = _bytes_at(pat, i + 2)
+        if i + 2 < class_end and _pat_byte(pb, i + 1) == ord("-"):
+            var lo = _pat_byte(pb, i)
+            var hi = _pat_byte(pb, i + 2)
             if Int32(lo) <= cp and cp <= Int32(hi):
                 matched = True
             i += 3
             continue
-        if Int32(_bytes_at(pat, i)) == cp:
+        if Int32(_pat_byte(pb, i)) == cp:
             matched = True
         i += 1
     return matched if not neg else not matched
 
 
-def _atom_end_no_quant(read pat: String, pi: Int) raises -> Int:
-    var pch = _bytes_at(pat, pi)
+def _atom_end_no_quant(read pb: PatBytes, pat_len: Int, pi: Int) raises -> Int:
+    var pch = _pat_byte(pb, pi)
     if pch == ord("["):
-        return _class_end(pat, pi) + 1
+        return _class_end(pb, pat_len, pi) + 1
     if pch == ord(".") or pch == ord("*") or pch == ord("+") or pch == ord("?"):
         raise Error("pattern_match: misplaced metacharacter")
-    if pch == ord("\\") and pi + 1 < pat.byte_length():
+    if pch == ord("\\") and pi + 1 < pat_len:
         return pi + 2
     return pi + 1
 
 
 def _parse_brace_exact(
-    read pat: String, brace_pi: Int
+    read pb: PatBytes, pat_len: Int, brace_pi: Int
 ) raises -> Tuple[Int, Int]:
     ## `{n}` only: returns `(n, index_after_brace)` or `(0, brace_pi)` if invalid.
-    if brace_pi >= pat.byte_length() or _bytes_at(pat, brace_pi) != ord("{"):
+    if brace_pi >= pat_len or _pat_byte(pb, brace_pi) != ord("{"):
         return (0, brace_pi)
     var i = brace_pi + 1
     var n = 0
     var seen = False
-    var pl = pat.byte_length()
-    while i < pl:
-        var b = _bytes_at(pat, i)
+    while i < pat_len:
+        var b = _pat_byte(pb, i)
         if b >= ord("0") and b <= ord("9"):
             seen = True
             n = n * 10 + Int(b - ord("0"))
@@ -143,23 +154,25 @@ def _parse_brace_exact(
     return (0, brace_pi)
 
 
-def _quant_next_pi(read pat: String, atom_end: Int) raises -> Int:
-    if atom_end >= pat.byte_length():
+def _quant_next_pi(
+    read pb: PatBytes, pat_len: Int, atom_end: Int
+) raises -> Int:
+    if atom_end >= pat_len:
         return atom_end
-    var q = _bytes_at(pat, atom_end)
+    var q = _pat_byte(pb, atom_end)
     if q == ord("*") or q == ord("+") or q == ord("?"):
         return atom_end + 1
     if q == ord("{"):
-        var br = _parse_brace_exact(pat, atom_end)
+        var br = _parse_brace_exact(pb, pat_len, atom_end)
         if br[0] > 0:
             return br[1]
     return atom_end
 
 
-def _quant_kind(read pat: String, atom_end: Int) raises -> Int:
-    if atom_end >= pat.byte_length():
+def _quant_kind(read pb: PatBytes, pat_len: Int, atom_end: Int) raises -> Int:
+    if atom_end >= pat_len:
         return 0
-    var q = _bytes_at(pat, atom_end)
+    var q = _pat_byte(pb, atom_end)
     if q == ord("*"):
         return 1
     if q == ord("+"):
@@ -167,20 +180,20 @@ def _quant_kind(read pat: String, atom_end: Int) raises -> Int:
     if q == ord("?"):
         return 3
     if q == ord("{"):
-        var br = _parse_brace_exact(pat, atom_end)
+        var br = _parse_brace_exact(pb, pat_len, atom_end)
         if br[0] > 0:
             return 4
     return 0
 
 
 def _class_matches(
-    read pat: String, class_start: Int, read val: String, vi: Int
+    read pb: PatBytes, pat_len: Int, class_start: Int, read val: String, vi: Int
 ) raises -> Bool:
     if vi >= val.byte_length():
         return False
     var dec = _utf8_decode_scalar(val, vi)
-    var ce = _class_end(pat, class_start)
-    return _scalar_in_class(pat, class_start, ce, dec[0])
+    var ce = _class_end(pb, pat_len, class_start)
+    return _scalar_in_class(pb, class_start, ce, dec[0])
 
 
 def _dot_matches(read val: String, vi: Int) -> Bool:
@@ -188,13 +201,13 @@ def _dot_matches(read val: String, vi: Int) -> Bool:
 
 
 def _literal_matches(
-    read pat: String, pi: Int, read val: String, vi: Int
+    read pb: PatBytes, pat_len: Int, pi: Int, read val: String, vi: Int
 ) raises -> Bool:
     if vi >= val.byte_length():
         return False
-    var pch = _bytes_at(pat, pi)
-    if pch == ord("\\") and pi + 1 < pat.byte_length():
-        var esc = _bytes_at(pat, pi + 1)
+    var pch = _pat_byte(pb, pi)
+    if pch == ord("\\") and pi + 1 < pat_len:
+        var esc = _pat_byte(pb, pi + 1)
         var dec = _utf8_decode_scalar(val, vi)
         var cp = dec[0]
         if esc == ord("d"):
@@ -204,81 +217,90 @@ def _literal_matches(
     return Int32(pch) == dec2[0]
 
 
-def _literal_advance(read pat: String, pi: Int) -> Int:
-    if _bytes_at(pat, pi) == ord("\\") and pi + 1 < pat.byte_length():
+def _literal_advance(read pb: PatBytes, pat_len: Int, pi: Int) -> Int:
+    if _pat_byte(pb, pi) == ord("\\") and pi + 1 < pat_len:
         return pi + 2
     return pi + 1
 
 
 def _match_from(
-    read pat: String, pi: Int, read val: String, vi: Int
+    read pb: PatBytes, pat_len: Int, pi: Int, read val: String, vi: Int
 ) raises -> Bool:
-    var pl = pat.byte_length()
-    if pi >= pl:
+    if pi >= pat_len:
         return vi >= val.byte_length()
-    var a_end = _atom_end_no_quant(pat, pi)
-    var next_pi = _quant_next_pi(pat, a_end)
-    var qk = _quant_kind(pat, a_end)
+    var a_end = _atom_end_no_quant(pb, pat_len, pi)
+    var next_pi = _quant_next_pi(pb, pat_len, a_end)
+    var qk = _quant_kind(pb, pat_len, a_end)
 
-    if _bytes_at(pat, pi) == ord("["):
+    if _pat_byte(pb, pi) == ord("["):
         if qk == 4:
-            var n_times = _parse_brace_exact(pat, a_end)[0]
+            var n_times = _parse_brace_exact(pb, pat_len, a_end)[0]
             var j4 = vi
             for _ in range(n_times):
                 if j4 >= val.byte_length() or not _class_matches(
-                    pat, pi, val, j4
+                    pb, pat_len, pi, val, j4
                 ):
                     return False
                 j4 += _utf8_decode_scalar(val, j4)[1]
-            return _match_from(pat, next_pi, val, j4)
+            return _match_from(pb, pat_len, next_pi, val, j4)
         if qk == 1:
             var j = vi
             while True:
-                if _match_from(pat, next_pi, val, j):
+                if _match_from(pb, pat_len, next_pi, val, j):
                     return True
                 if j >= val.byte_length():
                     return False
-                if not _class_matches(pat, pi, val, j):
+                if not _class_matches(pb, pat_len, pi, val, j):
                     return False
                 j += _utf8_decode_scalar(val, j)[1]
         elif qk == 2:
-            if vi >= val.byte_length() or not _class_matches(pat, pi, val, vi):
+            if vi >= val.byte_length() or not _class_matches(
+                pb, pat_len, pi, val, vi
+            ):
                 return False
             var j2 = vi + _utf8_decode_scalar(val, vi)[1]
             while True:
-                if _match_from(pat, next_pi, val, j2):
+                if _match_from(pb, pat_len, next_pi, val, j2):
                     return True
                 if j2 >= val.byte_length():
                     return False
-                if not _class_matches(pat, pi, val, j2):
+                if not _class_matches(pb, pat_len, pi, val, j2):
                     return False
                 j2 += _utf8_decode_scalar(val, j2)[1]
         elif qk == 3:
-            if _class_matches(pat, pi, val, vi):
+            if _class_matches(pb, pat_len, pi, val, vi):
                 return _match_from(
-                    pat, next_pi, val, vi + _utf8_decode_scalar(val, vi)[1]
+                    pb,
+                    pat_len,
+                    next_pi,
+                    val,
+                    vi + _utf8_decode_scalar(val, vi)[1],
                 )
-            return _match_from(pat, next_pi, val, vi)
+            return _match_from(pb, pat_len, next_pi, val, vi)
         else:
-            if not _class_matches(pat, pi, val, vi):
+            if not _class_matches(pb, pat_len, pi, val, vi):
                 return False
             return _match_from(
-                pat, next_pi, val, vi + _utf8_decode_scalar(val, vi)[1]
+                pb,
+                pat_len,
+                next_pi,
+                val,
+                vi + _utf8_decode_scalar(val, vi)[1],
             )
 
-    if _bytes_at(pat, pi) == ord("."):
+    if _pat_byte(pb, pi) == ord("."):
         if qk == 4:
-            var n_dot = _parse_brace_exact(pat, a_end)[0]
+            var n_dot = _parse_brace_exact(pb, pat_len, a_end)[0]
             var jfd4 = vi
             for _ in range(n_dot):
                 if not _dot_matches(val, jfd4):
                     return False
                 jfd4 += _utf8_decode_scalar(val, jfd4)[1]
-            return _match_from(pat, next_pi, val, jfd4)
+            return _match_from(pb, pat_len, next_pi, val, jfd4)
         if qk == 1:
             var jd = vi
             while True:
-                if _match_from(pat, next_pi, val, jd):
+                if _match_from(pb, pat_len, next_pi, val, jd):
                     return True
                 if jd >= val.byte_length():
                     return False
@@ -288,7 +310,7 @@ def _match_from(
                 return False
             var jdp = vi + _utf8_decode_scalar(val, vi)[1]
             while True:
-                if _match_from(pat, next_pi, val, jdp):
+                if _match_from(pb, pat_len, next_pi, val, jdp):
                     return True
                 if jdp >= val.byte_length():
                     return False
@@ -296,63 +318,73 @@ def _match_from(
         elif qk == 3:
             if _dot_matches(val, vi):
                 return _match_from(
-                    pat, next_pi, val, vi + _utf8_decode_scalar(val, vi)[1]
+                    pb,
+                    pat_len,
+                    next_pi,
+                    val,
+                    vi + _utf8_decode_scalar(val, vi)[1],
                 )
-            return _match_from(pat, next_pi, val, vi)
+            return _match_from(pb, pat_len, next_pi, val, vi)
         else:
             if not _dot_matches(val, vi):
                 return False
             return _match_from(
-                pat, next_pi, val, vi + _utf8_decode_scalar(val, vi)[1]
+                pb,
+                pat_len,
+                next_pi,
+                val,
+                vi + _utf8_decode_scalar(val, vi)[1],
             )
 
     if qk == 4:
-        var n_lit = _parse_brace_exact(pat, a_end)[0]
+        var n_lit = _parse_brace_exact(pb, pat_len, a_end)[0]
         var jn = vi
         for _ in range(n_lit):
-            if not _literal_matches(pat, pi, val, jn):
+            if not _literal_matches(pb, pat_len, pi, val, jn):
                 return False
             jn += _utf8_decode_scalar(val, jn)[1]
-        return _match_from(pat, next_pi, val, jn)
+        return _match_from(pb, pat_len, next_pi, val, jn)
 
-    if not _literal_matches(pat, pi, val, vi):
+    if not _literal_matches(pb, pat_len, pi, val, vi):
         return False
     var vadv = _utf8_decode_scalar(val, vi)[1]
     if qk == 1:
         var jl = vi
         while True:
-            if _match_from(pat, next_pi, val, jl):
+            if _match_from(pb, pat_len, next_pi, val, jl):
                 return True
             if jl >= val.byte_length():
                 return False
-            if not _literal_matches(pat, pi, val, jl):
+            if not _literal_matches(pb, pat_len, pi, val, jl):
                 return False
             jl += _utf8_decode_scalar(val, jl)[1]
     elif qk == 2:
         var jlp = vi + vadv
         while True:
-            if _match_from(pat, next_pi, val, jlp):
+            if _match_from(pb, pat_len, next_pi, val, jlp):
                 return True
             if jlp >= val.byte_length():
                 return False
-            if not _literal_matches(pat, pi, val, jlp):
+            if not _literal_matches(pb, pat_len, pi, val, jlp):
                 return False
             jlp += _utf8_decode_scalar(val, jlp)[1]
     elif qk == 3:
-        if _literal_matches(pat, pi, val, vi):
-            return _match_from(pat, next_pi, val, vi + vadv)
-        return _match_from(pat, next_pi, val, vi)
+        if _literal_matches(pb, pat_len, pi, val, vi):
+            return _match_from(pb, pat_len, next_pi, val, vi + vadv)
+        return _match_from(pb, pat_len, next_pi, val, vi)
     else:
-        return _match_from(pat, next_pi, val, vi + vadv)
+        return _match_from(pb, pat_len, next_pi, val, vi + vadv)
 
 
 def yang_string_matches_xsd_subset(
     read pattern: String, read value: String
 ) raises -> Bool:
     var p = _strip_pattern_anchors(_strip_spaces(pattern))
-    if p.byte_length() == 0:
+    var pb = p.as_bytes()
+    var pn = len(pb)
+    if pn == 0:
         return value.byte_length() == 0
-    return _match_from(p, 0, value, 0)
+    return _match_from(pb, pn, 0, value, 0)
 
 
 def unicode_scalar_count(read s: String) raises -> Int:

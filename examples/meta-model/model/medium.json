@@ -18,12 +18,12 @@
           {
             "name": "id",
             "description": "Primary key for the customer.",
-            "type": { "primitive": "integer" }
+            "type": { "primitive-or-enum": { "primitive": "integer" } }
           },
           {
             "name": "name",
             "description": "Customer display name.",
-            "type": { "primitive": "string" }
+            "type": { "primitive-or-enum": { "primitive": "string" } }
           }
         ]
       },
@@ -36,20 +36,20 @@
           {
             "name": "id",
             "description": "Primary key for the order.",
-            "type": { "primitive": "integer" }
+            "type": { "primitive-or-enum": { "primitive": "integer" } }
           },
           {
             "name": "customer_id",
             "description": "References customer.id (primary key of customer).",
             "type": {
-              "primitive": "integer",
+              "primitive-or-enum": { "primitive": "integer" },
               "foreignKeys": [{ "entity": "customer" }]
             }
           },
           {
             "name": "placed_at",
             "description": "When the order was submitted (ISO-like datetime string in instance data).",
-            "type": { "primitive": "datetime" }
+            "type": { "primitive-or-enum": { "primitive": "datetime" } }
           }
         ]
       }

@@ -7,13 +7,13 @@ comptime `_` = ast_util.to_byte["_"]()
 comptime `.` = ast_util.to_byte["."]()
 
 comptime ALPHA = (
-    ast_util.BitSet.range[ast_util.to_byte["a"](), ast_util.to_byte["z"]()]()
-    | ast_util.BitSet.range[ast_util.to_byte["A"](), ast_util.to_byte["Z"]()]()
+    ast_util.ASCIIRange[ast_util.to_byte["a"](), ast_util.to_byte["z"]()]()
+    | ast_util.ASCIIRange[ast_util.to_byte["A"](), ast_util.to_byte["Z"]()]()
 )
 
-comptime IDENTIFIER_START_CHAR = ALPHA | ast_util.BitSet.chars[`_`]()
+comptime IDENTIFIER_START_CHAR = ALPHA | ast_util.ASCIISet[`_`]()
 
-comptime DIGIT = ast_util.BitSet.range[
+comptime DIGIT = ast_util.ASCIIRange[
     ast_util.to_byte["0"](),
     ast_util.to_byte["9"](),
 ]()
@@ -37,9 +37,9 @@ def is_identifier_start_char(ch: Byte) -> Bool:
 def is_identifier_char(ch: Byte) -> Bool:
     # identifier = (ALPHA / "_") *(ALPHA / DIGIT / "_" / "-" / ".")
     comptime IDENTIFIER_CHAR = (
-        ALPHA | DIGIT | ast_util.BitSet.chars[`_`, `-`, `.`]()
+        ALPHA | DIGIT | ast_util.ASCIISet[`_`, `-`, `.`]()
     )
-    return ch in IDENTIFIER_CHAR
+    return Int(ch) in IDENTIFIER_CHAR
 
 def is_identifier(text: StringSlice) -> Bool:
     var bytes = text.as_bytes()

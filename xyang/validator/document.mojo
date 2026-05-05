@@ -4,10 +4,7 @@ from xyang.json.parser import JsonValue, parse_json
 from xyang.yang.ast.module import YangModule
 from xyang.yang.ast.lexer import AstLexer
 from xyang.validator.leafref import LeafrefCache, check_leafrefs_in_object
-from xyang.validator.tree import (
-    ValidationCache,
-    validate_object_against_construct,
-)
+from xyang.validator.tree import validate_object_against_construct
 
 
 def validate_data(
@@ -20,7 +17,6 @@ def validate_data(
         if data.source_line > 0:
             pfx += "line " + String(data.source_line) + ": "
         raise Error(pfx + "/: expected top-level JSON object")
-    var validation_cache = ValidationCache()
     var leafref_cache = LeafrefCache()
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
@@ -40,7 +36,6 @@ def validate_data(
             "/" + key,
             json_path,
             "/" + key,
-            validation_cache,
         )
         check_leafrefs_in_object(
             slot,

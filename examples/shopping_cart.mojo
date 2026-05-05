@@ -21,9 +21,10 @@ from std.reflection import reflect
 from xyang.json import parse_json, parse_yang_json_module
 from xyang.json.parser import JsonValue, json_get, make_json
 from xyang.validator.document import validate_data
+import xyang.validator.schema_walk as schema_walk
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import `container`, `leaf`, `list`, `when`
+from xyang.yang.spec import `container`, `leaf`, `leaf-list`, `list`, `when`
 
 comptime Arc = ArcPointer
 comptime ArcJson = ArcPointer[JsonValue]
@@ -481,17 +482,26 @@ def _prune_object_to_schema(
     if data.kind != JsonValue.OBJECT:
         return make_json(JsonValue.OBJECT)
     var out = make_json(JsonValue.OBJECT)
-    var kids = module.effective_data_children(schema)
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        if key not in kids:
+        var ch_opt = schema_walk.find_schema_child_for_json_key(
+            module,
+            schema,
+            key,
+            data,
+        )
+        if not ch_opt:
             continue
-        ref ch = kids[key][]
+        ref ch = ch_opt.value()[]
         var kw = ch.spec
         if kw == `leaf`:
             if not _leaf_allowed_by_when(module, ch, parent_for_when):
                 continue
+            out.object_keys.append(key)
+            out.object_values.append(data.object_values[i].copy())
+            continue
+        if kw == `leaf-list`:
             out.object_keys.append(key)
             out.object_values.append(data.object_values[i].copy())
             continue

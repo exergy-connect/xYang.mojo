@@ -8,6 +8,7 @@ from std.collections import Dict, List
 from std.memory import ArcPointer
 
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
+import xyang.validator.schema_walk as schema_walk
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 import xyang.yang.ast.util as ast_util
@@ -66,7 +67,9 @@ def _parse_ascii_int(read s: String) raises -> Int:
     return n
 
 
-def _parse_step_segment(read seg: String) raises -> Tuple[String, Optional[Int]]:
+def _parse_step_segment(
+    read seg: String,
+) raises -> Tuple[String, Optional[Int]]:
     var b = seg.as_bytes()
     var bracket = -1
     for i in range(len(b)):
@@ -85,9 +88,7 @@ def _parse_step_segment(read seg: String) raises -> Tuple[String, Optional[Int]]
         raise Error("invalid instance path segment `" + seg + "`")
     var inside = String(StringSlice(unsafe_from_utf8=b[bracket + 1 : close]))
     var ix = _parse_ascii_int(inside)
-    return Tuple[String, Optional[Int]](
-        base^, Optional[Int](ix)
-    )
+    return Tuple[String, Optional[Int]](base^, Optional[Int](ix))
 
 
 def _instance_path_segments(read path: String) raises -> List[String]:
@@ -100,7 +101,9 @@ def _instance_path_segments(read path: String) raises -> List[String]:
     return segs^
 
 
-def _json_arc_at_path(read root: JsonValue, read path: String) raises -> Arc[JsonValue]:
+def _json_arc_at_path(
+    read root: JsonValue, read path: String
+) raises -> Arc[JsonValue]:
     var segs = _instance_path_segments(path)
     if len(segs) == 0:
         raise Error("empty instance path")
@@ -163,7 +166,9 @@ def _chain_qnames_scalar(
     var nxt = json_get(cur, segments[seg_idx].local_name)
     if not nxt:
         raise Error(
-            "missing key in leafref key-expression: `" + segments[seg_idx].local_name + "`"
+            "missing key in leafref key-expression: `"
+            + segments[seg_idx].local_name
+            + "`"
         )
     return _chain_qnames_scalar(nxt.value()[], segments, seg_idx + 1)
 
@@ -235,7 +240,9 @@ def _collect_resolved_values_from_object(
                 )
         return
     var down = _join_path(path_to_start, local)
-    _collect_resolved_values_from_object(root, child, steps, step_index + 1, down, out)
+    _collect_resolved_values_from_object(
+        root, child, steps, step_index + 1, down, out
+    )
 
 
 def collect_leafref_target_values(
@@ -317,7 +324,12 @@ def check_leafrefs_in_object(
     for i in range(len(data.object_keys)):
         var key = data.object_keys[i]
         ref slot = data.object_values[i][]
-        var data_child = module.find_effective_data_child(schema, key)
+        var data_child = schema_walk.find_schema_child_for_json_key(
+            module,
+            schema,
+            key,
+            data,
+        )
         if (
             data_child
             and data_child.value()[].spec == `leaf`
