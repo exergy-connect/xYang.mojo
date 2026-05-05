@@ -125,11 +125,86 @@ struct QNameArgument(Movable, YangArgument):
         if len(parts) == 2:
             var prefix = String(parts[0])
             var local_name = String(parts[1])
-            node.update_argument(
-                QNameArgument(prefix^, local_name^)
-            )
+            node.update_argument(QNameArgument(prefix^, local_name^))
         else:
             node.update_argument(IdentifierArgument(argument.copy()))
+
+
+@always_inline
+def _yang_ws_byte(b: Byte) -> Bool:
+    var i = Int(b)
+    return i == 32 or i == 9 or i == 10 or i == 13
+
+
+def _yang_ws_split(read s: String) raises -> List[String]:
+    ## RFC 7950 `sep` = 1*(WSP / line-break); split argument into non-empty tokens.
+    var out = List[String]()
+    var b = s.as_bytes()
+    var n = len(b)
+    var i = 0
+    while i < n:
+        while i < n and _yang_ws_byte(b[i]):
+            i += 1
+        if i >= n:
+            break
+        var start = i
+        while i < n and not _yang_ws_byte(b[i]):
+            i += 1
+        out.append(String(StringSlice(unsafe_from_utf8=b[start:i])))
+    return out^
+
+
+struct KeyArgument(Movable, YangArgument):
+    ## RFC 7950 `key-arg` = `node-identifier` *(sep `node-identifier`).
+    def __init__(out self):
+        pass
+
+    @staticmethod
+    def parse_and_store(mut node: YangConstruct) raises -> None:
+        ref argument = node.argument_text()
+        if argument.byte_length() == 0:
+            raise _argument_error(node, "expected non-empty `key`")
+        var toks = _yang_ws_split(argument)
+        if len(toks) < 1:
+            raise _argument_error(node, "expected at least one key leaf name")
+        for i in range(len(toks)):
+            if not is_qname(toks[i]):
+                raise _argument_error(
+                    node, "expected node-identifier in `key` argument"
+                )
+        node.update_argument(KeyArgument())
+
+
+struct UniqueArgument(Movable, YangArgument):
+    ## RFC 7950 `unique-arg` = `descendant-schema-nodeid`
+    ## *(sep `descendant-schema-nodeid`).
+    def __init__(out self):
+        pass
+
+    @staticmethod
+    def parse_and_store(mut node: YangConstruct) raises -> None:
+        ref argument = node.argument_text()
+        if argument.byte_length() == 0:
+            raise _argument_error(node, "expected non-empty `unique`")
+        var constraints = _yang_ws_split(argument)
+        if len(constraints) < 1:
+            raise _argument_error(
+                node, "expected at least one `unique` constraint"
+            )
+        for c in range(len(constraints)):
+            var parts = constraints[c].split("/")
+            for p in range(len(parts)):
+                var seg = String(parts[p])
+                if seg.byte_length() == 0:
+                    raise _argument_error(
+                        node, "invalid empty path segment in `unique`"
+                    )
+                if not is_qname(seg):
+                    raise _argument_error(
+                        node,
+                        "expected node-identifier in `unique` path segment",
+                    )
+        node.update_argument(UniqueArgument())
 
 
 @fieldwise_init
@@ -295,17 +370,26 @@ struct StatusArgument(Movable, YangArgument):
 
 @fieldwise_init
 struct OrderedByArgument(Movable, YangArgument):
-    var ordering: String
+    comptime VALUE_TYPE = UInt8
+    comptime SYSTEM: Self.VALUE_TYPE = 0
+    comptime USER: Self.VALUE_TYPE = 1
+
+    var ordering: Self.VALUE_TYPE
 
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
-        if argument != "system" and argument != "user":
+        ref argument = node.argument_text()
+        var tag: UInt8
+        if argument == "system":
+            tag = Self.SYSTEM
+        elif argument == "user":
+            tag = Self.USER
+        else:
             raise _argument_error(
                 node,
                 "expected `system` or `user` (RFC 7950 §7.7.7)",
             )
-        node.update_argument(OrderedByArgument(argument.copy()))
+        node.update_argument(OrderedByArgument(tag))
 
 
 @fieldwise_init
@@ -356,6 +440,8 @@ comptime YangArgumentPayload = Variant[
     MaxElementsArgument,
     StatusArgument,
     OrderedByArgument,
+    KeyArgument,
+    UniqueArgument,
     Int32Argument,  # EnumArgument
     UInt32Argument,  # PositionArgument and MinElementsArgument
 ]
