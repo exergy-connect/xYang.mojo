@@ -37,7 +37,7 @@ from std.memory import ArcPointer
 
 import xyang.json.parser as json_parser
 import xyang.yang.ast.util as ast_util
-from xyang.yang.arguments import _strip_spaces
+from xyang.yang.ast.util import _strip_spaces
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 

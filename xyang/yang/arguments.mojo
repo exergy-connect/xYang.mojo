@@ -4,6 +4,7 @@
 ## Includes RFC 7950 §9.4 (`length`, `pattern`, `modifier`) argument checks.
 
 from std.collections import List
+from std.collections.string import StringSlice
 from std.memory import ArcPointer
 from std.utils import Variant
 
@@ -201,12 +202,11 @@ struct PatternArgument(Movable, YangArgument):
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        var stripped = _strip_spaces(argument)
-        if stripped.byte_length() == 0:
+        if argument.byte_length() == 0:
             raise _argument_error(
                 node, "expected non-empty XSD regular expression"
             )
-        node.update_argument(PatternArgument(stripped^))
+        node.update_argument(PatternArgument(argument.copy()))
 
 
 @fieldwise_init
@@ -217,7 +217,7 @@ struct ModifierArgument(Movable, YangArgument):
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        if _strip_spaces(argument) != "invert-match":
+        if argument != "invert-match":
             raise _argument_error(node, "expected argument `invert-match`")
         node.update_argument(ModifierArgument(True))
 
@@ -229,10 +229,9 @@ struct FractionDigitsArgument(Movable, YangArgument):
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        var t = _strip_spaces(argument)
-        if t.byte_length() == 0:
+        if argument.byte_length() == 0:
             raise _argument_error(node, "expected digit string")
-        var n = atol(t)
+        var n = atol(argument)
         if n < 1 or n > 18:
             raise _argument_error(
                 node, "must be between 1 and 18 (RFC 7950 §9.3)"
@@ -254,22 +253,6 @@ struct BoolArgument(Movable, YangArgument):
 
 
 @fieldwise_init
-struct MinElementsArgument(Movable, YangArgument):
-    var count: Int
-
-    @staticmethod
-    def parse_and_store(mut node: YangConstruct) raises -> None:
-        var argument = node.argument_text()
-        var t = _strip_spaces(argument)
-        if t.byte_length() == 0:
-            raise _argument_error(node, "expected non-negative integer")
-        var n = atol(t)
-        if n < 0:
-            raise _argument_error(node, "`min-elements` must be non-negative")
-        node.update_argument(MinElementsArgument(Int(n)))
-
-
-@fieldwise_init
 struct MaxElementsArgument(Movable, YangArgument):
     ## Non-negative count, or `-1` when the argument is `unbounded`.
     var count: Int
@@ -277,15 +260,14 @@ struct MaxElementsArgument(Movable, YangArgument):
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        var t = _strip_spaces(argument)
-        if t.byte_length() == 0:
+        if argument.byte_length() == 0:
             raise _argument_error(
                 node, "expected non-negative integer or unbounded"
             )
-        if t == "unbounded":
+        if argument == "unbounded":
             node.update_argument(MaxElementsArgument(-1))
             return
-        var n = atol(t)
+        var n = atol(argument)
         if n < 0:
             raise _argument_error(node, "`max-elements` must be non-negative")
         node.update_argument(MaxElementsArgument(Int(n)))
@@ -298,8 +280,11 @@ struct StatusArgument(Movable, YangArgument):
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        var t = _strip_spaces(argument)
-        if t != "current" and t != "deprecated" and t != "obsolete":
+        if (
+            argument != "current"
+            and argument != "deprecated"
+            and argument != "obsolete"
+        ):
             raise _argument_error(
                 node,
                 (
@@ -307,7 +292,7 @@ struct StatusArgument(Movable, YangArgument):
                     " §7.21.2)"
                 ),
             )
-        node.update_argument(StatusArgument(t.copy()))
+        node.update_argument(StatusArgument(argument.copy()))
 
 
 @fieldwise_init
@@ -317,13 +302,12 @@ struct OrderedByArgument(Movable, YangArgument):
     @staticmethod
     def parse_and_store(mut node: YangConstruct) raises -> None:
         var argument = node.argument_text()
-        var t = _strip_spaces(argument)
-        if t != "system" and t != "user":
+        if argument != "system" and argument != "user":
             raise _argument_error(
                 node,
                 "expected `system` or `user` (RFC 7950 §7.7.7)",
             )
-        node.update_argument(OrderedByArgument(t.copy()))
+        node.update_argument(OrderedByArgument(argument.copy()))
 
 
 @fieldwise_init
@@ -338,17 +322,23 @@ struct IntegerArgument[T: DType](Movable, YangArgument):
         comptime lo = Int64(Scalar[Self.T].MIN)
         comptime hi = Int64(Scalar[Self.T].MAX)
         if n < lo or n > hi:
-            raise _argument_error(node, "integer value out of range for this statement")
-        node.update_argument(
-            IntegerArgument[Self.T](Scalar[Self.T](Int(n)))
-        )
+            raise _argument_error(
+                node, "integer value out of range for this statement"
+            )
+        node.update_argument(IntegerArgument[Self.T](Scalar[Self.T](Int(n))))
 
+
+comptime Int32Argument = IntegerArgument[DType.int32]
+comptime UInt32Argument = IntegerArgument[DType.uint32]
 
 ## `value` under `enum` (RFC 7950 §9.6.4.2).
-comptime Integer32Argument = IntegerArgument[DType.int32]
+comptime EnumArgument = Int32Argument
 
 ## `position` under `bit` (RFC 7950 §9.7.4.2); `Scalar[DType.uint32]` range.
-comptime PositionArgument = IntegerArgument[DType.uint32]
+comptime PositionArgument = UInt32Argument
+
+## `min-elements` (RFC 7950 §7.7.5); same unsigned range as `position`.
+comptime MinElementsArgument = UInt32Argument
 
 
 comptime YangArgumentPayload = Variant[
@@ -365,12 +355,11 @@ comptime YangArgumentPayload = Variant[
     ModifierArgument,
     FractionDigitsArgument,
     BoolArgument,
-    MinElementsArgument,
     MaxElementsArgument,
     StatusArgument,
     OrderedByArgument,
-    Integer32Argument,
-    PositionArgument,
+    Int32Argument,  # EnumArgument
+    UInt32Argument,  # PositionArgument and MinElementsArgument
 ]
 
 
@@ -419,9 +408,6 @@ struct YangPatternSpec(Copyable, ImplicitlyCopyable, Movable):
 
 
 comptime _LENGTH_MAX: Int64 = 9223372036854775807
-## `range` statement: `min` / `max` keywords (RFC 7950 §9.2.4) as wide finite bounds.
-comptime _RANGE_F64_MIN: Float64 = -1.7976931348623157e308
-comptime _RANGE_F64_MAX: Float64 = 1.7976931348623157e308
 
 
 def _line_prefix(line: UInt) -> String:
@@ -430,27 +416,16 @@ def _line_prefix(line: UInt) -> String:
     return ""
 
 
-def _strip_spaces(read s: String) -> String:
-    var parts = s.split(" ")
-    var out = String()
-    for i in range(len(parts)):
-        var p = String(parts[i])
-        if p.byte_length() > 0:
-            out += p
-    return out^
-
-
-def _length_lower_bound(read tok: String, line: UInt) raises -> Int64:
-    var t = _strip_spaces(tok)
-    if t == "min":
+def _length_lower_bound(read tok: StringSlice, line: UInt) raises -> Int64:
+    if tok == "min":
         return 0
-    if t == "max":
+    if tok == "max":
         raise Error(
             _line_prefix(line) + "`length` `max` cannot be a lower bound"
         )
-    if t.byte_length() == 0:
+    if tok.byte_length() == 0:
         raise Error(_line_prefix(line) + "`length` empty lower bound")
-    var n = Int64(atol(t))
+    var n = Int64(atol(tok))
     if n < 0:
         raise Error(
             _line_prefix(line) + "`length` lower bound must be non-negative"
@@ -458,17 +433,16 @@ def _length_lower_bound(read tok: String, line: UInt) raises -> Int64:
     return n
 
 
-def _length_upper_bound(read tok: String, line: UInt) raises -> Int64:
-    var t = _strip_spaces(tok)
-    if t == "max":
+def _length_upper_bound(read tok: StringSlice, line: UInt) raises -> Int64:
+    if tok == "max":
         return _LENGTH_MAX
-    if t == "min":
+    if tok == "min":
         raise Error(
             _line_prefix(line) + "`length` `min` cannot be an upper bound"
         )
-    if t.byte_length() == 0:
+    if tok.byte_length() == 0:
         raise Error(_line_prefix(line) + "`length` empty upper bound")
-    var n = Int64(atol(t))
+    var n = Int64(atol(tok))
     if n < 0:
         raise Error(
             _line_prefix(line) + "`length` upper bound must be non-negative"
@@ -481,19 +455,18 @@ def try_parse_length_segments(
 ) raises -> List[LengthSegment]:
     ## Parse RFC 7950 `length-arg` (§9.4.4, ABNF `length-arg` in §14).
     var out = List[LengthSegment]()
-    var norm = _strip_spaces(argument)
-    if norm.byte_length() == 0:
+    if argument.byte_length() == 0:
         raise Error(_line_prefix(line) + "`length` expected non-empty argument")
-    var raw_parts = norm.split("|")
+    var raw_parts = argument.split("|")
     for i in range(len(raw_parts)):
-        var part = _strip_spaces(String(raw_parts[i]))
+        var part = raw_parts[i]
         if part.byte_length() == 0:
             raise Error(_line_prefix(line) + "`length` empty `|` segment")
         var dots = part.split("..")
         var lo_b: Int64
         var hi_b: Int64
         if len(dots) == 1:
-            var t = _strip_spaces(String(dots[0]))
+            var t = dots[0]
             if t == "min" or t == "max":
                 raise Error(
                     _line_prefix(line)
@@ -508,8 +481,8 @@ def try_parse_length_segments(
             lo_b = n
             hi_b = n
         elif len(dots) == 2:
-            lo_b = _length_lower_bound(String(dots[0]), line)
-            hi_b = _length_upper_bound(String(dots[1]), line)
+            lo_b = _length_lower_bound(dots[0], line)
+            hi_b = _length_upper_bound(dots[1], line)
             if lo_b > hi_b:
                 raise Error(
                     _line_prefix(line)
@@ -545,47 +518,44 @@ def length_allows_scalar_count(
     return False
 
 
-def _range_lower_bound_f64(read tok: String, line: UInt) raises -> Float64:
-    var t = _strip_spaces(tok)
-    if t == "min":
-        return _RANGE_F64_MIN
-    if t == "max":
+def _range_lower_bound_f64(read tok: StringSlice, line: UInt) raises -> Float64:
+    if tok == "min":
+        return Float64.MAX_FINITE
+    if tok == "max":
         raise Error(
             _line_prefix(line) + "`range` `max` cannot be a lower bound"
         )
-    if t.byte_length() == 0:
+    if tok.byte_length() == 0:
         raise Error(_line_prefix(line) + "`range` empty lower bound")
-    return Float64(t)
+    return Float64(tok)
 
 
-def _range_upper_bound_f64(read tok: String, line: UInt) raises -> Float64:
-    var t = _strip_spaces(tok)
-    if t == "max":
-        return _RANGE_F64_MAX
-    if t == "min":
+def _range_upper_bound_f64(read tok: StringSlice, line: UInt) raises -> Float64:
+    if tok == "max":
+        return Float64.MAX_FINITE
+    if tok == "min":
         raise Error(
             _line_prefix(line) + "`range` `min` cannot be an upper bound"
         )
-    if t.byte_length() == 0:
+    if tok.byte_length() == 0:
         raise Error(_line_prefix(line) + "`range` empty upper bound")
-    return Float64(t)
+    return Float64(tok)
 
 
 def _parse_one_range_segment(
-    read seg: String, line: UInt
+    read seg: StringSlice, line: UInt
 ) raises -> RangeBounds:
     ## One `lower..upper` piece (RFC 7950 §9.2.4); bounds may be decimal.
-    var part = _strip_spaces(seg)
-    var parts = part.split("..")
+    var parts = seg.split("..")
     if len(parts) != 2:
         raise Error(
             _line_prefix(line)
             + "`range` segment `"
-            + part
+            + String(seg)
             + "` must contain exactly one `..`"
         )
-    var lo = _range_lower_bound_f64(String(parts[0]), line)
-    var hi = _range_upper_bound_f64(String(parts[1]), line)
+    var lo = _range_lower_bound_f64(parts[0], line)
+    var hi = _range_upper_bound_f64(parts[1], line)
     if lo > hi:
         raise Error(
             _line_prefix(line) + "`range` lower bound exceeds upper bound"
@@ -598,12 +568,11 @@ def try_parse_range_segments(
 ) raises -> List[RangeBounds]:
     ## Parse `range-arg`: `|` alternatives, each `lower..upper` (§9.2.4).
     var out = List[RangeBounds]()
-    var norm = _strip_spaces(argument)
-    if norm.byte_length() == 0:
+    if argument.byte_length() == 0:
         return out^
-    var raw_parts = norm.split("|")
+    var raw_parts = argument.split("|")
     for i in range(len(raw_parts)):
-        var piece = _strip_spaces(String(raw_parts[i]))
+        var piece = raw_parts[i]
         if piece.byte_length() == 0:
             raise Error(_line_prefix(line) + "`range` empty `|` segment")
         out.append(_parse_one_range_segment(piece, line))

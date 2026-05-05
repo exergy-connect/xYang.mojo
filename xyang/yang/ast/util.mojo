@@ -170,3 +170,16 @@ struct BitSet[size: Int](Copyable, ImplicitlyCopyable, Defaultable):
 
 comptime ASCIISet[*chars: Byte] = BitSet[size=128].charset[*chars]
 comptime ASCIIRange[start: Byte, end: Byte] = BitSet[size=128].range[start, end]
+
+
+## Collapse ASCII spaces inside composite argument fragments (`length`, `range`,
+## JSON-derived XPath, pattern normalization). Single-token lexer arguments should
+## not need this.
+def _strip_spaces(read s: String) -> String:
+    var parts = s.split(" ")
+    var out = String()
+    for i in range(len(parts)):
+        var p = String(parts[i])
+        if p.byte_length() > 0:
+            out += p
+    return out^

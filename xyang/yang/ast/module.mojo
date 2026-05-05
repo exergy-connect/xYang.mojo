@@ -7,11 +7,11 @@ from std.memory import ArcPointer
 from .construct import YangConstruct
 from .lexer import AstLexer
 from .parser import parse_module
+from .util import _strip_spaces
 from ..arguments import (
     LengthSegment,
     RangeBounds,
     YangPatternSpec,
-    _strip_spaces,
     length_allows_scalar_count,
     try_parse_length_segments,
     try_parse_range_segments,

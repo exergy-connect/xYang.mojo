@@ -10,7 +10,7 @@
 
 from std.memory import Span
 
-from xyang.yang.arguments import _strip_spaces
+from xyang.yang.ast.util import _strip_spaces
 
 
 comptime PatBytes = Span[Byte, _]

@@ -482,7 +482,7 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_scalar_spec[`unique`, yarg.StringArgument]()
     add_scalar_spec[`units`, yarg.StringArgument]()
     add_scalar_spec[`uses`, yarg.QNameArgument]()
-    add_scalar_spec[`value`, yarg.Integer32Argument]()
+    add_scalar_spec[`value`, yarg.EnumArgument]()
     add_scalar_spec[`when`, yarg.XPathExpressionArgument]()
     add_scalar_spec[`yang-version`, yarg.YangVersionArgument]()
 
