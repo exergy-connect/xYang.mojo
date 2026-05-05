@@ -310,6 +310,47 @@ struct StatusArgument(Movable, YangArgument):
         node.update_argument(StatusArgument(t.copy()))
 
 
+@fieldwise_init
+struct OrderedByArgument(Movable, YangArgument):
+    var ordering: String
+
+    @staticmethod
+    def parse_and_store(mut node: YangConstruct) raises -> None:
+        var argument = node.argument_text()
+        var t = _strip_spaces(argument)
+        if t != "system" and t != "user":
+            raise _argument_error(
+                node,
+                "expected `system` or `user` (RFC 7950 §7.7.7)",
+            )
+        node.update_argument(OrderedByArgument(t.copy()))
+
+
+@fieldwise_init
+struct IntegerArgument[T: DType](Movable, YangArgument):
+    ## Parsed integer argument, checked against `Scalar[Self.T].MIN`..`MAX`
+    ## (e.g. `DType.int32` for RFC 7950 §9.6.4.2 `enum` values).
+    var value: Scalar[Self.T]
+
+    @staticmethod
+    def parse_and_store(mut node: YangConstruct) raises -> None:
+        var n = Int64(atol(node.argument_text()))
+        comptime lo = Int64(Scalar[Self.T].MIN)
+        comptime hi = Int64(Scalar[Self.T].MAX)
+        if n < lo or n > hi:
+            raise _argument_error(node, "integer value out of range for this statement")
+        node.update_argument(
+            IntegerArgument[Self.T](Scalar[Self.T](Int(n)))
+        )
+
+
+## `value` under `enum` (RFC 7950 §9.6.4.2).
+comptime Integer32Argument = IntegerArgument[DType.int32]
+
+## `position` under `bit` (RFC 7950 §9.7.4.2); `Scalar[DType.uint32]` range.
+comptime PositionArgument = IntegerArgument[DType.uint32]
+
+
 comptime YangArgumentPayload = Variant[
     NoArgument,
     StringArgument,
@@ -327,6 +368,9 @@ comptime YangArgumentPayload = Variant[
     MinElementsArgument,
     MaxElementsArgument,
     StatusArgument,
+    OrderedByArgument,
+    Integer32Argument,
+    PositionArgument,
 ]
 
 

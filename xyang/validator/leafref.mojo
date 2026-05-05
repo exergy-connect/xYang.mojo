@@ -337,7 +337,10 @@ def check_leafrefs_in_object(
         ):
             var target_path = module.leafref_path(data_child.value()[])
             var actual = json_scalar_text(slot)
-            if not cache.contains(root, target_path, path, actual):
+            ## Leafref paths (e.g. `../fields/name`) are evaluated with the
+            ## leafref leaf as context; `..` must reach the parent data node.
+            var leaf_path = path + "/" + key
+            if not cache.contains(root, target_path, leaf_path, actual):
                 var pfx = String()
                 if json_path.byte_length() > 0:
                     pfx += json_path + " "

@@ -14,58 +14,67 @@ from xyang.yang.runtime_spec import (
     keyword_spelling,
 )
 
-
-comptime `anydata`: Keyword = 1
-comptime `anyxml`: Keyword = 2
-comptime `augment`: Keyword = 3
-comptime `base`: Keyword = 4
-comptime `bit`: Keyword = 5
-comptime `case`: Keyword = 6
-comptime `choice`: Keyword = 7
-comptime `config`: Keyword = 8
-comptime `contact`: Keyword = 9
-comptime `container`: Keyword = 10
-comptime `default`: Keyword = 11
-comptime `description`: Keyword = 12
-comptime `deviation`: Keyword = 13
-comptime `enum`: Keyword = 14
-comptime `error-message`: Keyword = 15
-comptime `extension`: Keyword = 16
-comptime `feature`: Keyword = 17
-comptime `fraction-digits`: Keyword = 18
-comptime `grouping`: Keyword = 19
-comptime `identity`: Keyword = 20
-comptime `if-feature`: Keyword = 21
-comptime `import`: Keyword = 22
-comptime `include`: Keyword = 23
-comptime `key`: Keyword = 24
-comptime `leaf`: Keyword = 25
-comptime `leaf-list`: Keyword = 26
-comptime `length`: Keyword = 27
-comptime `list`: Keyword = 28
-comptime `mandatory`: Keyword = 29
-comptime `max-elements`: Keyword = 30
-comptime `min-elements`: Keyword = 31
-comptime `modifier`: Keyword = 32
-comptime `module`: Keyword = 33
-comptime `must`: Keyword = 34
-comptime `namespace`: Keyword = 35
-comptime `notification`: Keyword = 36
-comptime `organization`: Keyword = 37
-comptime `path`: Keyword = 38
-comptime `pattern`: Keyword = 39
-comptime `prefix`: Keyword = 40
-comptime `presence`: Keyword = 41
-comptime `range-stmt`: Keyword = 42
-comptime `reference`: Keyword = 43
-comptime `revision`: Keyword = 44
-comptime `rpc`: Keyword = 45
-comptime `status`: Keyword = 46
-comptime `type`: Keyword = 47
-comptime `typedef`: Keyword = 48
-comptime `uses`: Keyword = 49
-comptime `when`: Keyword = 50
-comptime `yang-version`: Keyword = 51
+## YANG keywords: ids match `SPELLING` in `runtime_spec.mojo` (alphabetical,
+## `<INVALID>` at index 0).
+comptime `action`: Keyword = 1
+comptime `anydata`: Keyword = 2
+comptime `anyxml`: Keyword = 3
+comptime `augment`: Keyword = 4
+comptime `base`: Keyword = 5
+comptime `bit`: Keyword = 6
+comptime `case`: Keyword = 7
+comptime `choice`: Keyword = 8
+comptime `config`: Keyword = 9
+comptime `contact`: Keyword = 10
+comptime `container`: Keyword = 11
+comptime `default`: Keyword = 12
+comptime `description`: Keyword = 13
+comptime `deviation`: Keyword = 14
+comptime `enum`: Keyword = 15
+comptime `error-app-tag`: Keyword = 16
+comptime `error-message`: Keyword = 17
+comptime `extension`: Keyword = 18
+comptime `feature`: Keyword = 19
+comptime `fraction-digits`: Keyword = 20
+comptime `grouping`: Keyword = 21
+comptime `identity`: Keyword = 22
+comptime `if-feature`: Keyword = 23
+comptime `import`: Keyword = 24
+comptime `include`: Keyword = 25
+comptime `key`: Keyword = 26
+comptime `leaf`: Keyword = 27
+comptime `leaf-list`: Keyword = 28
+comptime `length`: Keyword = 29
+comptime `list`: Keyword = 30
+comptime `mandatory`: Keyword = 31
+comptime `max-elements`: Keyword = 32
+comptime `min-elements`: Keyword = 33
+comptime `modifier`: Keyword = 34
+comptime `module`: Keyword = 35
+comptime `must`: Keyword = 36
+comptime `namespace`: Keyword = 37
+comptime `notification`: Keyword = 38
+comptime `organization`: Keyword = 39
+comptime `ordered-by`: Keyword = 40
+comptime `path`: Keyword = 41
+comptime `pattern`: Keyword = 42
+comptime `position`: Keyword = 43
+comptime `prefix`: Keyword = 44
+comptime `presence`: Keyword = 45
+comptime `range-stmt`: Keyword = 46
+comptime `reference`: Keyword = 47
+comptime `require-instance`: Keyword = 48
+comptime `revision`: Keyword = 49
+comptime `rpc`: Keyword = 50
+comptime `status`: Keyword = 51
+comptime `type`: Keyword = 52
+comptime `typedef`: Keyword = 53
+comptime `unique`: Keyword = 54
+comptime `units`: Keyword = 55
+comptime `uses`: Keyword = 56
+comptime `value`: Keyword = 57
+comptime `when`: Keyword = 58
+comptime `yang-version`: Keyword = 59
 
 
 struct YangConstructSpec[
@@ -119,129 +128,226 @@ comptime MODULE_TYPED_SPEC = YangConstructSpec[
         (`yang-version`, `1`),
     ),
 ]
+## Source: RFC 7950 section 7.5.2, "The container's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.5
 comptime CONTAINER_TYPED_SPEC = YangConstructSpec[
     `container`,
     yarg.IdentifierArgument,
-    fields[9](
-        (`must`, `0..n`),
-        (`description`, `0..1`),
-        (`presence`, `0..1`),
-        (`uses`, `0..n`),
+    fields[20](
+        (`action`, `0..n`),
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`choice`, `0..n`),
+        (`config`, `0..1`),
         (`container`, `0..n`),
+        (`description`, `0..1`),
+        (`grouping`, `0..n`),
+        (`if-feature`, `0..n`),
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
-        (`choice`, `0..n`),
+        (`must`, `0..n`),
+        (`notification`, `0..n`),
+        (`presence`, `0..1`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`typedef`, `0..n`),
+        (`uses`, `0..n`),
+        (`when`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.8.1, "The list's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.8
 comptime LIST_TYPED_SPEC = YangConstructSpec[
     `list`,
     yarg.IdentifierArgument,
-    fields[11](
-        (`must`, `0..n`),
-        (`key`, `0..1`),
-        (`min-elements`, `0..1`),
-        (`max-elements`, `0..1`),
-        (`description`, `0..1`),
-        (`uses`, `0..n`),
+    fields[24](
+        (`action`, `0..n`),
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`choice`, `0..n`),
+        (`config`, `0..1`),
         (`container`, `0..n`),
+        (`description`, `0..1`),
+        (`grouping`, `0..n`),
+        (`if-feature`, `0..n`),
+        (`key`, `0..1`),
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
-        (`choice`, `0..n`),
+        (`max-elements`, `0..1`),
+        (`min-elements`, `0..1`),
+        (`must`, `0..n`),
+        (`notification`, `0..n`),
+        (`ordered-by`, `0..1`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`typedef`, `0..n`),
+        (`unique`, `0..n`),
+        (`uses`, `0..n`),
+        (`when`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.6.2, "The leaf's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.6
 comptime LEAF_TYPED_SPEC = YangConstructSpec[
     `leaf`,
     yarg.IdentifierArgument,
-    fields[6](
-        (`when`, `0..1`),
-        (`type`, `1`),
-        (`must`, `0..n`),
+    fields[11](
+        (`config`, `0..1`),
         (`default`, `0..1`),
         (`description`, `0..1`),
+        (`if-feature`, `0..n`),
         (`mandatory`, `0..1`),
+        (`must`, `0..n`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`type`, `1`),
+        (`units`, `0..1`),
+        (`when`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.7.3, "The leaf-list's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.7
 comptime LEAF_LIST_TYPED_SPEC = YangConstructSpec[
     `leaf-list`,
     yarg.IdentifierArgument,
-    fields[8](
-        (`when`, `0..1`),
-        (`type`, `1`),
-        (`must`, `0..n`),
-        (`default`, `0..1`),
+    fields[13](
+        (`config`, `0..1`),
+        (`default`, `0..n`),
         (`description`, `0..1`),
-        (`mandatory`, `0..1`),
-        (`min-elements`, `0..1`),
+        (`if-feature`, `0..n`),
         (`max-elements`, `0..1`),
+        (`min-elements`, `0..1`),
+        (`must`, `0..n`),
+        (`ordered-by`, `0..1`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`type`, `1`),
+        (`units`, `0..1`),
+        (`when`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.3.1, "The typedef's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.3
 comptime TYPEDEF_TYPED_SPEC = YangConstructSpec[
     `typedef`,
     yarg.IdentifierArgument,
-    fields[4](
-        (`type`, `1`),
+    fields[6](
         (`default`, `0..1`),
         (`description`, `0..1`),
         (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`type`, `1`),
+        (`units`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.4.1, "The type's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.4
 comptime TYPE_TYPED_SPEC = YangConstructSpec[
     `type`,
     yarg.IdentifierArgument,
-    fields[9](
-        (`path`, `0..1`),
-        (`range-stmt`, `0..1`),
-        (`length`, `0..1`),
-        (`pattern`, `0..n`),
-        (`fraction-digits`, `0..1`),
-        (`enum`, `0..n`),
-        (`bit`, `0..n`),
-        (`type`, `0..n`),
+    fields[10](
         (`base`, `0..n`),
+        (`bit`, `0..n`),
+        (`enum`, `0..n`),
+        (`fraction-digits`, `0..1`),
+        (`length`, `0..1`),
+        (`path`, `0..1`),
+        (`pattern`, `0..n`),
+        (`range-stmt`, `0..1`),
+        (`require-instance`, `0..1`),
+        (`type`, `0..n`),
     ),
 ]
+## Source: RFC 7950 section 9.6.4.1, "The enum's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-9.6.4
 comptime ENUM_STMT_TYPED_SPEC = YangConstructSpec[
     `enum`,
     yarg.IdentifierArgument,
-    fields[2](
+    fields[5](
         (`description`, `0..1`),
+        (`if-feature`, `0..n`),
         (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`value`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 9.4.4.1, "The length's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-9.4.4
 comptime LENGTH_STMT_TYPED_SPEC = YangConstructSpec[
     `length`,
     yarg.LengthArgument,
-    fields[3](
+    fields[4](
         (`description`, `0..1`),
+        (`error-app-tag`, `0..1`),
         (`error-message`, `0..1`),
         (`reference`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 9.4.5.1, "The pattern's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-9.4.5
 comptime PATTERN_STMT_TYPED_SPEC = YangConstructSpec[
     `pattern`,
     yarg.PatternArgument,
-    fields[4](
+    fields[5](
         (`description`, `0..1`),
+        (`error-app-tag`, `0..1`),
         (`error-message`, `0..1`),
-        (`reference`, `0..1`),
         (`modifier`, `0..1`),
+        (`reference`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 9.7.4.1, "The bit's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-9.7.4
+comptime BIT_TYPED_SPEC = YangConstructSpec[
+    `bit`,
+    yarg.IdentifierArgument,
+    fields[5](
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
+        (`position`, `0..1`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+    ),
+]
+## Source: RFC 7950 section 9.2.4.1, "The range's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-9.2.4
+comptime RANGE_STMT_TYPED_SPEC = YangConstructSpec[
+    `range-stmt`,
+    yarg.RangeArgument,
+    fields[4](
+        (`description`, `0..1`),
+        (`error-app-tag`, `0..1`),
+        (`error-message`, `0..1`),
+        (`reference`, `0..1`),
+    ),
+]
+## Source: RFC 7950 section 7.12.1, "The grouping's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.12
 comptime GROUPING_TYPED_SPEC = YangConstructSpec[
     `grouping`,
     yarg.IdentifierArgument,
-    fields[7](
-        (`description`, `0..1`),
-        (`uses`, `0..n`),
+    fields[15](
+        (`action`, `0..n`),
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`choice`, `0..n`),
         (`container`, `0..n`),
+        (`description`, `0..1`),
+        (`grouping`, `0..n`),
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
-        (`choice`, `0..n`),
+        (`notification`, `0..n`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+        (`typedef`, `0..n`),
+        (`uses`, `0..n`),
     ),
 ]
+## Source: RFC 7950 section 7.9.1, "The choice's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.9
 comptime CHOICE_TYPED_SPEC = YangConstructSpec[
     `choice`,
     yarg.IdentifierArgument,
@@ -264,6 +370,8 @@ comptime CHOICE_TYPED_SPEC = YangConstructSpec[
         (`when`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.9.2.1, "The case's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.9
 comptime CASE_TYPED_SPEC = YangConstructSpec[
     `case`,
     yarg.IdentifierArgument,
@@ -283,17 +391,26 @@ comptime CASE_TYPED_SPEC = YangConstructSpec[
         (`when`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.1.9.1, "The revision's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.1.9
 comptime REVISION_TYPED_SPEC = YangConstructSpec[
     `revision`,
     yarg.RevisionDateArgument,
-    fields[1]((`description`, `0..1`)),
+    fields[2](
+        (`description`, `0..1`),
+        (`reference`, `0..1`),
+    ),
 ]
+## Source: RFC 7950 section 7.5.4, "The must's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.5
 comptime MUST_TYPED_SPEC = YangConstructSpec[
     `must`,
     yarg.XPathExpressionArgument,
-    fields[2](
-        (`error-message`, `0..1`),
+    fields[4](
         (`description`, `0..1`),
+        (`error-app-tag`, `0..1`),
+        (`error-message`, `0..1`),
+        (`reference`, `0..1`),
     ),
 ]
 
@@ -309,11 +426,12 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     def add_scalar_spec[kw: Keyword, arg_t: YangArgument]() {mut specs}:
         specs[kw] = RuntimeConstructSpec.scalar[kw, arg_t]()
 
+    add_scalar_spec[`action`, yarg.IdentifierArgument]()
     add_scalar_spec[`anydata`, yarg.IdentifierArgument]()
     add_scalar_spec[`anyxml`, yarg.IdentifierArgument]()
     add_scalar_spec[`augment`, yarg.PathArgument]()
     add_scalar_spec[`base`, yarg.QNameArgument]()
-    add_scalar_spec[`bit`, yarg.IdentifierArgument]()
+    add_spec[BIT_TYPED_SPEC]()
     add_spec[CASE_TYPED_SPEC]()
     add_spec[CHOICE_TYPED_SPEC]()
     add_scalar_spec[`config`, yarg.BoolArgument]()
@@ -323,6 +441,7 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_scalar_spec[`description`, yarg.StringArgument]()
     add_scalar_spec[`deviation`, yarg.PathArgument]()
     add_spec[ENUM_STMT_TYPED_SPEC]()
+    add_scalar_spec[`error-app-tag`, yarg.StringArgument]()
     add_scalar_spec[`error-message`, yarg.StringArgument]()
     add_scalar_spec[`extension`, yarg.IdentifierArgument]()
     add_scalar_spec[`feature`, yarg.IdentifierArgument]()
@@ -346,18 +465,24 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_scalar_spec[`namespace`, yarg.StringArgument]()
     add_scalar_spec[`notification`, yarg.IdentifierArgument]()
     add_scalar_spec[`organization`, yarg.StringArgument]()
+    add_scalar_spec[`ordered-by`, yarg.OrderedByArgument]()
     add_scalar_spec[`path`, yarg.PathArgument]()
     add_spec[PATTERN_STMT_TYPED_SPEC]()
+    add_scalar_spec[`position`, yarg.PositionArgument]()
     add_scalar_spec[`prefix`, yarg.IdentifierArgument]()
     add_scalar_spec[`presence`, yarg.StringArgument]()
-    add_scalar_spec[`range-stmt`, yarg.RangeArgument]()
+    add_spec[RANGE_STMT_TYPED_SPEC]()
     add_scalar_spec[`reference`, yarg.StringArgument]()
+    add_scalar_spec[`require-instance`, yarg.BoolArgument]()
     add_spec[REVISION_TYPED_SPEC]()
     add_scalar_spec[`rpc`, yarg.IdentifierArgument]()
     add_scalar_spec[`status`, yarg.StatusArgument]()
     add_spec[TYPE_TYPED_SPEC]()
     add_spec[TYPEDEF_TYPED_SPEC]()
+    add_scalar_spec[`unique`, yarg.StringArgument]()
+    add_scalar_spec[`units`, yarg.StringArgument]()
     add_scalar_spec[`uses`, yarg.QNameArgument]()
+    add_scalar_spec[`value`, yarg.Integer32Argument]()
     add_scalar_spec[`when`, yarg.XPathExpressionArgument]()
     add_scalar_spec[`yang-version`, yarg.YangVersionArgument]()
 

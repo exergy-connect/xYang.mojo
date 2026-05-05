@@ -11,9 +11,10 @@ from xyang.yang.keyword import Keyword
 
 comptime ArgumentParser = def(mut YangConstruct) raises thin -> None
 
-comptime KEYWORD_COUNT: Int = 52
+comptime KEYWORD_COUNT: Int = 60
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "<INVALID>",
+    "action",
     "anydata",
     "anyxml",
     "augment",
@@ -28,6 +29,7 @@ comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "description",
     "deviation",
     "enum",
+    "error-app-tag",
     "error-message",
     "extension",
     "feature",
@@ -51,18 +53,24 @@ comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "namespace",
     "notification",
     "organization",
+    "ordered-by",
     "path",
     "pattern",
+    "position",
     "prefix",
     "presence",
     "range",
     "reference",
+    "require-instance",
     "revision",
     "rpc",
     "status",
     "type",
     "typedef",
+    "unique",
+    "units",
     "uses",
+    "value",
     "when",
     "yang-version",
 ]
@@ -202,4 +210,3 @@ struct RuntimeConstructSpec(Copyable, ImplicitlyCopyable, Movable):
             var child_kw = keyword_id(child[].keyword, child[].line)
             ref child_spec = specs[Int(child_kw)]
             child_spec.validate(child[], specs)
-

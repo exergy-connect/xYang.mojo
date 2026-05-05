@@ -134,17 +134,21 @@ def find_schema_child_for_json_key(
                 return found^
             continue
         if kw == `choice`:
-            var sel = select_choice_case_from_instance(module, c, instance)
-            if not sel:
-                continue
-            var inner = find_schema_child_for_json_key(
-                module,
-                sel.value()[],
-                name,
-                instance,
-            )
-            if inner:
-                return inner^
+            ## RFC 7950: `case` is not a data node — instance keys are the leaves
+            ## (and containers/lists) nested under a branch. Try every `case` so
+            ## lookup matches the branch that actually declares `name`, not only
+            ## the first branch whose key-set intersects the instance.
+            for ch in c.children:
+                if ch[].spec != `case`:
+                    continue
+                var inner = find_schema_child_for_json_key(
+                    module,
+                    ch[],
+                    name,
+                    instance,
+                )
+                if inner:
+                    return inner^
             continue
     return Optional[Arc[YangConstruct]]()
 

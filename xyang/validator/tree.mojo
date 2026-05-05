@@ -11,6 +11,7 @@ from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.yang.spec import (
     `container`,
+    `enum`,
     `key`,
     `leaf`,
     `leaf-list`,
@@ -83,6 +84,33 @@ def validate_leaf_value(
         if value.kind != JsonValue.BOOL:
             _raise_json_path_error(
                 json_path, value.source_line, path, ": expected boolean"
+            )
+        return
+    if ty == "enumeration":
+        if value.kind != JsonValue.STRING:
+            _raise_json_path_error(
+                json_path, value.source_line, path, ": expected string"
+            )
+        var eff = module.leaf_effective_type_stmt(leaf)
+        if not eff:
+            _raise_json_path_error(
+                json_path,
+                value.source_line,
+                path,
+                ": missing effective type for enumeration",
+            )
+        var allowed = False
+        for ch in eff.value()[].children:
+            if ch[].spec == `enum` and ch[].has_argument():
+                if ch[].argument_text() == value.text:
+                    allowed = True
+                    break
+        if not allowed:
+            _raise_json_path_error(
+                json_path,
+                value.source_line,
+                path,
+                ": enumeration value not allowed",
             )
         return
     if ty == "uint16":

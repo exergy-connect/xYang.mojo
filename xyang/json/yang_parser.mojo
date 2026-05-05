@@ -396,6 +396,81 @@ def _type_from_schema(
     return t^
 
 
+## --- JSON Schema `oneOf` + `x-yang.choice` → YANG `choice` / `case` ---
+
+
+def _append_cases_from_oneof(
+    mut choice_node: YangConstruct,
+    read one_of_arr: json_parser.JsonValue,
+    read defs: json_parser.JsonValue,
+) raises:
+    ## Each `oneOf` branch becomes a `case`; branch `x-yang.name` is the case id.
+    if one_of_arr.kind != json_parser.JsonValue.ARRAY:
+        return
+    for bi in range(len(one_of_arr.array_values)):
+        ref branch = one_of_arr.array_values[bi][]
+        if branch.kind != json_parser.JsonValue.OBJECT:
+            continue
+        var bxy = _xyang(branch)
+        var case_id = String("case-") + String(bi)
+        if bxy and bxy.value()[].kind == json_parser.JsonValue.OBJECT:
+            var nn = _json_string(bxy.value()[], "name")
+            if nn.byte_length() > 0:
+                case_id = nn.copy()
+        var case_node = _stmt("case", case_id)
+        var props = json_parser.json_get(branch, "properties")
+        var required = json_parser.json_get(branch, "required")
+        if props and props.value()[].kind == json_parser.JsonValue.OBJECT:
+            for j in range(len(props.value()[].object_keys)):
+                var child_name = props.value()[].object_keys[j]
+                var mandatory = Optional[Bool]()
+                if (
+                    required
+                    and required.value()[].kind == json_parser.JsonValue.ARRAY
+                ):
+                    for req in required.value()[].array_values:
+                        if (
+                            req[].kind == json_parser.JsonValue.STRING
+                            and req[].text == child_name
+                        ):
+                            mandatory = Optional[Bool](True)
+                var child = _convert_property(
+                    child_name,
+                    props.value()[].object_values[j][],
+                    defs,
+                    mandatory,
+                )
+                if child:
+                    _append_stmt(case_node, child.take())
+        _append_stmt(choice_node, case_node^)
+
+
+def _append_choice_from_schema_oneof(
+    mut container_node: YangConstruct,
+    read schema: json_parser.JsonValue,
+    read xy: json_parser.JsonValue,
+    read defs: json_parser.JsonValue,
+) raises:
+    ## When a `container` schema uses `oneOf` for mutually exclusive branches,
+    ## `x-yang.choice` supplies the YANG choice name and metadata.
+    var one_of_top = json_parser.json_get(schema, "oneOf")
+    var choice_blob = json_parser.json_get(xy, "choice")
+    if (
+        not one_of_top
+        or one_of_top.value()[].kind != json_parser.JsonValue.ARRAY
+        or not choice_blob
+        or choice_blob.value()[].kind != json_parser.JsonValue.OBJECT
+    ):
+        return
+    ref ch_xy = choice_blob.value()[]
+    var ch = _stmt("choice", _json_string(ch_xy, "name", "branches"))
+    _append_arg(ch, "description", _json_string(ch_xy, "description"))
+    if _json_bool(ch_xy, "mandatory"):
+        _append_arg(ch, "mandatory", "true")
+    _append_cases_from_oneof(ch, one_of_top.value()[], defs)
+    _append_stmt(container_node, ch^)
+
+
 ## --- One schema property → optional child statement (recursive) ---
 
 
@@ -404,7 +479,7 @@ def _convert_property(
     read prop_value: json_parser.JsonValue,
     read defs: json_parser.JsonValue,
     mandatory_override: Optional[Bool] = Optional[Bool](),
-) -> Optional[YangConstruct]:
+) raises -> Optional[YangConstruct]:
     if prop_value.kind != json_parser.JsonValue.OBJECT:
         return Optional[YangConstruct]()
     ref schema = prop_value
@@ -449,7 +524,24 @@ def _convert_property(
                 )
                 if child:
                     _append_stmt(node, child.take())
+        _append_choice_from_schema_oneof(node, schema, xy.value()[], defs)
         return Optional[YangConstruct](node^)
+
+    if node_type == "choice":
+        var ch_node = _stmt("choice", name)
+        _append_arg(ch_node, "description", _json_string(schema, "description"))
+        _append_when(ch_node, xy.value()[])
+        _append_musts(ch_node, xy.value()[])
+        if _json_bool(xy.value()[], "mandatory"):
+            _append_arg(ch_node, "mandatory", "true")
+        var one_of_ch = json_parser.json_get(schema, "oneOf")
+        if (
+            not one_of_ch
+            or one_of_ch.value()[].kind != json_parser.JsonValue.ARRAY
+        ):
+            return Optional[YangConstruct]()
+        _append_cases_from_oneof(ch_node, one_of_ch.value()[], defs)
+        return Optional[YangConstruct](ch_node^)
 
     if node_type == "list":
         var node = _stmt("list", name)
