@@ -103,12 +103,38 @@ def fields[n: Int](*fieldlist: FIELD) -> RuleTable:
     return table
 
 
+@always_inline
+def _effective_field_rule(
+    read ordered: Optional[RuleTable],
+    read node_specific: Optional[RuleTable],
+    idx: Int,
+) raises -> FieldRule:
+    if ordered:
+        var co = ordered.value()[idx].cardinality
+        if co != `0`:
+            return ordered.value()[idx]
+    if node_specific:
+        return node_specific.value()[idx]
+    return FieldRule(`0`)
+
+
+@always_inline
+def _no_substatement_rules(
+    read ordered: Optional[RuleTable], read node_specific: Optional[RuleTable]
+) -> Bool:
+    return not ordered and not node_specific
+
+
 trait YangConstructSpecTrait(Movable):
     comptime KEYWORD: Keyword
     comptime ARGUMENT_TYPE: YangArgument
 
     @staticmethod
-    def allowed_fields() -> RuleTable:
+    def ordered_data_nodes() -> RuleTable:
+        ...
+
+    @staticmethod
+    def node_specific_fields() -> RuleTable:
         ...
 
 
@@ -123,14 +149,18 @@ struct RuntimeConstructSpec(Copyable, ImplicitlyCopyable, Movable):
 
     var kw: Keyword
     var parse_argument: ArgumentParser
-    var allowed_fields: RuleTable
+    var ordered_data_nodes: Optional[RuleTable]
+    var node_specific_fields: Optional[RuleTable]
 
     @staticmethod
     def from_comptime[spec: YangConstructSpecTrait]() -> Self:
         return RuntimeConstructSpec(
             kw=spec.KEYWORD,
             parse_argument=_parse_argument[spec.ARGUMENT_TYPE],
-            allowed_fields=spec.allowed_fields(),
+            ordered_data_nodes=Optional[RuleTable](spec.ordered_data_nodes()),
+            node_specific_fields=Optional[RuleTable](
+                spec.node_specific_fields()
+            ),
         )
 
     @staticmethod
@@ -138,7 +168,8 @@ struct RuntimeConstructSpec(Copyable, ImplicitlyCopyable, Movable):
         return RuntimeConstructSpec(
             kw=kw,
             parse_argument=_parse_argument[arg_t],
-            allowed_fields=fields[0](),
+            ordered_data_nodes=Optional[RuleTable](),
+            node_specific_fields=Optional[RuleTable](),
         )
 
     def validate(
@@ -163,7 +194,9 @@ struct RuntimeConstructSpec(Copyable, ImplicitlyCopyable, Movable):
             )
         self.parse_argument(node)
 
-        if len(self.allowed_fields) == 0:
+        if _no_substatement_rules(
+            self.ordered_data_nodes, self.node_specific_fields
+        ):
             for child in node.children:
                 raise Error(
                     (
@@ -182,7 +215,11 @@ struct RuntimeConstructSpec(Copyable, ImplicitlyCopyable, Movable):
         var counts = InlineArray[Int, KEYWORD_COUNT](fill=0)
         for child in node.children:
             var child_kw = keyword_id(child[].keyword, child[].line)
-            var rule = self.allowed_fields[Int(child_kw)]
+            var rule = _effective_field_rule(
+                self.ordered_data_nodes,
+                self.node_specific_fields,
+                Int(child_kw),
+            )
             if rule.cardinality == `0`:
                 raise Error(
                     (
@@ -198,9 +235,12 @@ struct RuntimeConstructSpec(Copyable, ImplicitlyCopyable, Movable):
             counts[Int(child_kw)] += 1
 
         for i in range(KEYWORD_COUNT):
+            var eff = _effective_field_rule(
+                self.ordered_data_nodes, self.node_specific_fields, i
+            )
             check_cardinality(
                 keyword_spelling(Keyword(i)),
-                self.allowed_fields[i].cardinality,
+                eff.cardinality,
                 counts[i],
                 node.line,
             )

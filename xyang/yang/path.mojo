@@ -85,10 +85,10 @@ def parse_yang_qname(text: String) raises -> YangQName:
     return qname^
 
 
-def parse_yang_path(text: String, line: UInt = 0) raises -> YangPath:
+def parse_yang_path(text: String, line: UInt = 0, allow_absolute: Bool = True) raises -> YangPath:
     var bytes = text.as_bytes()
     var parser = YangPathParser(bytes, line)
-    return parser.parse()
+    return parser.parse(allow_absolute)
 
 
 struct YangPathParser[origin: ImmutOrigin]:
@@ -146,12 +146,14 @@ struct YangPathParser[origin: ImmutOrigin]:
         self.consume(`/`, "expected `/` after `..` in path predicate target")
         return True
 
-    def parse(mut self) raises -> YangPath:
+    def parse(mut self, allow_absolute: Bool = True) raises -> YangPath:
         self.skip_ws()
         var absolute = False
         var parent_steps = 0
 
         if not self.eof() and self.input[self.pos] == `/`:
+            if not allow_absolute:
+                self.syntax_error("absolute path not allowed")
             absolute = True
             self.pos += 1
         else:

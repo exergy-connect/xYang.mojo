@@ -21,6 +21,7 @@ from ..keyword import Keyword
 
 comptime Arc = ArcPointer
 comptime ConstructMap = Dict[String, Arc[YangConstruct]]
+comptime ModuleFieldMap = Dict[Keyword, Arc[YangConstruct]]
 
 
 @always_inline
@@ -65,7 +66,7 @@ struct YangModule(Movable & Iterable):
     ]: Iterator = TopContainerIterator
 
     var root: Optional[Arc[YangConstruct]]
-    var fields: Dict[Keyword, String]
+    var fields: ModuleFieldMap
     var revisions: List[String]
     var groupings: ConstructMap
     var typedefs: ConstructMap
@@ -73,7 +74,7 @@ struct YangModule(Movable & Iterable):
 
     def __init__(out self):
         self.root = Optional[Arc[YangConstruct]]()
-        self.fields = Dict[Keyword, String]()
+        self.fields = ModuleFieldMap()
         self.revisions = List[String]()
         self.groupings = ConstructMap()
         self.typedefs = ConstructMap()
@@ -96,16 +97,14 @@ struct YangModule(Movable & Iterable):
 
         var specs = build_spec_table()
         specs[Int(`module`)].validate(tree, specs)
-        self._populate_from_validated_tree(tree)
         self.root = Optional[Arc[YangConstruct]](Arc[YangConstruct](tree^))
+        self._populate_from_validated_root()
 
-    def _populate_from_validated_tree(
-        mut self, read tree: YangConstruct
-    ) raises:
+    def _populate_from_validated_root(mut self) raises:
         from ..spec import `container`, `grouping`, `revision`, `typedef`
 
-        self.fields[tree.spec] = tree.argument_text()
-        for child in tree.children:
+        ref root_arc = self.root.value()
+        for child in root_arc[].children:
             ref node = child[]
             var arg = node.argument_text()
             var kw = node.spec
@@ -118,52 +117,71 @@ struct YangModule(Movable & Iterable):
             elif kw == `container`:
                 _insert_unique(self.top_containers, arg, child)
             else:
-                self.fields[kw] = arg
+                self.fields[kw] = child.copy()
 
     def root_construct(read self) raises -> Arc[YangConstruct]:
         if not self.root:
             raise Error("YANG module has no parsed root construct")
         return self.root.value().copy()
 
-    def field(read self, kw: Keyword) raises -> Optional[String]:
+    def field(read self, kw: Keyword) raises -> Optional[Arc[YangConstruct]]:
         if kw not in self.fields:
+            return Optional[Arc[YangConstruct]]()
+        return Optional[Arc[YangConstruct]](self.fields[kw].copy())
+
+    @always_inline
+    def _field_argument_text_optional(
+        read self, kw: Keyword
+    ) raises -> Optional[String]:
+        var stmt = self.field(kw)
+        if not stmt:
             return Optional[String]()
-        return Optional[String](self.fields[kw])
+        ref n = stmt.value()[]
+        if not n.has_argument():
+            return Optional[String]()
+        return Optional[String](n.argument_text())
+
+    @always_inline
+    def _field_argument_text_required(read self, kw: Keyword) raises -> String:
+        ref n = self.fields[kw][]
+        if n.has_argument():
+            return n.argument_text()
+        return ""
 
     def get_name(read self) raises -> String:
         from ..spec import `module`
 
-        return self.fields[`module`]
+        return self._field_argument_text_required(`module`)
 
     def get_yang_version(read self) raises -> Optional[String]:
         from ..spec import `yang-version`
 
-        return self.field(`yang-version`)
+        return self._field_argument_text_optional(`yang-version`)
 
     def get_namespace(read self) raises -> String:
         from ..spec import `namespace`
 
-        return self.fields[`namespace`]
+        return self._field_argument_text_required(`namespace`)
 
     def get_prefix(read self) raises -> String:
         from ..spec import `prefix`
 
-        return self.fields[`prefix`]
+        return self._field_argument_text_required(`prefix`)
 
     def get_organization(read self) raises -> Optional[String]:
         from ..spec import `organization`
 
-        return self.field(`organization`)
+        return self._field_argument_text_optional(`organization`)
 
     def get_contact(read self) raises -> Optional[String]:
         from ..spec import `contact`
 
-        return self.field(`contact`)
+        return self._field_argument_text_optional(`contact`)
 
     def get_description(read self) raises -> Optional[String]:
         from ..spec import `description`
 
-        return self.field(`description`)
+        return self._field_argument_text_optional(`description`)
 
     def get_revisions(read self) -> List[String]:
         return self.revisions.copy()
@@ -215,15 +233,17 @@ struct YangModule(Movable & Iterable):
     def is_leaf_name_in_uses(
         read self, read parent: YangConstruct, name: String
     ) raises -> Bool:
+        from ..spec import `leaf`, `uses`
+
         for child in parent.children:
-            if child[].keyword != "uses" or not child[].has_argument():
+            if child[].spec != `uses` or not child[].has_argument():
                 continue
             var grouping = self.find_grouping(child[].argument_text())
             if not grouping:
                 continue
             for gchild in grouping.value()[].children:
                 if (
-                    gchild[].keyword == "leaf"
+                    gchild[].spec == `leaf`
                     and gchild[].has_argument()
                     and gchild[].argument_text() == name
                 ):
@@ -233,15 +253,17 @@ struct YangModule(Movable & Iterable):
     def find_effective_leaf(
         read self, read parent: YangConstruct, name: String
     ) raises -> Optional[Arc[YangConstruct]]:
+        from ..spec import `leaf`, `uses`
+
         for child in parent.children:
             if (
-                child[].keyword == "leaf"
+                child[].spec == `leaf`
                 and child[].has_argument()
                 and child[].argument_text() == name
             ):
                 return Optional[Arc[YangConstruct]](child.copy())
         for child in parent.children:
-            if child[].keyword != "uses" or not child[].has_argument():
+            if child[].spec != `uses` or not child[].has_argument():
                 continue
             var grouping = self.find_grouping(child[].argument_text())
             if not grouping:

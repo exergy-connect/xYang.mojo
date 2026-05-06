@@ -142,6 +142,12 @@ module ex-mod {
     var unique_stmt = _find_first_keyword(root_arc, "unique")
     assert_true(unique_stmt)
     assert_true(unique_stmt.value()[].argument.isa[UniqueArgument]())
+    ref uarg = unique_stmt.value()[].argument.get[UniqueArgument]()
+    assert_true(len(uarg.paths) == 2)
+    assert_true(uarg.paths[0].text == "name")
+    assert_true(len(uarg.paths[0].segments) == 1)
+    assert_true(uarg.paths[1].text == "ex:extra/nested")
+    assert_true(len(uarg.paths[1].segments) == 2)
 
     var aug = _find_first_keyword(root_arc, "augment")
     assert_true(aug)

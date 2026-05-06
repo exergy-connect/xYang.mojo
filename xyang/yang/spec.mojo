@@ -80,31 +80,46 @@ comptime `yang-version`: Keyword = 59
 struct YangConstructSpec[
     kw: Keyword,
     arg_t: YangArgument,
-    allowed_fields_table: RuleTable,
+    ordered_data_nodes_table: RuleTable,
+    node_specific_fields_table: RuleTable,
 ](Movable, YangConstructSpecTrait):
     comptime KEYWORD: Keyword = Self.kw
     comptime ARGUMENT_TYPE: YangArgument = Self.arg_t
 
     @staticmethod
-    def allowed_fields() -> RuleTable:
-        return Self.allowed_fields_table
+    def ordered_data_nodes() -> RuleTable:
+        return Self.ordered_data_nodes_table
+
+    @staticmethod
+    def node_specific_fields() -> RuleTable:
+        return Self.node_specific_fields_table
 
     def __init__(out self):
         pass
 
+# Not included: augment, rpc
+# TODO: Move notification out of here, treat separately
+comptime COMMON_DATA_NODES = fields[9](
+        (`anydata`, `0..n`),
+        (`anyxml`, `0..n`),
+        (`choice`, `0..n`),
+        (`container`, `0..n`),
+        (`leaf`, `0..n`),
+        (`leaf-list`, `0..n`),
+        (`list`, `0..n`),
+        (`notification`, `0..n`),
+        (`uses`, `0..n`),
+    )
 
 ## Source: RFC 7950 section 7.1.1, "The module's Substatements".
 ## https://datatracker.ietf.org/doc/html/rfc7950#section-7.1.1
 comptime MODULE_SPEC = YangConstructSpec[
     `module`,
     yarg.IdentifierArgument,
-    fields[27](
-        (`anydata`, `0..n`),
-        (`anyxml`, `0..n`),
+    COMMON_DATA_NODES,
+    fields[18](
         (`augment`, `0..n`),
-        (`choice`, `0..n`),
         (`contact`, `0..1`),
-        (`container`, `0..n`),
         (`description`, `0..1`),
         (`deviation`, `0..n`),
         (`extension`, `0..n`),
@@ -113,18 +128,13 @@ comptime MODULE_SPEC = YangConstructSpec[
         (`identity`, `0..n`),
         (`import`, `0..n`),
         (`include`, `0..n`),
-        (`leaf`, `0..n`),
-        (`leaf-list`, `0..n`),
-        (`list`, `0..n`),
         (`namespace`, `1`),
-        (`notification`, `0..n`),
         (`organization`, `0..1`),
         (`prefix`, `1`),
         (`reference`, `0..1`),
         (`revision`, `0..n`),
         (`rpc`, `0..n`),
         (`typedef`, `0..n`),
-        (`uses`, `0..n`),
         (`yang-version`, `1`),
     ),
 ]
@@ -133,26 +143,18 @@ comptime MODULE_SPEC = YangConstructSpec[
 comptime CONTAINER_SPEC = YangConstructSpec[
     `container`,
     yarg.IdentifierArgument,
-    fields[20](
+    COMMON_DATA_NODES,
+    fields[11](
         (`action`, `0..n`),
-        (`anydata`, `0..n`),
-        (`anyxml`, `0..n`),
-        (`choice`, `0..n`),
         (`config`, `0..1`),
-        (`container`, `0..n`),
         (`description`, `0..1`),
         (`grouping`, `0..n`),
         (`if-feature`, `0..n`),
-        (`leaf`, `0..n`),
-        (`leaf-list`, `0..n`),
-        (`list`, `0..n`),
         (`must`, `0..n`),
-        (`notification`, `0..n`),
         (`presence`, `0..1`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
         (`typedef`, `0..n`),
-        (`uses`, `0..n`),
         (`when`, `0..1`),
     ),
 ]
@@ -161,30 +163,22 @@ comptime CONTAINER_SPEC = YangConstructSpec[
 comptime LIST_SPEC = YangConstructSpec[
     `list`,
     yarg.IdentifierArgument,
-    fields[24](
+    COMMON_DATA_NODES,
+    fields[15](
         (`action`, `0..n`),
-        (`anydata`, `0..n`),
-        (`anyxml`, `0..n`),
-        (`choice`, `0..n`),
         (`config`, `0..1`),
-        (`container`, `0..n`),
         (`description`, `0..1`),
         (`grouping`, `0..n`),
         (`if-feature`, `0..n`),
         (`key`, `0..1`),
-        (`leaf`, `0..n`),
-        (`leaf-list`, `0..n`),
-        (`list`, `0..n`),
         (`max-elements`, `0..1`),
         (`min-elements`, `0..1`),
         (`must`, `0..n`),
-        (`notification`, `0..n`),
         (`ordered-by`, `0..1`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
         (`typedef`, `0..n`),
         (`unique`, `0..n`),
-        (`uses`, `0..n`),
         (`when`, `0..1`),
     ),
 ]
@@ -193,6 +187,7 @@ comptime LIST_SPEC = YangConstructSpec[
 comptime LEAF_SPEC = YangConstructSpec[
     `leaf`,
     yarg.IdentifierArgument,
+    fields[0](),
     fields[11](
         (`config`, `0..1`),
         (`default`, `0..1`),
@@ -212,6 +207,7 @@ comptime LEAF_SPEC = YangConstructSpec[
 comptime LEAF_LIST_SPEC = YangConstructSpec[
     `leaf-list`,
     yarg.IdentifierArgument,
+    fields[0](),
     fields[13](
         (`config`, `0..1`),
         (`default`, `0..n`),
@@ -233,6 +229,7 @@ comptime LEAF_LIST_SPEC = YangConstructSpec[
 comptime TYPEDEF_SPEC = YangConstructSpec[
     `typedef`,
     yarg.IdentifierArgument,
+    fields[0](),
     fields[6](
         (`default`, `0..1`),
         (`description`, `0..1`),
@@ -248,7 +245,8 @@ comptime TYPEDEF_SPEC = YangConstructSpec[
 comptime TYPE_SPEC = YangConstructSpec[
     `type`,
     yarg.QNameArgument,
-    fields[10](
+    fields[1]((`type`, `0..n`)),
+    fields[9](
         (`base`, `0..n`),
         (`bit`, `0..n`),
         (`enum`, `0..n`),
@@ -258,7 +256,6 @@ comptime TYPE_SPEC = YangConstructSpec[
         (`pattern`, `0..n`),
         (`range-stmt`, `0..1`),
         (`require-instance`, `0..1`),
-        (`type`, `0..n`),
     ),
 ]
 ## Source: RFC 7950 section 9.6.4.1, "The enum's Substatements".
@@ -266,6 +263,7 @@ comptime TYPE_SPEC = YangConstructSpec[
 comptime ENUM_STMT_SPEC = YangConstructSpec[
     `enum`,
     yarg.IdentifierArgument,
+    fields[0](),
     fields[5](
         (`description`, `0..1`),
         (`if-feature`, `0..n`),
@@ -279,6 +277,7 @@ comptime ENUM_STMT_SPEC = YangConstructSpec[
 comptime LENGTH_STMT_SPEC = YangConstructSpec[
     `length`,
     yarg.LengthArgument,
+    fields[0](),
     fields[4](
         (`description`, `0..1`),
         (`error-app-tag`, `0..1`),
@@ -291,6 +290,7 @@ comptime LENGTH_STMT_SPEC = YangConstructSpec[
 comptime PATTERN_STMT_SPEC = YangConstructSpec[
     `pattern`,
     yarg.PatternArgument,
+    fields[0](),
     fields[5](
         (`description`, `0..1`),
         (`error-app-tag`, `0..1`),
@@ -304,6 +304,7 @@ comptime PATTERN_STMT_SPEC = YangConstructSpec[
 comptime BIT_SPEC = YangConstructSpec[
     `bit`,
     yarg.IdentifierArgument,
+    fields[0](),
     fields[5](
         (`description`, `0..1`),
         (`if-feature`, `0..n`),
@@ -317,6 +318,7 @@ comptime BIT_SPEC = YangConstructSpec[
 comptime RANGE_STMT_SPEC = YangConstructSpec[
     `range-stmt`,
     yarg.RangeArgument,
+    fields[0](),
     fields[4](
         (`description`, `0..1`),
         (`error-app-tag`, `0..1`),
@@ -329,22 +331,14 @@ comptime RANGE_STMT_SPEC = YangConstructSpec[
 comptime GROUPING_SPEC = YangConstructSpec[
     `grouping`,
     yarg.IdentifierArgument,
-    fields[15](
+    COMMON_DATA_NODES,
+    fields[6](
         (`action`, `0..n`),
-        (`anydata`, `0..n`),
-        (`anyxml`, `0..n`),
-        (`choice`, `0..n`),
-        (`container`, `0..n`),
         (`description`, `0..1`),
         (`grouping`, `0..n`),
-        (`leaf`, `0..n`),
-        (`leaf-list`, `0..n`),
-        (`list`, `0..n`),
-        (`notification`, `0..n`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
         (`typedef`, `0..n`),
-        (`uses`, `0..n`),
     ),
 ]
 ## Source: RFC 7950 section 7.9.1, "The choice's Substatements".
@@ -352,19 +346,21 @@ comptime GROUPING_SPEC = YangConstructSpec[
 comptime CHOICE_SPEC = YangConstructSpec[
     `choice`,
     yarg.IdentifierArgument,
-    fields[16](
+    fields[8](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
         (`case`, `0..n`),
         (`choice`, `0..n`),
-        (`config`, `0..1`),
         (`container`, `0..n`),
-        (`default`, `0..1`),
-        (`description`, `0..1`),
-        (`if-feature`, `0..n`),
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
+    ),
+    fields[8](
+        (`config`, `0..1`),
+        (`default`, `0..1`),
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
         (`mandatory`, `0..1`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
@@ -376,19 +372,21 @@ comptime CHOICE_SPEC = YangConstructSpec[
 comptime CASE_SPEC = YangConstructSpec[
     `case`,
     yarg.IdentifierArgument,
-    fields[12](
+    fields[8](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
         (`choice`, `0..n`),
         (`container`, `0..n`),
-        (`description`, `0..1`),
-        (`if-feature`, `0..n`),
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
+        (`uses`, `0..n`),
+    ),
+    fields[5](
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
-        (`uses`, `0..n`),
         (`when`, `0..1`),
     ),
 ]
@@ -397,6 +395,7 @@ comptime CASE_SPEC = YangConstructSpec[
 comptime REVISION_SPEC = YangConstructSpec[
     `revision`,
     yarg.RevisionDateArgument,
+    fields[0](),
     fields[2](
         (`description`, `0..1`),
         (`reference`, `0..1`),
@@ -407,6 +406,7 @@ comptime REVISION_SPEC = YangConstructSpec[
 comptime MUST_SPEC = YangConstructSpec[
     `must`,
     yarg.XPathExpressionArgument,
+    fields[0](),
     fields[4](
         (`description`, `0..1`),
         (`error-app-tag`, `0..1`),
@@ -419,6 +419,7 @@ comptime MUST_SPEC = YangConstructSpec[
 comptime IDENTITY_SPEC = YangConstructSpec[
     `identity`,
     yarg.IdentifierArgument,
+    fields[0](),
     fields[5](
         (`base`, `0..n`),
         (`description`, `0..1`),
@@ -432,19 +433,21 @@ comptime IDENTITY_SPEC = YangConstructSpec[
 comptime AUGMENT_SPEC = YangConstructSpec[
     `augment`,
     yarg.PathArgument,
-    fields[15](
+    fields[10](
         (`action`, `0..n`),
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
         (`case`, `0..n`),
         (`choice`, `0..n`),
         (`container`, `0..n`),
-        (`description`, `0..1`),
-        (`if-feature`, `0..n`),
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
         (`notification`, `0..n`),
+    ),
+    fields[5](
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
         (`when`, `0..1`),
