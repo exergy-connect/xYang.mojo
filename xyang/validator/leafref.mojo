@@ -1,16 +1,13 @@
 ## Leafref path resolution against a JSON document tree (RFC 7950 §9.9.2).
 ##
 ## Context node for ``path`` is the leafref leaf; leading ``../`` ascends the
-## instance path built during validation. List predicates use ``current()`` as
-## each candidate list entry (§9.9.2).
+## instance path built during validation. ``current()`` in list predicates
+## refers to the leafref leaf itself (§9.9.2).
 
 from std.collections import Dict, List
 from std.memory import ArcPointer
 
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
-import xyang.validator.schema_walk as schema_walk
-from xyang.yang.ast.construct import YangConstruct
-from xyang.yang.ast.module import YangModule
 import xyang.yang.ast.util as ast_util
 from xyang.yang.path import (
     YangPath,
@@ -20,7 +17,6 @@ from xyang.yang.path import (
     YangQName,
     parse_yang_path,
 )
-from xyang.yang.spec import `container`, `leaf`, `list`
 
 
 comptime Arc = ArcPointer
@@ -191,11 +187,11 @@ def _evaluate_key_expression(
 def _predicate_matches(
     read root: JsonValue,
     read pred: YangPathPredicate,
-    read candidate_path: String,
+    read leafref_leaf_path: String,
     read candidate_obj: JsonValue,
 ) raises -> Bool:
     var key_local = pred.key.local_name
-    var want = _evaluate_key_expression(root, pred.target, candidate_path)
+    var want = _evaluate_key_expression(root, pred.target, leafref_leaf_path)
     if candidate_obj.kind != JsonValue.OBJECT:
         return False
     var got_slot = json_get(candidate_obj, key_local)
@@ -210,6 +206,7 @@ def _collect_resolved_values_from_object(
     read steps: List[YangPathStep],
     step_index: Int,
     read path_to_start: String,
+    read leafref_leaf_path: String,
     mut out: List[String],
 ) raises:
     if step_index >= len(steps):
@@ -231,17 +228,20 @@ def _collect_resolved_values_from_object(
             )
             var ok = True
             for pr in step.predicates:
-                if not _predicate_matches(root, pr, cand_path, elem):
+                if not _predicate_matches(
+                    root, pr, leafref_leaf_path, elem
+                ):
                     ok = False
                     break
             if ok:
                 _collect_resolved_values_from_object(
-                    root, elem, steps, step_index + 1, cand_path, out
+                    root, elem, steps, step_index + 1, cand_path,
+                    leafref_leaf_path, out,
                 )
         return
     var down = _join_path(path_to_start, local)
     _collect_resolved_values_from_object(
-        root, child, steps, step_index + 1, down, out
+        root, child, steps, step_index + 1, down, leafref_leaf_path, out
     )
 
 
@@ -253,7 +253,7 @@ def collect_leafref_target_values(
     var out = List[String]()
     if yang_path.absolute:
         _collect_resolved_values_from_object(
-            root, root, yang_path.segments, 0, "", out
+            root, root, yang_path.segments, 0, "", leaf_parent_path, out
         )
         return out^
     var rev = _ancestor_rev_chain(leaf_parent_path)
@@ -262,12 +262,13 @@ def collect_leafref_target_values(
     var start_path = rev[yang_path.parent_steps]
     if start_path.byte_length() == 0:
         _collect_resolved_values_from_object(
-            root, root, yang_path.segments, 0, "", out
+            root, root, yang_path.segments, 0, "", leaf_parent_path, out
         )
     else:
         var start_arc = _json_arc_at_path(root, start_path)
         _collect_resolved_values_from_object(
-            root, start_arc[], yang_path.segments, 0, start_path, out
+            root, start_arc[], yang_path.segments, 0, start_path,
+            leaf_parent_path, out,
         )
     return out^
 
@@ -298,103 +299,3 @@ struct LeafrefCache:
         return value in self.target_sets[key]
 
 
-def check_leafrefs_in_object(
-    read data: JsonValue,
-    read schema: YangConstruct,
-    read module: YangModule,
-    read root: JsonValue,
-    path: String,
-    json_path: String,
-) raises:
-    var cache = LeafrefCache()
-    check_leafrefs_in_object(data, schema, module, root, path, json_path, cache)
-
-
-def check_leafrefs_in_object(
-    read data: JsonValue,
-    read schema: YangConstruct,
-    read module: YangModule,
-    read root: JsonValue,
-    path: String,
-    json_path: String,
-    mut cache: LeafrefCache,
-) raises:
-    if data.kind != JsonValue.OBJECT:
-        return
-    for i in range(len(data.object_keys)):
-        var key = data.object_keys[i]
-        ref slot = data.object_values[i][]
-        var data_child = schema_walk.find_schema_child_for_json_key(
-            module,
-            schema,
-            key,
-            data,
-        )
-        if (
-            data_child
-            and data_child.value()[].spec == `leaf`
-            and module.leaf_type(data_child.value()[]) == "leafref"
-        ):
-            var target_path = module.leafref_path(data_child.value()[])
-            var actual = json_scalar_text(slot)
-            ## Leafref paths (e.g. `../fields/name`) are evaluated with the
-            ## leafref leaf as context; `..` must reach the parent data node.
-            var leaf_path = path + "/" + key
-            if not cache.contains(root, target_path, leaf_path, actual):
-                var pfx = String()
-                if json_path.byte_length() > 0:
-                    pfx += json_path + " "
-                if slot.source_line > 0:
-                    pfx += "line " + String(slot.source_line) + ": "
-                raise Error(
-                    pfx
-                    + path
-                    + "/"
-                    + key
-                    + ": leafref `"
-                    + actual
-                    + "` does not resolve"
-                )
-        if data_child and data_child.value()[].spec == `container`:
-            check_leafrefs_in_object(
-                slot,
-                data_child.value()[],
-                module,
-                root,
-                path + "/" + key,
-                json_path,
-                cache,
-            )
-        if data_child and data_child.value()[].spec == `list`:
-            check_leafrefs_in_list(
-                slot,
-                data_child.value()[],
-                module,
-                root,
-                path + "/" + key,
-                json_path,
-                cache,
-            )
-
-
-def check_leafrefs_in_list(
-    read data: JsonValue,
-    read schema: YangConstruct,
-    read module: YangModule,
-    read root: JsonValue,
-    path: String,
-    json_path: String,
-    mut cache: LeafrefCache,
-) raises:
-    if data.kind != JsonValue.ARRAY:
-        return
-    for i in range(len(data.array_values)):
-        check_leafrefs_in_object(
-            data.array_values[i][],
-            schema,
-            module,
-            root,
-            path + "[" + String(i) + "]",
-            json_path,
-            cache,
-        )

@@ -1,9 +1,11 @@
 ## Top-level validation: YANG module shape + JSON instance document.
+##
+## A single pass validates structure, leaf types, and leafref resolution.
 
 from xyang.json.parser import JsonValue, parse_json
 from xyang.yang.ast.module import YangModule
 from xyang.yang.ast.lexer import AstLexer
-from xyang.validator.leafref import LeafrefCache, check_leafrefs_in_object
+from xyang.validator.leafref import LeafrefCache
 from xyang.validator.tree import validate_object_against_construct
 
 
@@ -36,14 +38,7 @@ def validate_data(
             "/" + key,
             json_path,
             "/" + key,
-        )
-        check_leafrefs_in_object(
-            slot,
-            container.value()[],
-            module,
             data,
-            "/" + key,
-            json_path,
             leafref_cache,
         )
 
