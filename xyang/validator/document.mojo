@@ -31,6 +31,13 @@ def validate_data(
             if slot.source_line > 0:
                 pfx2 += "line " + String(slot.source_line) + ": "
             raise Error(pfx2 + "/: unknown top-level field `" + key + "`")
+        if not module.is_construct_active(container.value()[]):
+            var pfx3 = String()
+            if json_path.byte_length() > 0:
+                pfx3 += json_path + " "
+            if slot.source_line > 0:
+                pfx3 += "line " + String(slot.source_line) + ": "
+            raise Error(pfx3 + "/: unknown top-level field `" + key + "`")
         validate_object_against_construct(
             slot,
             container.value()[],

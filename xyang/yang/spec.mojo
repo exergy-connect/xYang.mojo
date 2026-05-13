@@ -428,6 +428,19 @@ comptime IDENTITY_SPEC = YangConstructSpec[
         (`status`, `0..1`),
     ),
 ]
+## Source: RFC 7950 section 7.20.1, "The feature's Substatements".
+## https://datatracker.ietf.org/doc/html/rfc7950#section-7.20
+comptime FEATURE_SPEC = YangConstructSpec[
+    `feature`,
+    yarg.IdentifierArgument,
+    fields[0](),
+    fields[4](
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
+        (`reference`, `0..1`),
+        (`status`, `0..1`),
+    ),
+]
 ## Source: RFC 7950 section 7.17, "The augment Statement".
 ## https://datatracker.ietf.org/doc/html/rfc7950#section-7.17
 comptime AUGMENT_SPEC = YangConstructSpec[
@@ -486,7 +499,7 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_scalar_spec[`error-app-tag`, yarg.StringArgument]()
     add_scalar_spec[`error-message`, yarg.StringArgument]()
     add_scalar_spec[`extension`, yarg.IdentifierArgument]()
-    add_scalar_spec[`feature`, yarg.IdentifierArgument]()
+    add_spec[FEATURE_SPEC]()
     add_scalar_spec[`fraction-digits`, yarg.FractionDigitsArgument]()
     add_spec[GROUPING_SPEC]()
     add_spec[IDENTITY_SPEC]()

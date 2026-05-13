@@ -42,6 +42,9 @@ module all-types {
   identity udp {
     base transport;
   }
+  identity quic {
+    base udp;
+  }
 
   typedef percentage {
     type uint8 {
@@ -393,6 +396,22 @@ def test_empty_valid() raises:
 def test_identityref_valid() raises:
     _expect_ok(YANG_ALL_TYPES, '{"config": {"protocol": "tcp"}}')
     _expect_ok(YANG_ALL_TYPES, '{"config": {"protocol": "udp"}}')
+
+
+def test_identityref_base_itself_valid() raises:
+    _expect_ok(YANG_ALL_TYPES, '{"config": {"protocol": "transport"}}')
+
+
+def test_identityref_transitive_valid() raises:
+    _expect_ok(YANG_ALL_TYPES, '{"config": {"protocol": "quic"}}')
+
+
+def test_identityref_unknown_value() raises:
+    _expect_error(
+        YANG_ALL_TYPES,
+        '{"config": {"protocol": "sctp"}}',
+        "does not match any declared identity",
+    )
 
 
 def test_union_valid() raises:

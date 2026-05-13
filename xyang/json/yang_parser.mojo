@@ -88,6 +88,26 @@ def _append_arg(mut parent: YangConstruct, keyword: String, argument: String):
     _append_stmt(parent, _stmt(keyword, argument))
 
 
+def _append_string_or_string_array(
+    mut parent: YangConstruct,
+    read obj: json_parser.JsonValue,
+    key: String,
+    yang_keyword: String,
+):
+    var value = json_parser.json_get(obj, key)
+    if not value:
+        return
+    ref v = value.value()[]
+    if v.kind == json_parser.JsonValue.STRING:
+        _append_arg(parent, yang_keyword, v.text)
+        return
+    if v.kind != json_parser.JsonValue.ARRAY:
+        return
+    for item in v.array_values:
+        if item[].kind == json_parser.JsonValue.STRING:
+            _append_arg(parent, yang_keyword, item[].text)
+
+
 ## --- Typed reads from `JsonValue` objects (by string key) ---
 
 
@@ -244,6 +264,20 @@ def _append_musts(mut node: YangConstruct, read xyang: json_parser.JsonValue):
             must_node, "description", _json_string(item[], "description")
         )
         _append_stmt(node, must_node^)
+
+
+def _append_if_features(
+    mut node: YangConstruct, read xyang: json_parser.JsonValue
+):
+    var single = _json_string(xyang, "if-feature")
+    if single.byte_length() > 0:
+        _append_arg(node, "if-feature", single)
+    var many = json_parser.json_get(xyang, "if-features")
+    if not many or many.value()[].kind != json_parser.JsonValue.ARRAY:
+        return
+    for item in many.value()[].array_values:
+        if item[].kind == json_parser.JsonValue.STRING:
+            _append_arg(node, "if-feature", item[].text)
 
 
 def _append_range_from_schema(
@@ -499,6 +533,7 @@ def _convert_property(
         var node = _stmt("container", name)
         _append_arg(node, "description", _json_string(schema, "description"))
         _append_arg(node, "presence", _json_string(xy.value()[], "presence"))
+        _append_if_features(node, xy.value()[])
         _append_when(node, xy.value()[])
         _append_musts(node, xy.value()[])
         var props = json_parser.json_get(schema, "properties")
@@ -531,6 +566,7 @@ def _convert_property(
     if node_type == "choice":
         var ch_node = _stmt("choice", name)
         _append_arg(ch_node, "description", _json_string(schema, "description"))
+        _append_if_features(ch_node, xy.value()[])
         _append_when(ch_node, xy.value()[])
         _append_musts(ch_node, xy.value()[])
         if _json_bool(xy.value()[], "mandatory"):
@@ -547,6 +583,8 @@ def _convert_property(
     if node_type == "list":
         var node = _stmt("list", name)
         _append_arg(node, "key", _json_string(xy.value()[], "key"))
+        _append_arg(node, "ordered-by", _json_string(xy.value()[], "ordered-by"))
+        _append_string_or_string_array(node, xy.value()[], "unique", "unique")
         var min_items = _json_scalar(schema, "minItems")
         if min_items:
             _append_arg(node, "min-elements", min_items.value())
@@ -554,6 +592,7 @@ def _convert_property(
         if max_items:
             _append_arg(node, "max-elements", max_items.value())
         _append_arg(node, "description", _json_string(schema, "description"))
+        _append_if_features(node, xy.value()[])
         _append_when(node, xy.value()[])
         _append_musts(node, xy.value()[])
         var items = json_parser.json_get(schema, "items")
@@ -587,8 +626,12 @@ def _convert_property(
 
     if node_type == "leaf" or node_type == "leaf-list":
         var node = _stmt(node_type, name)
+        _append_if_features(node, xy.value()[])
         _append_when(node, xy.value()[])
         if node_type == "leaf-list":
+            _append_arg(
+                node, "ordered-by", _json_string(xy.value()[], "ordered-by")
+            )
             var items = json_parser.json_get(schema, "items")
             if items and items.value()[].kind == json_parser.JsonValue.OBJECT:
                 _append_stmt(node, _type_from_schema(items.value()[], defs))
@@ -619,6 +662,7 @@ def _convert_property(
     if node_type == "anydata" or node_type == "anyxml":
         var node = _stmt(node_type, name)
         _append_arg(node, "description", _json_string(schema, "description"))
+        _append_if_features(node, xy.value()[])
         _append_when(node, xy.value()[])
         _append_musts(node, xy.value()[])
         return Optional[YangConstruct](node^)

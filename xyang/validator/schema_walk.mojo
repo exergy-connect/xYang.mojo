@@ -40,6 +40,8 @@ def _accumulate_keys_under_stmt(
     mut keys: KeySet,
 ) raises:
     ref n = stmt[]
+    if not module.is_construct_active(n):
+        return
     var kw = n.spec
     if (
         kw == `leaf` or kw == `leaf-list` or kw == `container` or kw == `list`
@@ -84,6 +86,8 @@ def select_choice_case_from_instance(
     for ch in choice_node.children:
         if ch[].spec != `case`:
             continue
+        if not module.is_construct_active(ch[]):
+            continue
         var ku = _keys_union_under_case(module, ch[])
         if _instance_key_intersects_keyset(instance, ku):
             candidates.append(ch.copy())
@@ -106,6 +110,8 @@ def find_schema_child_for_json_key(
     ## visiting `uses` and selecting `choice` branches from `instance` keys.
     for child in parent.children:
         ref c = child[]
+        if not module.is_construct_active(c):
+            continue
         var kw = c.spec
         if (
             (
@@ -141,6 +147,8 @@ def find_schema_child_for_json_key(
             for ch in c.children:
                 if ch[].spec != `case`:
                     continue
+                if not module.is_construct_active(ch[]):
+                    continue
                 var inner = find_schema_child_for_json_key(
                     module,
                     ch[],
@@ -162,6 +170,8 @@ def validate_mandatory_choices_under_container(
 ) raises:
     for child in container.children:
         ref c = child[]
+        if not module.is_construct_active(c):
+            continue
         if c.spec == `uses`:
             if not c.has_argument():
                 continue
@@ -196,6 +206,8 @@ def validate_mandatory_choices_under_container(
         if not sel:
             continue
         for inner in sel.value()[].children:
+            if not module.is_construct_active(inner[]):
+                continue
             if inner[].spec == `choice`:
                 _validate_mandatory_choices_for_choice(
                     module,
@@ -241,6 +253,8 @@ def _validate_mandatory_choices_for_choice(
     if not sel:
         return
     for inner in sel.value()[].children:
+        if not module.is_construct_active(inner[]):
+            continue
         if inner[].spec == `choice`:
             _validate_mandatory_choices_for_choice(
                 module,

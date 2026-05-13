@@ -34,7 +34,7 @@ Scope:
 | `leaf-list` | Supported | Dedicated AST node and text-parser support; validator enforces array shape plus per-item type/leafref/must checks. |
 | `anydata`, `anyxml` | Supported | Parsed into AST; JSON Schema uses open instance `type` array plus `x-yang.type` (`anydata` / `anyxml`); validator enforces presence/mandatory, `when`, and `must` only (instance JSON unconstrained). Bodies accept `if-feature` and prefixed extensions like Python xYang. Optional draft subtree validation is not implemented (CLI flags remain unavailable). |
 | `grouping` | Supported | Text parser parses and stores groupings and supports grouped schema nodes used by this project (`leaf`, `leaf-list`, `container`, `list`, `choice`). |
-| `uses` | Partial | Text parser expands `uses` in `container`/`list`/`grouping` for in-module groupings and applies `refine` plus `augment` substatements; `if-feature` is parsed/accepted but feature resolution is not yet enforced. |
+| `uses` | Partial | Text parser expands `uses` in `container`/`list`/`grouping` for in-module groupings and applies `refine` plus `augment` substatements; validator honors `if-feature` on expanded schema nodes. |
 | `augment` | Partial | Text parser applies `augment` for in-module targets (including absolute module paths and relative paths under `uses`) for supported node kinds. |
 | `rpc`, `action`, `notification` | Not yet | Not modeled/validated. |
 | `deviation`/`deviate` | Not yet | Not modeled/validated. |
@@ -50,7 +50,7 @@ Scope:
 | `union` | Partial | Member types in AST; validator tries each member (same as “first matching branch” for instance data). Text parser and JSON `oneOf` round-trip. |
 | `decimal64` | Partial | `fraction-digits` and `range` parsed in text YANG; JSON Schema uses `number`, optional `multipleOf`, `minimum`/`maximum`, `x-yang` with `fraction-digits`. Validator checks numeric value and range; does not fully enforce fraction-digit string form of every value. |
 | `bits` | Partial | `bit` names from text YANG; instance value is a string of space-separated bit names; validator checks against declared bits. No `position` ordering semantics beyond name list. |
-| `identityref` | Partial | `base` stored in AST (text and `x-yang` in JSON); validator treats instance as a string (no resolution of identity-derived names against `identity` statements in the module tree). |
+| `identityref` | Supported | `base` stored in AST; validator resolves instance values against declared `identity` statements, accepting the base itself or any transitively derived identity (single-module scope). |
 | `path` and `require-instance` leafref substatements | Supported | Parsed from text YANG and JSON/YANG metadata; used by validator for leafref target resolution and enforcement. |
 
 ### Constraints
@@ -64,7 +64,7 @@ Scope:
 | `default` (`leaf`, `leaf-list`, `choice` default case) | Partial | Parser captures defaults; validator realizes leaf/leaf-list effective defaults and treats choice default case as active when no explicit case is present. |
 | `key` (list) | Supported | Parsed and used for list-path formatting in diagnostics. |
 | `min-elements`, `max-elements` | Supported | Enforced for `list` and `leaf-list` array cardinality. `max-elements unbounded` is accepted. |
-| `unique`, `ordered-by` | Not yet | Parsed but not enforced by the validator. |
+| `unique`, `ordered-by` | Partial | `unique` is enforced for scalar descendant leaf paths on list entries; entries with missing referenced leaves are ignored. `ordered-by` is parsed/accepted for lists and leaf-lists, but static JSON validation does not impose an order. |
 | Choice/case full RFC semantics | Partial | Mandatory choice, default case, and `when` on `choice`/`case` are implemented in parser + validator; other subtleties of RFC 7950 `choice`/`case` are still simplified. |
 
 ### XPath support used by `must`/`when`
@@ -84,7 +84,8 @@ Implemented:
 - List node type checks (must be array).
 - Leaf-list node type checks (must be array).
 - `min-elements` / `max-elements` checks for lists and leaf-lists.
-- Numeric type + `range` checks; `union` (member types), `decimal64` (range), `bits` (space-separated names), `identityref` (string check).
+- `unique` checks for list entries with complete referenced leaf tuples.
+- Numeric type + `range` checks; `union` (member types), `decimal64` (range), `bits` (space-separated names), `identityref` (identity resolution against declared identities and transitive derivation).
 - Leaf-level `must` and `when` evaluation.
 - Leaf-list per-item `must` and type checks.
 - Basic choice mandatory check.
@@ -128,12 +129,12 @@ Good fit today:
 - Basic structural + scalar validation.
 - Simple `must` / `when` checks (leaves, and `when` on choices and explicit cases where modeled).
 - Integer range enforcement.
-- `union` members, `decimal64` (numeric + range), `bits` and `identityref` (within the limitations above).
+- `union` members, `decimal64` (numeric + range), `bits`, and `identityref` (identity resolution with transitive derivation).
 
 Not production-complete yet for:
 - Full RFC 7950 conformance.
-- Advanced module composition (`deviation`, full feature-resolution for `if-feature`, and remaining RFC edge cases in `grouping`/`uses`/`augment`).
-- Resolving `identityref` / `bits` / `union` to full RFC 7950 data-model rules (e.g. identity heritage, all `typedef` and facet combinations).
+- Advanced module composition (`deviation`, externally supplied feature sets for `if-feature`, and remaining RFC edge cases in `grouping`/`uses`/`augment`).
+- Resolving `bits` / `union` to full RFC 7950 data-model rules (e.g. all `typedef` and facet combinations).
 - Full XPath semantics.
 
 ## Notes On Current Leafref Scope

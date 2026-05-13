@@ -33,6 +33,104 @@ def _insert_unique(
     table[name] = child.copy()
 
 
+def _slice_string(read text: String, start: Int, end: Int) -> String:
+    return String(StringSlice(unsafe_from_utf8=text.as_bytes()[start:end]))
+
+
+def _is_if_feature_name_byte(c: UInt8) -> Bool:
+    var v = Int(c)
+    return (
+        (v >= ord("a") and v <= ord("z"))
+        or (v >= ord("A") and v <= ord("Z"))
+        or (v >= ord("0") and v <= ord("9"))
+        or v == ord("_")
+        or v == ord("-")
+        or v == ord(".")
+        or v == ord(":")
+    )
+
+
+def _local_feature_name(read name: String) -> String:
+    var sep = name.find(":")
+    if sep < 0:
+        return name.copy()
+    return _slice_string(name, sep + 1, name.byte_length())
+
+
+def _local_name(read name: String) -> String:
+    """Strip optional ``prefix:`` qualifier, returning the local part."""
+    var sep = name.find(":")
+    if sep < 0:
+        return name.copy()
+    return _slice_string(name, sep + 1, name.byte_length())
+
+
+@fieldwise_init
+struct IfFeatureExprParser(Movable):
+    var text: String
+    var pos: Int
+
+    def __init__(out self, read text: String):
+        self.text = text.copy()
+        self.pos = 0
+
+    def at_end(read self) -> Bool:
+        return self.pos >= self.text.byte_length()
+
+    def remaining(read self) -> String:
+        return _slice_string(self.text, self.pos, self.text.byte_length())
+
+    def skip_ws(mut self):
+        var b = self.text.as_bytes()
+        while self.pos < len(b):
+            var c = b[self.pos]
+            if (
+                c == UInt8(ord(" "))
+                or c == UInt8(ord("\n"))
+                or c == UInt8(ord("\r"))
+                or c == UInt8(ord("\t"))
+            ):
+                self.pos += 1
+            else:
+                return
+
+    def consume_keyword(mut self, read keyword: String) -> Bool:
+        self.skip_ws()
+        var n = keyword.byte_length()
+        if self.pos + n > self.text.byte_length():
+            return False
+        if _slice_string(self.text, self.pos, self.pos + n) != keyword:
+            return False
+        if self.pos + n < self.text.byte_length():
+            var next = self.text.as_bytes()[self.pos + n]
+            if _is_if_feature_name_byte(next):
+                return False
+        self.pos += n
+        return True
+
+    def consume_byte(mut self, c: UInt8) -> Bool:
+        self.skip_ws()
+        if self.pos >= self.text.byte_length():
+            return False
+        if self.text.as_bytes()[self.pos] != c:
+            return False
+        self.pos += 1
+        return True
+
+    def parse_name(mut self) raises -> String:
+        self.skip_ws()
+        var start = self.pos
+        var b = self.text.as_bytes()
+        while self.pos < len(b) and _is_if_feature_name_byte(b[self.pos]):
+            self.pos += 1
+        if self.pos == start:
+            raise Error(
+                "expected feature name in if-feature expression near `"
+                + self.remaining()
+                + "`"
+            )
+        return _slice_string(self.text, start, self.pos)
+
 @fieldwise_init
 struct TopContainerIterator(Iterator):
     comptime Element = Arc[YangConstruct]
@@ -70,6 +168,10 @@ struct YangModule(Movable & Iterable):
     var revisions: List[String]
     var groupings: ConstructMap
     var typedefs: ConstructMap
+    var identities: ConstructMap
+    var features: ConstructMap
+    var feature_names: List[String]
+    var feature_enabled: Dict[String, Bool]
     var top_containers: ConstructMap
 
     def __init__(out self):
@@ -78,6 +180,10 @@ struct YangModule(Movable & Iterable):
         self.revisions = List[String]()
         self.groupings = ConstructMap()
         self.typedefs = ConstructMap()
+        self.identities = ConstructMap()
+        self.features = ConstructMap()
+        self.feature_names = List[String]()
+        self.feature_enabled = Dict[String, Bool]()
         self.top_containers = ConstructMap()
 
     def parse[
@@ -101,7 +207,15 @@ struct YangModule(Movable & Iterable):
         self._populate_from_validated_root()
 
     def _populate_from_validated_root(mut self) raises:
-        from ..spec import `container`, `grouping`, `revision`, `typedef`
+        from ..spec import (
+            `container`,
+            `feature`,
+            `grouping`,
+            `identity`,
+            `if-feature`,
+            `revision`,
+            `typedef`,
+        )
 
         ref root_arc = self.root.value()
         for child in root_arc[].children:
@@ -110,14 +224,78 @@ struct YangModule(Movable & Iterable):
             var kw = node.spec
             if kw == `revision`:
                 self.revisions.append(arg)
+            elif kw == `feature`:
+                _insert_unique(self.features, arg, child)
+                self.feature_names.append(arg)
+                self.feature_enabled[arg] = False
             elif kw == `grouping`:
                 _insert_unique(self.groupings, arg, child)
             elif kw == `typedef`:
                 _insert_unique(self.typedefs, arg, child)
+            elif kw == `identity`:
+                _insert_unique(self.identities, arg, child)
             elif kw == `container`:
                 _insert_unique(self.top_containers, arg, child)
             else:
                 self.fields[kw] = child.copy()
+        self._resolve_feature_enablement()
+
+    def _resolve_feature_enablement(mut self) raises:
+        from ..spec import `if-feature`
+
+        comptime MAX_FEATURE_PASSES = 128
+        for _ in range(MAX_FEATURE_PASSES):
+            var changed = False
+            for name in self.feature_names:
+                ref stmt = self.features[name][]
+                var enabled = True
+                for child in stmt.children:
+                    if child[].spec == `if-feature` and child[].has_argument():
+                        if not self.if_feature_expr_enabled(
+                            child[].argument_text()
+                        ):
+                            enabled = False
+                            break
+                if self.feature_enabled[name] != enabled:
+                    self.feature_enabled[name] = enabled
+                    changed = True
+            if not changed:
+                return
+        raise Error("feature dependency chain too deep or cyclic")
+
+    def is_feature_enabled(read self, read name: String) raises -> Bool:
+        var local = _local_feature_name(name)
+        if local not in self.feature_enabled:
+            return False
+        return self.feature_enabled[local]
+
+    def if_feature_expr_enabled(
+        read self, read expression: String
+    ) raises -> Bool:
+        var parser = IfFeatureExprParser(expression)
+        var result = _parse_if_feature_or(parser, self)
+        parser.skip_ws()
+        if not parser.at_end():
+            raise Error(
+                "invalid if-feature expression near `"
+                + parser.remaining()
+                + "`"
+            )
+        return result
+
+    def construct_if_features_enabled(
+        read self, read node: YangConstruct
+    ) raises -> Bool:
+        from ..spec import `if-feature`
+
+        for child in node.children:
+            if child[].spec == `if-feature` and child[].has_argument():
+                if not self.if_feature_expr_enabled(child[].argument_text()):
+                    return False
+        return True
+
+    def is_construct_active(read self, read node: YangConstruct) raises -> Bool:
+        return self.construct_if_features_enabled(node)
 
     def root_construct(read self) raises -> Arc[YangConstruct]:
         if not self.root:
@@ -383,6 +561,65 @@ struct YangModule(Movable & Iterable):
             out.append(YangPatternSpec(ch[].argument_text(), inv))
         return out^
 
+    def identity_derives_from(
+        read self, read name: String, read base: String
+    ) raises -> Bool:
+        """Return True when `name` equals `base` or transitively derives from it.
+
+        Strips any module prefix (e.g. ``mod:foo`` → ``foo``) before lookup so
+        both qualified and unqualified forms work for the single-module case.
+        """
+        from ..spec import `base` as `base-kw`
+
+        var local_name = _local_name(name)
+        var local_base = _local_name(base)
+        if local_name == local_base:
+            return True
+        if local_name not in self.identities:
+            return False
+        comptime _MAX_DEPTH = 128
+        var stack = List[String]()
+        stack.append(local_name)
+        for _ in range(_MAX_DEPTH):
+            if len(stack) == 0:
+                return False
+            var cur = stack.pop()
+            if cur not in self.identities:
+                continue
+            ref ident = self.identities[cur][]
+            for child in ident.children:
+                if child[].spec == `base-kw` and child[].has_argument():
+                    var parent = _local_name(child[].argument_text())
+                    if parent == local_base:
+                        return True
+                    stack.append(parent)
+        return False
+
+    def leaf_identityref_bases(
+        read self, read leaf: YangConstruct
+    ) raises -> List[String]:
+        """Collect the `base` identity names from a leaf's effective identityref type."""
+        from ..spec import `base` as `base-kw`
+
+        var out = List[String]()
+        var ty = self.leaf_effective_type_stmt(leaf)
+        if not ty:
+            return out^
+        for ch in ty.value()[].children:
+            if ch[].spec == `base-kw` and ch[].has_argument():
+                out.append(_local_name(ch[].argument_text()))
+        return out^
+
+    def identity_valid_for_bases(
+        read self, read value: String, read bases: List[String]
+    ) raises -> Bool:
+        """Return True when `value` is (or derives from) at least one of `bases`."""
+        var local_val = _local_name(value)
+        for i in range(len(bases)):
+            if self.identity_derives_from(local_val, bases[i]):
+                return True
+        return False
+
     def leafref_path(read self, read leaf: YangConstruct) -> String:
         from ..spec import `path`, `type`
 
@@ -393,3 +630,47 @@ struct YangModule(Movable & Iterable):
         if path_stmt and path_stmt.value()[].has_argument():
             return path_stmt.value()[].argument_text()
         return ""
+
+
+def _parse_if_feature_primary(
+    mut parser: IfFeatureExprParser, read module: YangModule
+) raises -> Bool:
+    if parser.consume_byte(UInt8(ord("("))):
+        var value = _parse_if_feature_or(parser, module)
+        if not parser.consume_byte(UInt8(ord(")"))):
+            raise Error(
+                "expected `)` in if-feature expression near `"
+                + parser.remaining()
+                + "`"
+            )
+        return value
+    var name = parser.parse_name()
+    return module.is_feature_enabled(name)
+
+
+def _parse_if_feature_not(
+    mut parser: IfFeatureExprParser, read module: YangModule
+) raises -> Bool:
+    if parser.consume_keyword("not"):
+        return not _parse_if_feature_not(parser, module)
+    return _parse_if_feature_primary(parser, module)
+
+
+def _parse_if_feature_and(
+    mut parser: IfFeatureExprParser, read module: YangModule
+) raises -> Bool:
+    var value = _parse_if_feature_not(parser, module)
+    while parser.consume_keyword("and"):
+        var rhs = _parse_if_feature_not(parser, module)
+        value = value and rhs
+    return value
+
+
+def _parse_if_feature_or(
+    mut parser: IfFeatureExprParser, read module: YangModule
+) raises -> Bool:
+    var value = _parse_if_feature_and(parser, module)
+    while parser.consume_keyword("or"):
+        var rhs = _parse_if_feature_and(parser, module)
+        value = value or rhs
+    return value

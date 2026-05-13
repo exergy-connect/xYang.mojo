@@ -3,6 +3,8 @@
 ## A single pass over the JSON document validates each leaf (including leafref
 ## resolution) based on its schema type.
 
+from std.memory import ArcPointer
+
 from xyang.json.parser import JsonValue, json_get, json_scalar_text
 import xyang.validator.schema_walk as schema_walk
 from xyang.validator.leafref import LeafrefCache
@@ -10,9 +12,10 @@ from xyang.validator.pattern_match import (
     unicode_scalar_count,
     yang_string_matches_xsd_subset,
 )
-from xyang.yang.arguments import length_allows_scalar_count
+from xyang.yang.arguments import UniqueArgument, length_allows_scalar_count
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
+from xyang.yang.path import YangPath
 from xyang.yang.spec import (
     `bit`,
     `container`,
@@ -25,8 +28,12 @@ from xyang.yang.spec import (
     `max-elements`,
     `min-elements`,
     `must`,
+    `unique`,
     `type`,
 )
+
+
+comptime Arc = ArcPointer
 
 
 @always_inline
@@ -316,6 +323,17 @@ def validate_leaf_value(
             _raise_json_path_error(
                 json_path, value.source_line, path, ": expected string for identityref"
             )
+        var bases = module.leaf_identityref_bases(leaf)
+        if len(bases) > 0:
+            if not module.identity_valid_for_bases(value.text, bases):
+                _raise_json_path_error(
+                    json_path,
+                    value.source_line,
+                    path,
+                    ": identityref value `"
+                    + value.text
+                    + "` does not match any declared identity",
+                )
         return
 
     # --- empty (§9.11) — RFC 7951 §6.9: encoded as [null] ---
@@ -417,6 +435,84 @@ def _validate_cardinality(
                     + String(max_count)
                 ),
             )
+
+
+def _json_unique_scalar(read value: JsonValue) -> Optional[String]:
+    if value.kind == JsonValue.STRING:
+        return Optional[String]("s:" + value.text)
+    if value.kind == JsonValue.INT:
+        return Optional[String]("i:" + value.text)
+    if value.kind == JsonValue.REAL:
+        return Optional[String]("r:" + value.text)
+    if value.kind == JsonValue.BOOL:
+        return Optional[String]("b:" + ("true" if value.bool_value else "false"))
+    return Optional[String]()
+
+
+def _unique_path_value(
+    read entry: JsonValue, read path: YangPath
+) -> Optional[String]:
+    ## RFC 7950 `unique` paths are descendant-schema-nodeids: resolve them from
+    ## the list entry and skip entries where any referenced leaf is absent.
+    if entry.kind != JsonValue.OBJECT:
+        return Optional[String]()
+    var current = Optional[Arc[JsonValue]]()
+    var first = True
+    for i in range(len(path.segments)):
+        var name = path.segments[i].node.local_name
+        if first:
+            current = json_get(entry, name)
+            first = False
+        else:
+            if not current or current.value()[].kind != JsonValue.OBJECT:
+                return Optional[String]()
+            current = json_get(current.value()[], name)
+        if not current:
+            return Optional[String]()
+    if not current:
+        return Optional[String]()
+    return _json_unique_scalar(current.value()[])
+
+
+def _append_unique_component(mut out: String, read value: String):
+    out += String(value.byte_length())
+    out += ":"
+    out += value
+    out += ";"
+
+
+def _validate_unique_constraints(
+    read data: JsonValue,
+    read schema: YangConstruct,
+    path: String,
+    json_path: String,
+) raises:
+    for child in schema.children:
+        ref stmt = child[]
+        if stmt.spec != `unique` or not stmt.has_argument():
+            continue
+        ref arg = stmt.argument.get[UniqueArgument]()
+        var seen = Dict[String, Int]()
+        for i in range(len(data.array_values)):
+            ref entry = data.array_values[i][]
+            var tuple_key = String()
+            var complete = True
+            for j in range(len(arg.paths)):
+                var value = _unique_path_value(entry, arg.paths[j])
+                if not value:
+                    complete = False
+                    break
+                _append_unique_component(tuple_key, value.value())
+            if not complete:
+                continue
+            if tuple_key in seen:
+                _raise_json_path_error(
+                    json_path,
+                    entry.source_line,
+                    path + "[" + String(i) + "]",
+                    ": duplicate values for `unique` `" + stmt.argument_text() + "`",
+                )
+            seen[tuple_key] = i
 
 
 def validate_leaf_list_value(
@@ -573,6 +669,7 @@ def validate_list_against_construct(
             json_path, data.source_line, path, ": expected JSON array for list"
         )
     _validate_cardinality(data, schema, module, path, json_path, "list")
+    _validate_unique_constraints(data, schema, path, json_path)
     var key_stmt = module.find_child(schema, `key`)
     for i in range(len(data.array_values)):
         ref entry = data.array_values[i][]

@@ -1,6 +1,6 @@
 ## Shopping cart demo: **YANG-shaped JSON Schema** (`x-yang`) with field-annotated Mojo
 ## structs for the cart, **compile-time** parse + reflection checks, **runtime**
-## `validate_data` (strict) vs **prune mode** (drop unknown / `when`-inactive leaves),
+## `validate_data` (strict), catalog-owned pricing, itemized checkout response,
 ## and a tiny **REST** server over TCP using Python’s `socket` (Mojo std has no HTTP).
 ##
 ##   pixi run package
@@ -8,152 +8,141 @@
 ##   pixi run mojo -I build -I "$MODULAR_MOJO_IMPORT_PATH" examples/shopping_cart.mojo
 ##
 ##   curl -s http://127.0.0.1:18080/cart
+##   curl -s http://127.0.0.1:18080/catalog
 ##   curl -s -X POST http://127.0.0.1:18080/purchase -d \
-##     '{"purchase_request":{"item":[{"sku":"a","quantity":1,"unit_price_cents":100},{"sku":"b","quantity":1,"unit_price_cents":200},{"sku":"c","quantity":1,"unit_price_cents":50}],"discount_percent":10}}'
-##   # Schema `when`: `count(../item) >= 3` — with 3+ line items the discount leaf is kept;
-##   # prune mode strips `discount_percent` (and any non-schema keys) when the condition is false.
+##     '{"purchase_request":{"item":[{"sku":"tea","quantity":2},{"sku":"mug","quantity":1},{"sku":"beans","quantity":1}]}}'
+##   # Prices come from the server-side catalog. A 10% bulk discount is applied
+##   # when the request contains 3+ distinct line items.
 
-from std.collections import Dict, List
 from std.memory import ArcPointer
 from std.python import Python
-from std.reflection import reflect
 
+from xyang.api import (
+    MaxStringLength,
+    NoStringConstraints,
+    YangBuiltinInt32,
+    YangBuiltinUInt16,
+    YangKey,
+    YangList,
+    YangModeled,
+    YangRange,
+    YangBuiltinString,
+    YangLeaf,
+    YangWhen,
+    validate_yang_subtree,
+    yang_module_from_model,
+)
 from xyang.json import parse_json, parse_yang_json_module
 from xyang.json.parser import JsonValue, json_get, make_json
 from xyang.validator.document import validate_data
-import xyang.validator.schema_walk as schema_walk
-from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import `container`, `leaf`, `leaf-list`, `list`, `when`
 
 comptime Arc = ArcPointer
 comptime ArcJson = ArcPointer[JsonValue]
-
-
-## --- Optional string length caps (same pattern as `comptime_yang_validation.mojo`) ---
-
-
-trait StringLengthCap:
-    @staticmethod
-    def model_max_string_length() -> Int:
-        ...
-
-
-@fieldwise_init
-struct NoStringConstraints(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    StringLengthCap,
-    Writable,
-):
-    @staticmethod
-    def model_max_string_length() -> Int:
-        return -1
-
-
-@fieldwise_init
-struct MaxStringLength[
-    n: Int,
-](
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    StringLengthCap,
-    Writable,
-):
-    @staticmethod
-    def model_max_string_length() -> Int:
-        return Self.n
-
-
-trait YangBuiltinDescriptor:
-    comptime Value: Writable & Copyable & Movable & ImplicitlyDestructible & Defaultable
-
-    @staticmethod
-    def yang_type_keyword() -> String:
-        ...
-
-
-@fieldwise_init
-struct YangBuiltinString(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
-    YangBuiltinDescriptor,
-):
-    comptime Value = String
-
-    @staticmethod
-    def yang_type_keyword() -> String:
-        return "string"
-
-
-trait LeafModelSpec:
-    @staticmethod
-    def yang_type_str() -> String:
-        ...
-
-    @staticmethod
-    def model_max_string_length() -> Int:
-        ...
-
-
-trait Yang:
-    @staticmethod
-    def yang_container_name() -> String:
-        ...
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        _validate_yang_subtree[Self](module)
-
-
-@fieldwise_init
-struct YangLeaf[
-    Builtin: YangBuiltinDescriptor,
-    Constraints: StringLengthCap,
-](ImplicitlyDestructible, LeafModelSpec, Movable):
-    var value: Self.Builtin.Value
-
-    @staticmethod
-    def yang_type_str() -> String:
-        return Self.Builtin.yang_type_keyword()
-
-    @staticmethod
-    def model_max_string_length() -> Int:
-        return Self.Constraints.model_max_string_length()
-
-
-@fieldwise_init
-struct YangContainer[
-    Child: Movable & ImplicitlyDestructible & Yang,
-](ImplicitlyDestructible, Movable):
-    var body: Self.Child
-
-    @staticmethod
-    def yang_name() -> String:
-        return Self.Child.yang_container_name()
 
 
 ## --- Cart model (reflection-checked against embedded schema) -------------------
 
 
 @fieldwise_init
-struct CartContainer(ImplicitlyDestructible, Movable, Yang):
+struct CartContainer(ImplicitlyDestructible, Movable, YangModeled):
     @staticmethod
     def yang_container_name() -> String:
         return "cart"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        validate_yang_subtree[Self](module)
 
     var customer_id: YangLeaf[YangBuiltinString, MaxStringLength[128]]
     var currency: YangLeaf[YangBuiltinString, MaxStringLength[3]]
 
 
-## --- Embedded JSON Schema + YANG (purchase_request: list `item`, conditional discount) ---
+@fieldwise_init
+struct PurchaseItem(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "item"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var sku: YangLeaf[YangBuiltinString, MaxStringLength[64]]
+    var quantity: YangLeaf[
+        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+    ]
+
+
+@fieldwise_init
+struct PurchaseRequestContainer(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "purchase_request"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var item: YangList[PurchaseItem, YangKey["sku"]]
+
+
+@fieldwise_init
+struct PurchaseResponseItem(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "item"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var sku: YangLeaf[YangBuiltinString, MaxStringLength[64]]
+    var name: YangLeaf[YangBuiltinString, MaxStringLength[128]]
+    var quantity: YangLeaf[
+        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+    ]
+    var unit_price_cents: YangLeaf[
+        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+    ]
+    var line_total_cents: YangLeaf[
+        YangBuiltinInt32, NoStringConstraints, YangRange[0, 2147483647]
+    ]
+
+
+@fieldwise_init
+struct PurchaseResponseContainer(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "purchase_response"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var item: YangList[PurchaseResponseItem, YangKey["sku"]]
+    var subtotal_cents: YangLeaf[
+        YangBuiltinInt32, NoStringConstraints, YangRange[0, 2147483647]
+    ]
+    var discount_percent: YangLeaf[
+        YangBuiltinUInt16,
+        NoStringConstraints,
+        YangRange[0, 100],
+        YangWhen["count(../item) >= 3"],
+    ]
+    var discount_cents: YangLeaf[
+        YangBuiltinInt32,
+        NoStringConstraints,
+        YangRange[0, 2147483647],
+        YangWhen["count(../item) >= 3"],
+    ]
+    var total_cents: YangLeaf[
+        YangBuiltinInt32, NoStringConstraints, YangRange[0, 2147483647]
+    ]
+    var currency: YangLeaf[YangBuiltinString, MaxStringLength[3]]
+
+
+## --- Embedded JSON Schema + YANG (catalog, purchase request, itemized response) ---
 
 comptime APP_SCHEMA_JSON = """{
   "x-yang": {
@@ -184,14 +173,50 @@ comptime APP_SCHEMA_JSON = """{
         }
       }
     },
-    "purchase_request": {
+    "catalog": {
       "type": "object",
-      "description": "Checkout payload",
+      "description": "Server-owned products for sale",
       "x-yang": {"type": "container"},
       "properties": {
         "item": {
           "type": "array",
-          "description": "Line items",
+          "description": "Catalog items and authoritative prices",
+          "x-yang": {"type": "list", "key": "sku"},
+          "items": {
+            "type": "object",
+            "properties": {
+              "sku": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Product sku",
+                "x-yang": {"type": "leaf"}
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 128,
+                "description": "Display name",
+                "x-yang": {"type": "leaf"}
+              },
+              "unit_price_cents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "description": "Authoritative unit price in minor units",
+                "x-yang": {"type": "leaf"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "purchase_request": {
+      "type": "object",
+      "description": "Checkout request: clients choose catalog SKUs and quantities only",
+      "x-yang": {"type": "container"},
+      "properties": {
+        "item": {
+          "type": "array",
+          "description": "Requested line items",
           "x-yang": {"type": "list", "key": "sku"},
           "items": {
             "type": "object",
@@ -208,199 +233,104 @@ comptime APP_SCHEMA_JSON = """{
                 "maximum": 65535,
                 "description": "Units",
                 "x-yang": {"type": "leaf"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "purchase_response": {
+      "type": "object",
+      "description": "Server-computed itemized bill",
+      "x-yang": {"type": "container"},
+      "properties": {
+        "item": {
+          "type": "array",
+          "description": "Priced line items",
+          "x-yang": {"type": "list", "key": "sku"},
+          "items": {
+            "type": "object",
+            "properties": {
+              "sku": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Product sku",
+                "x-yang": {"type": "leaf"}
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 128,
+                "description": "Display name",
+                "x-yang": {"type": "leaf"}
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535,
+                "description": "Units purchased",
+                "x-yang": {"type": "leaf"}
               },
               "unit_price_cents": {
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 65535,
-                "description": "Pre-tax unit price in minor units",
+                "description": "Catalog unit price used for this bill",
+                "x-yang": {"type": "leaf"}
+              },
+              "line_total_cents": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "description": "Line total before discounts",
                 "x-yang": {"type": "leaf"}
               }
             }
           }
         },
+        "subtotal_cents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "description": "Subtotal before discounts",
+          "x-yang": {"type": "leaf"}
+        },
         "discount_percent": {
           "type": "integer",
           "minimum": 0,
           "maximum": 100,
-          "description": "Bulk discount; only when 3+ distinct line items",
+          "description": "Bulk discount percent; present when 3+ distinct line items",
           "x-yang": {
             "type": "leaf",
             "when": {"condition": "count(../item) >= 3"}
           }
+        },
+        "discount_cents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "description": "Discount amount; present when discount_percent is active",
+          "x-yang": {
+            "type": "leaf",
+            "when": {"condition": "count(../item) >= 3"}
+          }
+        },
+        "total_cents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "description": "Final total after discounts",
+          "x-yang": {"type": "leaf"}
+        },
+        "currency": {
+          "type": "string",
+          "maxLength": 3,
+          "description": "ISO 4217 alphabetic code",
+          "x-yang": {"type": "leaf"}
         }
       }
     }
   }
 }"""
-
-
-def _schema_string_max_length(
-    read module: YangModule, read parent: String, read leaf: String
-) raises -> Int:
-    var c = module.top_container(parent)
-    if not c:
-        raise Error("reflection: no top container `" + parent + "`")
-    var lf = module.find_effective_leaf(c.value()[], leaf)
-    if not lf:
-        raise Error(
-            "reflection: no leaf `"
-            + leaf
-            + "` under container `"
-            + parent
-            + "`"
-        )
-    var segs = module.leaf_length_segments(lf.value()[])
-    if len(segs) == 0:
-        return -1
-    var hi: Int64 = -1
-    for i in range(len(segs)):
-        if segs[i].hi > hi:
-            hi = segs[i].hi
-    comptime _BIG: Int64 = 9223372036854775807
-    if hi >= _BIG:
-        return -1
-    return Int(hi)
-
-
-def _effective_leaf_names_under(
-    read module: YangModule, read parent: YangConstruct
-) raises -> List[String]:
-    var out = List[String]()
-    var seen = Dict[String, Bool]()
-    for child in parent.children:
-        if child[].spec == `leaf` and child[].has_argument():
-            var name = child[].argument_text()
-            if name not in seen:
-                seen[name] = True
-                out.append(name)
-    for child in parent.children:
-        if child[].keyword != "uses" or not child[].has_argument():
-            continue
-        var grouping = module.find_grouping(child[].argument_text())
-        if not grouping:
-            continue
-        var inner = _effective_leaf_names_under(module, grouping.value()[])
-        for i in range(len(inner)):
-            var n = inner[i]
-            if n not in seen:
-                seen[n] = True
-                out.append(n)
-    return out^
-
-
-def _validate_yang_subtree[T: Yang](read module: YangModule) raises:
-    comptime info = reflect[T]()
-    comptime _nfc = info.field_count()
-    var want = T.yang_container_name()
-    var c = module.top_container(want)
-    if not c:
-        raise Error(
-            "reflection: Yang subtree missing top container `" + want + "`"
-        )
-    var schema_leaves = _effective_leaf_names_under(module, c.value()[])
-    if len(schema_leaves) != _nfc:
-        raise Error(
-            "reflection: container `"
-            + want
-            + "` has "
-            + String(len(schema_leaves))
-            + " effective leaf(es) vs "
-            + String(_nfc)
-            + " model field(s)"
-        )
-    for i in range(len(schema_leaves)):
-        var ln = schema_leaves[i]
-        var in_model = False
-        for j in range(_nfc):
-            if info.field_names()[j] == ln:
-                in_model = True
-                break
-        if not in_model:
-            raise Error(
-                "reflection: schema leaf `"
-                + want
-                + "/"
-                + ln
-                + "` has no matching Mojo field"
-            )
-    comptime for j in range(_nfc):
-        var fname = String(info.field_names()[j])
-        var in_schema = False
-        for i in range(len(schema_leaves)):
-            if schema_leaves[i] == fname:
-                in_schema = True
-                break
-        if not in_schema:
-            raise Error(
-                "reflection: Mojo field `"
-                + fname
-                + "` missing under YANG `"
-                + want
-                + "`"
-            )
-        _validate_leaf_field_type_vs_module[info.field_types()[j]](
-            module, want, fname
-        )
-
-
-def _validate_leaf_field_type_vs_module[
-    FT: AnyType,
-](read module: YangModule, read parent: String, read leaf: String) raises:
-    _validate_leaf_model_vs_module[FT](module, parent, leaf)
-
-
-def _validate_leaf_model_vs_module[
-    FT: AnyType
-](read module: YangModule, read parent: String, read leaf: String) raises:
-    var reflected_ty = reflect[FT]().name()
-    var string_marker = reflect[YangBuiltinString]().name()
-    var yt = "string"
-    if string_marker in reflected_ty:
-        pass
-    else:
-        raise Error(
-            "reflection: field `"
-            + parent
-            + "/"
-            + leaf
-            + "` is not a recognized YangLeaf builtin: "
-            + reflected_ty
-        )
-    var c = module.top_container(parent)
-    if not c:
-        raise Error("reflection: missing container `" + parent + "`")
-    var lf = module.find_effective_leaf(c.value()[], leaf)
-    if not lf:
-        raise Error("reflection: missing leaf `" + parent + "/" + leaf + "`")
-    var schema_ty = module.leaf_type(lf.value()[])
-    if schema_ty != yt:
-        raise Error(
-            "reflection: leaf `"
-            + parent
-            + "/"
-            + leaf
-            + "` model type `"
-            + yt
-            + "` != schema `"
-            + schema_ty
-            + "`"
-        )
-    var schema_max = _schema_string_max_length(module, parent, leaf)
-    var want_constraint = "MaxStringLength[" + String(schema_max) + "]"
-    if schema_max == -1:
-        want_constraint = reflect[NoStringConstraints]().name()
-    if want_constraint not in reflected_ty:
-        raise Error(
-            "reflection: leaf `"
-            + parent
-            + "/"
-            + leaf
-            + "` model constraints `"
-            + reflected_ty
-            + "` do not match schema length upper bound "
-            + String(schema_max)
-        )
 
 
 def _validate_mojo_cart_vs_yang(read module: YangModule) raises:
@@ -434,38 +364,25 @@ def _reflection_cart_ok() -> Bool:
 comptime _CART_REFLECTION_OK: Bool = _reflection_cart_ok()
 
 
-## --- Prune: keep only schema-known children; drop `discount_percent` when `when` fails ---
-## Note: `validate_data` does not evaluate YANG `when`; a client can still send
-## `discount_percent` with fewer than three line items and pass strict validation.
-## Prune mode applies the schema’s `when` for this leaf and removes it when the
-## `count(../item) >= 3` condition is not met.
-
-
-def _when_text_on_leaf(
-    read module: YangModule, read leaf: YangConstruct
-) -> String:
-    var w = module.find_child(leaf, `when`)
-    if not w:
-        return String()
-    ref wn = w.value()[]
-    if not wn.has_argument():
-        return String()
-    return wn.argument_text()
-
-
-def _purchase_discount_when_applies(
-    read when_expr: String, read purchase_obj: JsonValue
-) -> Bool:
-    ## Interpret the schema’s `count(../item) >= 3` style condition for JSON data.
-    if when_expr.byte_length() == 0:
+def _generated_cart_module_ok() -> Bool:
+    try:
+        var m = yang_module_from_model[CartContainer](
+            "shopping-cart-cart",
+            "urn:example:shopping-cart",
+            "sc",
+        )
+        _validate_mojo_cart_vs_yang(m)
+        var data = parse_json(
+            '{"cart":{"customer_id":"guest","currency":"USD"}}',
+            "generated-cart.json",
+        )
+        validate_data(data, m, "generated-cart")
         return True
-    var t = when_expr
-    if t.find("count(../item) >= 3") >= 0:
-        var it = json_get(purchase_obj, "item")
-        if not it or it.value()[].kind != JsonValue.ARRAY:
-            return False
-        return len(it.value()[].array_values.copy()) >= 3
-    return True
+    except:
+        return False
+
+
+comptime _CART_GENERATED_MODULE_OK: Bool = _generated_cart_module_ok()
 
 
 def _byte_slice_str(read s: String, start: Int, end: Int) -> String:
@@ -473,106 +390,75 @@ def _byte_slice_str(read s: String, start: Int, end: Int) -> String:
     return String(StringSlice(unsafe_from_utf8=b[start:end]))
 
 
-def _prune_object_to_schema(
-    read data: JsonValue,
-    read schema: YangConstruct,
-    read module: YangModule,
-    read parent_for_when: JsonValue,
-) raises -> JsonValue:
-    if data.kind != JsonValue.OBJECT:
-        return make_json(JsonValue.OBJECT)
-    var out = make_json(JsonValue.OBJECT)
-    for i in range(len(data.object_keys)):
-        var key = data.object_keys[i]
-        ref slot = data.object_values[i][]
-        var ch_opt = schema_walk.find_schema_child_for_json_key(
-            module,
-            schema,
-            key,
-            data,
-        )
-        if not ch_opt:
-            continue
-        ref ch = ch_opt.value()[]
-        var kw = ch.spec
-        if kw == `leaf`:
-            if not _leaf_allowed_by_when(module, ch, parent_for_when):
-                continue
-            out.object_keys.append(key)
-            out.object_values.append(data.object_values[i].copy())
-            continue
-        if kw == `leaf-list`:
-            out.object_keys.append(key)
-            out.object_values.append(data.object_values[i].copy())
-            continue
-        if kw == `container`:
-            var inner = _prune_object_to_schema(slot, ch, module, slot)
-            out.object_keys.append(key)
-            out.object_values.append(ArcJson(inner^))
-            continue
-        if kw == `list`:
-            var arr = _prune_list_to_schema(slot, ch, module)
-            out.object_keys.append(key)
-            out.object_values.append(ArcJson(arr^))
-            continue
-    return out^
-
-
-def _leaf_allowed_by_when(
-    read module: YangModule,
-    read leaf_schema: YangConstruct,
-    read ctx: JsonValue,
-) -> Bool:
-    var wx = _when_text_on_leaf(module, leaf_schema)
-    if wx.byte_length() == 0:
-        return True
-    return _purchase_discount_when_applies(wx, ctx)
-
-
-def _prune_list_to_schema(
-    read data: JsonValue,
-    read list_schema: YangConstruct,
-    read module: YangModule,
-) raises -> JsonValue:
-    if data.kind != JsonValue.ARRAY:
-        return make_json(JsonValue.ARRAY)
-    var out = make_json(JsonValue.ARRAY)
-    for i in range(len(data.array_values)):
-        ref el = data.array_values[i][]
-        var pr = _prune_object_to_schema(el, list_schema, module, el)
-        out.array_values.append(ArcJson(pr^))
-    return out^
-
-
-def prune_instance_to_model(
-    read root: JsonValue, read module: YangModule
-) raises -> JsonValue:
-    if root.kind != JsonValue.OBJECT:
-        return make_json(JsonValue.OBJECT)
-    var out = make_json(JsonValue.OBJECT)
-    for i in range(len(root.object_keys)):
-        var key = root.object_keys[i]
-        ref slot = root.object_values[i][]
-        var tc = module.top_container(key)
-        if not tc:
-            continue
-        var pruned = _prune_object_to_schema(slot, tc.value()[], module, slot)
-        out.object_keys.append(key)
-        out.object_values.append(ArcJson(pruned^))
-    return out^
-
-
 ## --- Pricing -------------------------------------------------------------------
 
 
-def _line_total_cents(read line: JsonValue) raises -> Int:
+def _catalog_json() -> String:
+    return (
+        '{"catalog":{"item":['
+        '{"sku":"tea","name":"Jasmine green tea","unit_price_cents":450},'
+        '{"sku":"mug","name":"Stoneware mug","unit_price_cents":1200},'
+        '{"sku":"beans","name":"House espresso beans","unit_price_cents":1600},'
+        '{"sku":"filter","name":"Paper filter pack","unit_price_cents":650}'
+        "]}}"
+    )
+
+
+def _catalog_name(read sku: String) raises -> String:
+    if sku == "tea":
+        return "Jasmine green tea"
+    if sku == "mug":
+        return "Stoneware mug"
+    if sku == "beans":
+        return "House espresso beans"
+    if sku == "filter":
+        return "Paper filter pack"
+    raise Error("unknown catalog sku `" + sku + "`")
+
+
+def _catalog_unit_price_cents(read sku: String) raises -> Int:
+    if sku == "tea":
+        return 450
+    if sku == "mug":
+        return 1200
+    if sku == "beans":
+        return 1600
+    if sku == "filter":
+        return 650
+    raise Error("unknown catalog sku `" + sku + "`")
+
+
+def _line_sku(read line: JsonValue) raises -> String:
+    var sku = json_get(line, "sku")
+    if not sku or sku.value()[].kind != JsonValue.STRING:
+        raise Error("purchase_request/item: expected sku")
+    return sku.value()[].text
+
+
+def _line_quantity(read line: JsonValue) raises -> Int:
     var q = json_get(line, "quantity")
-    var p = json_get(line, "unit_price_cents")
     if not q or q.value()[].kind != JsonValue.INT:
+        raise Error("purchase_request/item: expected quantity")
+    return Int(q.value()[].int_value)
+
+
+def _line_total_cents(read line: JsonValue) raises -> Int:
+    var sku = _line_sku(line)
+    var q = _line_quantity(line)
+    return q * _catalog_unit_price_cents(sku)
+
+
+def purchase_line_count(read purchase: JsonValue) raises -> Int:
+    var items = json_get(purchase, "item")
+    if not items or items.value()[].kind != JsonValue.ARRAY:
         return 0
-    if not p or p.value()[].kind != JsonValue.INT:
-        return 0
-    return Int(q.value()[].int_value * p.value()[].int_value)
+    return len(items.value()[].array_values.copy())
+
+
+def purchase_discount_percent(read purchase: JsonValue) raises -> Int:
+    if purchase_line_count(purchase) >= 3:
+        return 10
+    return 0
 
 
 def purchase_subtotal_cents(read purchase: JsonValue) raises -> Int:
@@ -588,15 +474,67 @@ def purchase_subtotal_cents(read purchase: JsonValue) raises -> Int:
 
 def purchase_total_cents(read purchase: JsonValue) raises -> Int:
     var sub = purchase_subtotal_cents(purchase)
-    var d = json_get(purchase, "discount_percent")
-    if not d or d.value()[].kind != JsonValue.INT:
-        return sub
-    var pct = Int(d.value()[].int_value)
-    if pct <= 0:
-        return sub
-    if pct > 100:
-        pct = 100
+    var pct = purchase_discount_percent(purchase)
     return sub - (sub * pct) // 100
+
+
+def _cart_currency(read doc: JsonValue) raises -> String:
+    var c = json_get(doc, "cart")
+    if not c:
+        return "USD"
+    var cur = json_get(c.value()[], "currency")
+    if not cur or cur.value()[].kind != JsonValue.STRING:
+        return "USD"
+    return cur.value()[].text
+
+
+def _json_purchase_response(
+    read purchase: JsonValue, read currency: String
+) raises -> String:
+    var items = json_get(purchase, "item")
+    if not items or items.value()[].kind != JsonValue.ARRAY:
+        raise Error("purchase_request: expected item list")
+    var subtotal = purchase_subtotal_cents(purchase)
+    var pct = purchase_discount_percent(purchase)
+    var discount = (subtotal * pct) // 100
+    var total = subtotal - discount
+    var s = String('{"purchase_response":{"item":[')
+    var arr = items.value()[].array_values.copy()
+    for i in range(len(arr)):
+        if i > 0:
+            s += ","
+        ref line = arr[i][]
+        var sku = _line_sku(line)
+        var q = _line_quantity(line)
+        var unit = _catalog_unit_price_cents(sku)
+        var line_total = q * unit
+        s += (
+            '{"sku":"'
+            + _json_escape(sku)
+            + '","name":"'
+            + _json_escape(_catalog_name(sku))
+            + '","quantity":'
+            + String(q)
+            + ',"unit_price_cents":'
+            + String(unit)
+            + ',"line_total_cents":'
+            + String(line_total)
+            + "}"
+        )
+    s += (
+        '],"subtotal_cents":'
+        + String(subtotal)
+        + ',"discount_percent":'
+        + String(pct)
+        + ',"discount_cents":'
+        + String(discount)
+        + ',"total_cents":'
+        + String(total)
+        + ',"currency":"'
+        + _json_escape(currency)
+        + '"}}'
+    )
+    return s^
 
 
 ## --- HTTP (Python `socket`) ----------------------------------------------------
@@ -710,11 +648,13 @@ def serve_rest(read module: YangModule, port: Int) raises:
     print(
         "REST shopping cart on http://127.0.0.1:"
         + String(port)
-        + "  (GET /cart, POST /cart, POST /purchase strict|prune)"
+        + "  (GET /cart, GET /catalog, POST /cart, POST /purchase)"
     )
     var g_cart = parse_json(
         '{"cart":{"customer_id":"guest","currency":"USD"}}', "cart.json"
     )
+    var catalog_doc = parse_json(_catalog_json(), "catalog.json")
+    validate_data(catalog_doc, module, "catalog")
     while True:
         var pair = s.accept()
         var conn = pair[0]
@@ -744,6 +684,8 @@ def serve_rest(read module: YangModule, port: Int) raises:
         var response: String
         if method == "GET" and path == "/cart":
             response = _http_ok_json(_json_cart_view(g_cart))
+        elif method == "GET" and path == "/catalog":
+            response = _http_ok_json(_catalog_json())
         elif method == "POST" and path == "/cart":
             try:
                 var doc = parse_json(body, "body.json")
@@ -758,21 +700,15 @@ def serve_rest(read module: YangModule, port: Int) raises:
                 var doc = parse_json(body, "body.json")
                 validate_data(doc, module, "strict-purchase")
                 var purchase = _purchase_from_doc(doc)
-                var total_cents_strict = purchase_total_cents(purchase)
-                var pruned_root = prune_instance_to_model(doc, module)
-                var pr_p = _purchase_from_doc(pruned_root)
-                var total_cents_pruned = purchase_total_cents(pr_p)
-                response = _http_ok_json(
-                    '{"totals":{"strict_validation_cents":'
-                    + String(total_cents_strict)
-                    + ',"pruned_model_cents":'
-                    + String(total_cents_pruned)
-                    + '},"purchase_strict":'
-                    + _json_purchase_summary(purchase)
-                    + ',"purchase_pruned":'
-                    + _json_purchase_summary(pr_p)
-                    + "}"
+                var body_json = _json_purchase_response(
+                    purchase, _cart_currency(g_cart)
                 )
+                validate_data(
+                    parse_json(body_json, "purchase-response.json"),
+                    module,
+                    "purchase-response",
+                )
+                response = _http_ok_json(body_json)
             except e:
                 response = _http_err(400, String(e))
         elif method == "GET" and path == "/health":
@@ -835,21 +771,6 @@ def _json_cart_view(read doc: JsonValue) raises -> String:
     return _json_value_to_string(c.value()[])
 
 
-def _json_purchase_summary(read p: JsonValue) raises -> String:
-    var disc = "false"
-    if json_get(p, "discount_percent") != None:
-        disc = "true"
-    return (
-        '{"subtotal_cents":'
-        + String(purchase_subtotal_cents(p))
-        + ',"total_cents":'
-        + String(purchase_total_cents(p))
-        + ',"discount_percent_present":'
-        + disc
-        + "}"
-    )
-
-
 def _json_value_to_string(read v: JsonValue) raises -> String:
     if v.kind == JsonValue.STRING:
         return '"' + _json_escape(v.text) + '"'
@@ -897,6 +818,9 @@ def main() raises:
     comptime assert (
         _CART_REFLECTION_OK
     ), "examples/shopping_cart.mojo: CartContainer fields do not match schema"
+    comptime assert (
+        _CART_GENERATED_MODULE_OK
+    ), "examples/shopping_cart.mojo: CartContainer generated YangModule failed"
     var module = parse_yang_json_module(
         String(APP_SCHEMA_JSON), "shopping-cart-app.json"
     )
