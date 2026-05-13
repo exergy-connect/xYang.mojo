@@ -22,7 +22,8 @@
         "name": "eth2",
         "if-index": 3,
         "mtu": 1500,
-        "admin-up": true
+        "admin-up": true,
+        "hold-time": 300
       }
     ]
   }

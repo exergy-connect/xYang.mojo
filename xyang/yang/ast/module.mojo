@@ -149,9 +149,12 @@ struct YangModule(Movable & Iterable):
         return ""
 
     def get_name(read self) raises -> String:
-        from ..spec import `module`
-
-        return self._field_argument_text_required(`module`)
+        if not self.root:
+            return ""
+        ref root_node = self.root.value()[]
+        if root_node.has_argument():
+            return root_node.argument_text()
+        return ""
 
     def get_yang_version(read self) raises -> Optional[String]:
         from ..spec import `yang-version`

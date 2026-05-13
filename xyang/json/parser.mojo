@@ -1,4 +1,4 @@
-## Minimal JSON parser (objects, arrays, strings, integers, bool, null).
+## Minimal JSON parser (objects, arrays, strings, numbers, bool, null).
 ##
 
 from std.memory import ArcPointer, Span
@@ -36,8 +36,9 @@ struct JsonValue(ImplicitlyDestructible, Movable):
     comptime ARRAY: Self.Kind = 1
     comptime STRING: Self.Kind = 2
     comptime INT: Self.Kind = 3
-    comptime BOOL: Self.Kind = 4
-    comptime NULL: Self.Kind = 5
+    comptime REAL: Self.Kind = 4
+    comptime BOOL: Self.Kind = 5
+    comptime NULL: Self.Kind = 6
     comptime ValueList = List[Arc[JsonValue]]
 
     var kind: Self.Kind
@@ -153,6 +154,7 @@ struct JsonParser[origin: ImmutOrigin]:
         self.skip_ws()
         var ln = self.line
         var start = self.pos
+        var is_real = False
         if self.input[self.pos] == `-`:
             self.pos += 1
         while (
@@ -162,6 +164,7 @@ struct JsonParser[origin: ImmutOrigin]:
         ):
             self.pos += 1
         if not self.eof() and self.input[self.pos] == `.b`:
+            is_real = True
             self.pos += 1
             while (
                 not self.eof()
@@ -172,6 +175,7 @@ struct JsonParser[origin: ImmutOrigin]:
         if not self.eof() and (
             self.input[self.pos] == `eb` or self.input[self.pos] == `Eb`
         ):
+            is_real = True
             self.pos += 1
             if not self.eof() and (
                 self.input[self.pos] == `+b` or self.input[self.pos] == `-`
@@ -186,13 +190,10 @@ struct JsonParser[origin: ImmutOrigin]:
         var text = String(
             StringSlice(unsafe_from_utf8=self.input[start : self.pos])
         )
-        var value = make_json(JsonValue.INT, ln)
+        var kind = JsonValue.REAL if is_real else JsonValue.INT
+        var value = make_json(kind, ln)
         value.text = text
-        if (
-            text.find(".") == -1
-            and text.find("e") == -1
-            and text.find("E") == -1
-        ):
+        if not is_real:
             value.int_value = Int64(atol(text))
         return value^
 
@@ -286,7 +287,11 @@ def json_get(read obj: JsonValue, key: String) -> Optional[Arc[JsonValue]]:
 
 
 def json_scalar_text(read value: JsonValue) -> String:
-    if value.kind == JsonValue.STRING or value.kind == JsonValue.INT:
+    if (
+        value.kind == JsonValue.STRING
+        or value.kind == JsonValue.INT
+        or value.kind == JsonValue.REAL
+    ):
         return value.text
     if value.kind == JsonValue.BOOL:
         return "true" if value.bool_value else "false"

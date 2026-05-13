@@ -63,7 +63,8 @@ Scope:
 | `mandatory` (leaf) | Supported | Missing/null checks implemented. |
 | `default` (`leaf`, `leaf-list`, `choice` default case) | Partial | Parser captures defaults; validator realizes leaf/leaf-list effective defaults and treats choice default case as active when no explicit case is present. |
 | `key` (list) | Supported | Parsed and used for list-path formatting in diagnostics. |
-| `min-elements`, `max-elements`, `unique`, `ordered-by` | Not yet | Not implemented. |
+| `min-elements`, `max-elements` | Supported | Enforced for `list` and `leaf-list` array cardinality. `max-elements unbounded` is accepted. |
+| `unique`, `ordered-by` | Not yet | Parsed but not enforced by the validator. |
 | Choice/case full RFC semantics | Partial | Mandatory choice, default case, and `when` on `choice`/`case` are implemented in parser + validator; other subtleties of RFC 7950 `choice`/`case` are still simplified. |
 
 ### XPath support used by `must`/`when`
@@ -82,6 +83,7 @@ Implemented:
 - Mandatory leaf missing/null checks.
 - List node type checks (must be array).
 - Leaf-list node type checks (must be array).
+- `min-elements` / `max-elements` checks for lists and leaf-lists.
 - Numeric type + `range` checks; `union` (member types), `decimal64` (range), `bits` (space-separated names), `identityref` (string check).
 - Leaf-level `must` and `when` evaluation.
 - Leaf-list per-item `must` and type checks.

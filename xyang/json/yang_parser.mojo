@@ -119,6 +119,7 @@ def _json_scalar(
     if (
         v.kind == json_parser.JsonValue.STRING
         or v.kind == json_parser.JsonValue.INT
+        or v.kind == json_parser.JsonValue.REAL
         or v.kind == json_parser.JsonValue.BOOL
     ):
         return Optional[String](json_parser.json_scalar_text(v))

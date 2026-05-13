@@ -22,7 +22,7 @@ comptime Arc = ArcPointer
 def test_must_statement_parses_boolean_current() raises:
     var node = YangConstruct("must", line=3)
     node.set_raw_argument(String("boolean(current())"))
-    XPathExpressionArgument.validate(node)
+    XPathExpressionArgument.parse_and_store(node)
     assert_equal(node.argument_text(), String("boolean(current())"))
     assert_true(node.argument.isa[XPathExpressionArgument]())
 
@@ -31,7 +31,7 @@ def test_must_statement_parses_current_parent_string_compare() raises:
     # Typical leaf/list pattern: relate the context node to an ancestor path.
     var node = YangConstruct("must", line=1)
     node.set_raw_argument(String("string(current()/..) = '/devices/device'"))
-    XPathExpressionArgument.validate(node)
+    XPathExpressionArgument.parse_and_store(node)
     assert_true(node.argument.isa[XPathExpressionArgument]())
 
 

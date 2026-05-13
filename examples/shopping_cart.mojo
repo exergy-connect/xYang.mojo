@@ -855,6 +855,8 @@ def _json_value_to_string(read v: JsonValue) raises -> String:
         return '"' + _json_escape(v.text) + '"'
     if v.kind == JsonValue.INT:
         return String(v.int_value)
+    if v.kind == JsonValue.REAL:
+        return v.text
     if v.kind == JsonValue.BOOL:
         if v.bool_value:
             return "true"

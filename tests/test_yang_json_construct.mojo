@@ -1,4 +1,4 @@
-from std.testing import assert_equal, assert_true
+from std.testing import assert_equal, assert_true, TestSuite
 
 from xyang.json import parse_yang_json, parse_yang_json_module
 from xyang.yang.arguments import PathArgument
@@ -191,7 +191,7 @@ def test_parse_yang_path_with_leafref_predicate() raises:
 def test_path_argument_stores_validated_yang_path() raises:
     var node = YangConstruct("path", 7)
     node.set_raw_argument("../fields/name")
-    PathArgument.validate(node)
+    PathArgument.parse_and_store(node)
     assert_true(node.argument.isa[PathArgument]())
     ref arg = node.argument.get[PathArgument]()
     assert_equal(node.argument.text, "../fields/name")
@@ -205,17 +205,11 @@ def test_invalid_yang_path_rejected() raises:
     node.set_raw_argument("/data-model/")
     var failed = False
     try:
-        PathArgument.validate(node)
+        PathArgument.parse_and_store(node)
     except:
         failed = True
     assert_true(failed)
 
 
 def main() raises:
-    test_yang_json_raw_construct_matches_yang_text()
-    test_yang_json_module_indexes_supported_subset()
-    test_overlapping_length_in_xyang_rejected()
-    test_pattern_invert_from_json_emits_modifier()
-    test_parse_yang_path_with_leafref_predicate()
-    test_path_argument_stores_validated_yang_path()
-    test_invalid_yang_path_rejected()
+    TestSuite.discover_tests[__functions_in_module()]().run()

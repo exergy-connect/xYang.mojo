@@ -29,11 +29,11 @@ package = "bash -lc 'mkdir -p build && export MODULAR_MOJO_IMPORT_PATH=\"$PWD/.p
 compile-check = "bash -lc 'M=\"$PWD/.pixi/envs/default/lib/mojo\"; test -f build/xyang.mojopkg || { echo \"Run: pixi run package\"; exit 1; }; mojo -I build -I \"$M\" tests/test_basic_yang_validator.mojo'"
 
 # Full test pass using `xyang` from `build/xyang.mojopkg`.
-tests-mojopkg = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; test -f build/xyang.mojopkg || { echo \"Run: pixi run package\"; exit 1; }; for f in tests/test_basic_yang_validator.mojo tests/test_yang_json_construct.mojo; do echo \"== $f\"; mojo -I build -I \"$M\" \"$f\"; done'"
+tests-mojopkg = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; test -f build/xyang.mojopkg || { echo \"Run: pixi run package\"; exit 1; }; for f in tests/test_basic_yang_validator.mojo tests/test_yang_json_construct.mojo tests/yang/cardinality.mojo tests/yang/leafref.mojo tests/yang/qname_test.mojo tests/yang/xpath/test_path_parser.mojo tests/yang/xpath/test_evaluator.mojo tests/yang/xpath/test_pratt_parser.mojo tests/yang/xpath/test_must_expression.mojo tests/yang/xpath/test_xpath_expression_argument.mojo; do echo \"== $f\"; mojo -I build -I \"$M\" \"$f\"; done'"
 
 # Rebuilds and runs selected tests from **source** (`-I .`) — slower; use when validating changes that are not in the published `.mojopkg` yet, or to compare with mojopkg.
 # Mojo 0.26+ rejects multiple entry `.mojo` paths in one invocation; run each file separately.
-tests = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; for f in tests/test_basic_yang_validator.mojo tests/test_yang_json_construct.mojo; do echo \"== $f\"; mojo -I . -I \"$M\" \"$f\"; done'"
+tests = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; for f in tests/test_basic_yang_validator.mojo tests/test_yang_json_construct.mojo tests/yang/cardinality.mojo tests/yang/leafref.mojo tests/yang/qname_test.mojo tests/yang/xpath/test_path_parser.mojo tests/yang/xpath/test_evaluator.mojo tests/yang/xpath/test_pratt_parser.mojo tests/yang/xpath/test_must_expression.mojo tests/yang/xpath/test_xpath_expression_argument.mojo; do echo \"== $f\"; mojo -I . -I \"$M\" \"$f\"; done'"
 
 basic-yang-example = "mojo -I . -I examples examples/basic_yang/validator.mojo"
 
