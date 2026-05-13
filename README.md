@@ -6,14 +6,13 @@ The goal of this repository is to:
 
 - model the xYang YANG meta‑model in Mojo, and
 - provide a JSON/YANG parser that can load `.yang.json` (hybrid JSON Schema + x-yang)
-  into a Mojo AST,
-- using [EmberJson](https://github.com/bgreni/EmberJson) as the JSON engine.
+  into a Mojo AST.
 
 > Status: **very early / experimental** – only the JSON/YANG path is sketched out.
 
 ## Fast workflow: precompiled `xyang.mojopkg`
 
-After you change code under `xyang/`, rebuild the package, then use **`compile-check`** (or any single `mojo` invocation with **`-I build`**) so the compiler links against the **prebuilt** `build/xyang.mojopkg` plus EmberJson — much faster than re-running the full test suite from source with `-I .` on every check.
+After you change code under `xyang/`, rebuild the package, then use **`compile-check`** (or any single `mojo` invocation with **`-I build`**) so the compiler links against the **prebuilt** `build/xyang.mojopkg` — much faster than re-running the full test suite from source with `-I .` on every check.
 
 ```bash
 pixi run package          # produces build/xyang.mojopkg
@@ -24,7 +23,7 @@ Use `pixi run tests-mojopkg` or `pixi run tests` only when you need a full regre
 
 ## Building the `xyang` library (`.mojopkg`)
 
-The `xyang` package is compiled into a portable [Mojo package](https://docs.modular.com/mojo/manual/packages) (`xyang.mojopkg`). The build depends on **EmberJson** on the Mojo import path (this repo’s Pixi environment provides `emberjson.mojopkg` under `lib/mojo`).
+The `xyang` package is compiled into a portable [Mojo package](https://docs.modular.com/mojo/manual/packages) (`xyang.mojopkg`).
 
 ```bash
 # From the repo root (after `pixi install`)
@@ -36,17 +35,16 @@ Manual equivalent:
 
 ```bash
 mkdir -p build
-export MODULAR_MOJO_IMPORT_PATH="$PWD/.pixi/envs/default/lib/mojo"
 mojo package -I. -o build/xyang.mojopkg xyang
 ```
 
-**Consuming the library:** pass **both** the directory containing `xyang.mojopkg` and the directory containing `emberjson.mojopkg` to the compiler, for example:
+**Consuming the library:** pass the directory containing `xyang.mojopkg` to the compiler, for example:
 
 ```bash
-mojo build -I build -I "$CONDA_PREFIX/lib/mojo" myapp.mojo
+mojo build -I build myapp.mojo
 ```
 
-Alternatively, set `MODULAR_MOJO_IMPORT_PATH` to a `:`-separated list of those directories. Then:
+Alternatively, set `MODULAR_MOJO_IMPORT_PATH` to point at that directory. Then:
 
 ```mojo
 from xyang import parse_json_schema, parse_yang_file
@@ -71,25 +69,3 @@ Subpackages (`xyang.json`, `xyang.validator`, `xyang.xpath`, …) work like impo
   - `validator/` – document validation, leafref, `must` / `when`, …
   - `xpath/` – tokenizer, Pratt parser, evaluator for constraint XPath
 - `main.mojo` – CLI (`pixi run xyang -- …`)
-
-## Using EmberJson
-
-This project assumes EmberJson is available in your Mojo toolchain. See the
-EmberJson repository for installation instructions and examples:
-
-- GitHub: [bgreni/EmberJson](https://github.com/bgreni/EmberJson)
-
-Example of using EmberJson in Mojo:
-
-```mojo
-from emberjson import parse, Value
-
-fn main() raises:
-    let doc: Value = parse(r#"{"key": 123}"#)
-    let obj = doc.object()
-    print(obj["key"].int())
-```
-
-The xYang.mojo JSON/YANG parser will build on this to walk the parsed `Value`
-tree and construct a `YangModule` AST.
-

@@ -48,7 +48,7 @@ The same pattern appears on **`YangMust`** and **`YangWhen`** (free the parse tr
 
 ## 4. `raises`, `try` / `except`, and CLI exit codes
 
-Functions that parse, validate, or perform I/O are marked **`raises`** where failure is modeled as errors (e.g. `parse_yang_file`, `parse_json_schema`, EmberJson `parse`). The top-level CLI wraps work in **`try` / `except`**, prints a message, and returns a **process exit code** via `std.sys.exit(run_cli())` in `main.mojo` — analogous to Python’s `sys.exit(main())`, but **return types** (`-> Int`) and **`raises`** are checked by the compiler.
+Functions that parse, validate, or perform I/O are marked **`raises`** where failure is modeled as errors (e.g. `parse_yang_file`, `parse_json_schema`, `parse_json`). The top-level CLI wraps work in **`try` / `except`**, prints a message, and returns a **process exit code** via `std.sys.exit(run_cli())` in `main.mojo` — analogous to Python’s `sys.exit(main())`, but **return types** (`-> Int`) and **`raises`** are checked by the compiler.
 
 ---
 
@@ -57,7 +57,7 @@ Functions that parse, validate, or perform I/O are marked **`raises`** where fai
 Mojo encodes mutability and borrowing in signatures:
 
 - **`read x: T`**: immutable borrow (common for traversals: `read leaf: YangLeaf` in the JSON generator).
-- **`ref`**: interior references into structs or JSON `Value` views — e.g. `ref pair in props_obj.items()` in `xyang/json/parser.mojo` to walk EmberJson objects without copying the whole tree.
+- **`ref`**: interior references into structs or JSON `Value` views — e.g. `ref pair in props_obj.items()` in `xyang/json/parser.mojo` to walk JSON objects without copying the whole tree.
 - **`mut self`** on validators / builders where internal state changes.
 
 Python has no equivalent split; “const correctness” is only by convention.
@@ -78,13 +78,13 @@ Shared spellings (e.g. `Arc = ArcPointer`, JSON / `x-yang` key strings in `xyang
 
 ## 8. `@fieldwise_init` structs vs Python `@dataclass`
 
-AST nodes are **`@fieldwise_init` structs** (`YangModule`, `YangLeaf`, …) with generated memberwise constructors. They are **`Movable`** and often **`JsonDeserializable`** for EmberJson reflection, not open-ended classes with `__dict__`. That trades flexibility for **predictable layout** and **clear ownership** of every field.
+AST nodes are **`@fieldwise_init` structs** (`YangModule`, `YangLeaf`, …) with generated memberwise constructors. They are **`Movable`**, not open-ended classes with `__dict__`. That trades flexibility for **predictable layout** and **clear ownership** of every field.
 
 ---
 
-## 9. EmberJson `Value` / `Object` vs Python `dict[str, Any]`
+## 9. JSON `JsonValue` vs Python `dict[str, Any]`
 
-The JSON path uses **typed JSON values** (`Value`, `Object`, `Array`) from EmberJson instead of plain Python dicts. Navigation uses **`.object()`, `.string()`, `.is_array()`**, etc. (`xyang/json/parser.mojo`). Building schema output constructs **`Object`** trees explicitly (`xyang/json/generator.mojo`). This is closer to “typed document API” than Python’s uniform `dict` + `json.loads`, and interacts with Mojo’s **move / copy** rules when stuffing values into maps and arrays.
+The JSON path uses **typed JSON values** (`JsonValue`) with the project's own JSON parser instead of plain Python dicts. Navigation uses typed accessors (`xyang/json/parser.mojo`). This is closer to “typed document API” than Python’s uniform `dict` + `json.loads`, and interacts with Mojo’s **move / copy** rules when stuffing values into maps and arrays.
 
 ---
 
@@ -111,7 +111,7 @@ Identifiers that are natural in Python may be **reserved in Mojo** (e.g. `module
 | Topic | Python xYang (typical) | xYang.mojo |
 |--------|-------------------------|------------|
 | Tree ownership | Reference cycles + GC | `Arc`, `^` transfer, explicit `__del__` for XPath |
-| JSON tree | `dict` / `Any` | EmberJson `Value` / `Object` / `Array` |
+| JSON tree | `dict` / `Any` | `JsonValue` (typed document API) |
 | Optional data | `None` | `Optional[T]` |
 | Failure modes | Exceptions (unchecked by types) | `raises` + `try` / `except` where declared |
 | Shared subtrees | Implicit aliasing | `Arc[T]` + move into `Arc` |

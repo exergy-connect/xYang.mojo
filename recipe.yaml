@@ -20,7 +20,5 @@ requirements:
   build:
     - mojo 0.26.2.0.*
     - mblack ==26.2.0
-    - emberjson
   run:
     - mojo 0.26.2.0.*
-    - emberjson
