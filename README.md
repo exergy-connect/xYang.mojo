@@ -52,9 +52,9 @@ A constraint is not metadata attached to a type.
 The constraint *is part of the type*.
 
 ```mojo
-alias Age = YangLeaf[
+comptime Age = YangLeaf[
     YangBuiltinUInt8,
-    Constraints=YangConstraints[
+    YangConstraints[
         Range=YangRange[18, 120]
     ]
 ]
@@ -234,14 +234,14 @@ MODULAR_MOJO_IMPORT_PATH=build
 Example:
 
 ```mojo
-from xyang import parse_json_schema, parse_yang_file
+from xyang import parse_json, parse_yang_json, parse_yang_json_module
 ```
 
 Subpackages work like normal Mojo source imports:
 
 ```mojo
-from xyang.validator import validate_json
-from xyang.xpath import parse_xpath
+from xyang.validator.document import validate_data
+from xyang.yang.xpath import parse_xpath
 ```
 
 ---
