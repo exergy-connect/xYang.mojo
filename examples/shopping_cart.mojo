@@ -117,7 +117,7 @@ struct PurchaseResponseItem(ImplicitlyDestructible, Movable, YangListItem, YangM
     var name: YangLeaf[YangBuiltinString, YangConstraints[MaxStringLength[128]]]
     var quantity: YangLeaf[
         YangBuiltinUInt16,
-        YangConstraints[Range=YangRange[0, 65535]],
+        YangConstraints[Range=YangRange[1, 999]],
     ]
     var unit_price_cents: YangLeaf[
         YangBuiltinUInt16,
@@ -832,6 +832,46 @@ def _json_clone(read v: JsonValue) raises -> JsonValue:
     return parse_json(_json_value_to_string(v), "clone.json")
 
 
+## --- Demo client (background thread sends orders over TCP) -------------------
+
+
+def _start_demo_client(port: Int) raises:
+    var subprocess = Python.import_module("subprocess")
+    var sys = Python.import_module("sys")
+    var py_code = (
+        "import http.client, time\n"
+        "time.sleep(1)\n"
+        "port = " + String(port) + "\n"
+        "orders = [\n"
+        "    ('Order 1 (valid, 2 items, no bulk discount)',\n"
+        "     '{\"purchase_request\":{\"item\":[{\"sku\":\"tea\",\"quantity\":2},{\"sku\":\"mug\",\"quantity\":1}]}}'),\n"
+        "    ('Order 2 (valid, 4 items, 10% bulk discount)',\n"
+        "     '{\"purchase_request\":{\"item\":[{\"sku\":\"tea\",\"quantity\":1},{\"sku\":\"mug\",\"quantity\":2},{\"sku\":\"beans\",\"quantity\":1},{\"sku\":\"filter\",\"quantity\":3}]}}'),\n"
+        "    ('Order 3 (invalid, unknown SKU)',\n"
+        "     '{\"purchase_request\":{\"item\":[{\"sku\":\"tea\",\"quantity\":1},{\"sku\":\"unicorn\",\"quantity\":1}]}}'),\n"
+        "]\n"
+        "print('\\n=== Shopping Cart Demo Orders ===\\n')\n"
+        "for label, body in orders:\n"
+        "    print(f'-- {label} --')\n"
+        "    print(f'  REQUEST:  {body}')\n"
+        "    try:\n"
+        "        conn = http.client.HTTPConnection('127.0.0.1', port, timeout=5)\n"
+        "        conn.request('POST', '/purchase', body,\n"
+        "                     {'Content-Type': 'application/json'})\n"
+        "        resp = conn.getresponse()\n"
+        "        data = resp.read().decode()\n"
+        "        if resp.status == 200:\n"
+        "            print(f'  RESPONSE: {data}')\n"
+        "        else:\n"
+        "            print(f'  ERROR:    HTTP {resp.status}: {data}')\n"
+        "        conn.close()\n"
+        "    except Exception as e:\n"
+        "        print(f'  ERROR:    {e}')\n"
+        "    print()\n"
+    )
+    subprocess.Popen([sys.executable, "-c", py_code])
+
+
 ## --- main ----------------------------------------------------------------------
 
 
@@ -850,4 +890,5 @@ def main() raises:
     )
     _validate_mojo_cart_vs_yang(module)
     var port: Int = 18080
+    _start_demo_client(port)
     serve_rest(module, port)
