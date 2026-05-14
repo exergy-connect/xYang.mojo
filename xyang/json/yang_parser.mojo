@@ -35,7 +35,8 @@
 
 from std.memory import ArcPointer
 
-import xyang.json.parser as json_parser
+import xyang.json.value as json_value
+from xyang.json.parser import parse_json
 import xyang.yang.ast.util as ast_util
 from xyang.yang.ast.util import _strip_spaces
 from xyang.yang.ast.construct import YangConstruct
@@ -90,59 +91,59 @@ def _append_arg(mut parent: YangConstruct, keyword: String, argument: String):
 
 def _append_string_or_string_array(
     mut parent: YangConstruct,
-    read obj: json_parser.JsonValue,
+    read obj: json_value.JsonValue,
     key: String,
     yang_keyword: String,
 ):
-    var value = json_parser.json_get(obj, key)
+    var value = json_value.json_get(obj, key)
     if not value:
         return
     ref v = value.value()[]
-    if v.kind == json_parser.JsonValue.STRING:
-        _append_arg(parent, yang_keyword, v.text)
+    if v.kind == json_value.JsonValue.STRING:
+        _append_arg(parent, yang_keyword, v.payload[json_value.JsonString].value)
         return
-    if v.kind != json_parser.JsonValue.ARRAY:
+    if v.kind != json_value.JsonValue.ARRAY:
         return
-    for item in v.array_values:
-        if item[].kind == json_parser.JsonValue.STRING:
-            _append_arg(parent, yang_keyword, item[].text)
+    for item in v.payload[json_value.JsonArray].values:
+        if item[].kind == json_value.JsonValue.STRING:
+            _append_arg(parent, yang_keyword, item[].payload[json_value.JsonString].value)
 
 
 ## --- Typed reads from `JsonValue` objects (by string key) ---
 
 
 def _json_string(
-    read obj: json_parser.JsonValue, key: String, default: String = ""
+    read obj: json_value.JsonValue, key: String, default: String = ""
 ) -> String:
-    var value = json_parser.json_get(obj, key)
-    if value and value.value()[].kind == json_parser.JsonValue.STRING:
-        return value.value()[].text
+    var value = json_value.json_get(obj, key)
+    if value and value.value()[].kind == json_value.JsonValue.STRING:
+        return value.value()[].payload[json_value.JsonString].value
     return default
 
 
 def _json_bool(
-    read obj: json_parser.JsonValue, key: String, default: Bool = False
+    read obj: json_value.JsonValue, key: String, default: Bool = False
 ) -> Bool:
-    var value = json_parser.json_get(obj, key)
-    if value and value.value()[].kind == json_parser.JsonValue.BOOL:
-        return value.value()[].bool_value
+    var value = json_value.json_get(obj, key)
+    if value and value.value()[].kind == json_value.JsonValue.BOOL:
+        return value.value()[].payload[json_value.JsonBool].value
     return default
 
 
 def _json_scalar(
-    read obj: json_parser.JsonValue, key: String
+    read obj: json_value.JsonValue, key: String
 ) -> Optional[String]:
-    var value = json_parser.json_get(obj, key)
+    var value = json_value.json_get(obj, key)
     if not value:
         return Optional[String]()
     ref v = value.value()[]
     if (
-        v.kind == json_parser.JsonValue.STRING
-        or v.kind == json_parser.JsonValue.INT
-        or v.kind == json_parser.JsonValue.REAL
-        or v.kind == json_parser.JsonValue.BOOL
+        v.kind == json_value.JsonValue.STRING
+        or v.kind == json_value.JsonValue.INT
+        or v.kind == json_value.JsonValue.REAL
+        or v.kind == json_value.JsonValue.BOOL
     ):
-        return Optional[String](json_parser.json_scalar_text(v))
+        return Optional[String](json_value.json_scalar_text(v))
     return Optional[String]()
 
 
@@ -212,23 +213,23 @@ def _ref_typedef_name(ref_text: String) -> String:
 
 
 def _xyang(
-    read schema: json_parser.JsonValue,
-) -> Optional[Arc[json_parser.JsonValue]]:
-    return json_parser.json_get(schema, "x-yang")
+    read schema: json_value.JsonValue,
+) -> Optional[Arc[json_value.JsonValue]]:
+    return json_value.json_get(schema, "x-yang")
 
 
-def _xyang_type(read schema: json_parser.JsonValue) -> String:
+def _xyang_type(read schema: json_value.JsonValue) -> String:
     var xy = _xyang(schema)
-    if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+    if xy and xy.value()[].kind == json_value.JsonValue.OBJECT:
         return _json_string(xy.value()[], "type")
     return ""
 
 
-def _append_when(mut node: YangConstruct, read xyang: json_parser.JsonValue):
-    var when_value = json_parser.json_get(xyang, "when")
+def _append_when(mut node: YangConstruct, read xyang: json_value.JsonValue):
+    var when_value = json_value.json_get(xyang, "when")
     if (
         not when_value
-        or when_value.value()[].kind != json_parser.JsonValue.OBJECT
+        or when_value.value()[].kind != json_value.JsonValue.OBJECT
     ):
         return
     var cond = _json_string(when_value.value()[], "condition")
@@ -243,15 +244,15 @@ def _append_when(mut node: YangConstruct, read xyang: json_parser.JsonValue):
     _append_stmt(node, when_node^)
 
 
-def _append_musts(mut node: YangConstruct, read xyang: json_parser.JsonValue):
-    var must_value = json_parser.json_get(xyang, "must")
+def _append_musts(mut node: YangConstruct, read xyang: json_value.JsonValue):
+    var must_value = json_value.json_get(xyang, "must")
     if (
         not must_value
-        or must_value.value()[].kind != json_parser.JsonValue.ARRAY
+        or must_value.value()[].kind != json_value.JsonValue.ARRAY
     ):
         return
-    for item in must_value.value()[].array_values:
-        if item[].kind != json_parser.JsonValue.OBJECT:
+    for item in must_value.value()[].payload[json_value.JsonArray].values:
+        if item[].kind != json_value.JsonValue.OBJECT:
             continue
         var expr = _json_string(item[], "must")
         if expr.byte_length() == 0:
@@ -267,21 +268,21 @@ def _append_musts(mut node: YangConstruct, read xyang: json_parser.JsonValue):
 
 
 def _append_if_features(
-    mut node: YangConstruct, read xyang: json_parser.JsonValue
+    mut node: YangConstruct, read xyang: json_value.JsonValue
 ):
     var single = _json_string(xyang, "if-feature")
     if single.byte_length() > 0:
         _append_arg(node, "if-feature", single)
-    var many = json_parser.json_get(xyang, "if-features")
-    if not many or many.value()[].kind != json_parser.JsonValue.ARRAY:
+    var many = json_value.json_get(xyang, "if-features")
+    if not many or many.value()[].kind != json_value.JsonValue.ARRAY:
         return
-    for item in many.value()[].array_values:
-        if item[].kind == json_parser.JsonValue.STRING:
-            _append_arg(node, "if-feature", item[].text)
+    for item in many.value()[].payload[json_value.JsonArray].values:
+        if item[].kind == json_value.JsonValue.STRING:
+            _append_arg(node, "if-feature", item[].payload[json_value.JsonString].value)
 
 
 def _append_range_from_schema(
-    mut type_node: YangConstruct, read schema: json_parser.JsonValue
+    mut type_node: YangConstruct, read schema: json_value.JsonValue
 ):
     var minv = _json_scalar(schema, "minimum")
     var maxv = _json_scalar(schema, "maximum")
@@ -297,11 +298,11 @@ def _append_range_from_schema(
 
 
 def _type_from_schema(
-    read schema: json_parser.JsonValue, read defs: json_parser.JsonValue
+    read schema: json_value.JsonValue, read defs: json_value.JsonValue
 ) -> YangConstruct:
     var xy = _xyang(schema)
     var xy_type = String()
-    if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+    if xy and xy.value()[].kind == json_value.JsonValue.OBJECT:
         xy_type = _json_string(xy.value()[], "type")
 
     if xy_type == "leafref":
@@ -311,43 +312,43 @@ def _type_from_schema(
     if xy_type == "identityref":
         var t = _stmt("type", "identityref")
         _append_arg(t, "base", _json_string(xy.value()[], "base"))
-        var bases = json_parser.json_get(xy.value()[], "bases")
-        if bases and bases.value()[].kind == json_parser.JsonValue.ARRAY:
-            for base in bases.value()[].array_values:
-                if base[].kind == json_parser.JsonValue.STRING:
-                    _append_arg(t, "base", base[].text)
+        var bases = json_value.json_get(xy.value()[], "bases")
+        if bases and bases.value()[].kind == json_value.JsonValue.ARRAY:
+            for base in bases.value()[].payload[json_value.JsonArray].values:
+                if base[].kind == json_value.JsonValue.STRING:
+                    _append_arg(t, "base", base[].payload[json_value.JsonString].value)
         return t^
     if xy_type == "instance-identifier":
         return _stmt("type", "instance-identifier")
     if xy_type == "bits":
         var t = _stmt("type", "bits")
-        var bits = json_parser.json_get(xy.value()[], "bits")
-        if bits and bits.value()[].kind == json_parser.JsonValue.ARRAY:
-            for bit in bits.value()[].array_values:
-                if bit[].kind == json_parser.JsonValue.STRING:
-                    _append_arg(t, "bit", bit[].text)
-                elif bit[].kind == json_parser.JsonValue.OBJECT:
+        var bits = json_value.json_get(xy.value()[], "bits")
+        if bits and bits.value()[].kind == json_value.JsonValue.ARRAY:
+            for bit in bits.value()[].payload[json_value.JsonArray].values:
+                if bit[].kind == json_value.JsonValue.STRING:
+                    _append_arg(t, "bit", bit[].payload[json_value.JsonString].value)
+                elif bit[].kind == json_value.JsonValue.OBJECT:
                     _append_arg(t, "bit", _json_string(bit[], "name"))
         return t^
 
-    var ref_value = json_parser.json_get(schema, "$ref")
-    if ref_value and ref_value.value()[].kind == json_parser.JsonValue.STRING:
-        return _stmt("type", _ref_typedef_name(ref_value.value()[].text))
+    var ref_value = json_value.json_get(schema, "$ref")
+    if ref_value and ref_value.value()[].kind == json_value.JsonValue.STRING:
+        return _stmt("type", _ref_typedef_name(ref_value.value()[].payload[json_value.JsonString].value))
 
-    var one_of = json_parser.json_get(schema, "oneOf")
-    if one_of and one_of.value()[].kind == json_parser.JsonValue.ARRAY:
+    var one_of = json_value.json_get(schema, "oneOf")
+    if one_of and one_of.value()[].kind == json_value.JsonValue.ARRAY:
         var t = _stmt("type", "union")
-        for branch in one_of.value()[].array_values:
-            if branch[].kind == json_parser.JsonValue.OBJECT:
+        for branch in one_of.value()[].payload[json_value.JsonArray].values:
+            if branch[].kind == json_value.JsonValue.OBJECT:
                 _append_stmt(t, _type_from_schema(branch[], defs))
         return t^
 
-    var enum_value = json_parser.json_get(schema, "enum")
-    if enum_value and enum_value.value()[].kind == json_parser.JsonValue.ARRAY:
+    var enum_value = json_value.json_get(schema, "enum")
+    if enum_value and enum_value.value()[].kind == json_value.JsonValue.ARRAY:
         var t = _stmt("type", "enumeration")
-        for e in enum_value.value()[].array_values:
-            if e[].kind == json_parser.JsonValue.STRING:
-                _append_arg(t, "enum", e[].text)
+        for e in enum_value.value()[].payload[json_value.JsonArray].values:
+            if e[].kind == json_value.JsonValue.STRING:
+                _append_arg(t, "enum", e[].payload[json_value.JsonString].value)
         return t^
 
     var schema_type = _json_string(schema, "type", "string")
@@ -359,8 +360,8 @@ def _type_from_schema(
             return _stmt("type", "empty")
         return _stmt("type", "string")
     if schema_type == "array":
-        var items = json_parser.json_get(schema, "items")
-        if items and items.value()[].kind == json_parser.JsonValue.OBJECT:
+        var items = json_value.json_get(schema, "items")
+        if items and items.value()[].kind == json_value.JsonValue.OBJECT:
             return _type_from_schema(items.value()[], defs)
         return _stmt("type", "string")
     if schema_type == "integer":
@@ -380,7 +381,7 @@ def _type_from_schema(
         return t^
     if schema_type == "number":
         var t = _stmt("type", "decimal64")
-        if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+        if xy and xy.value()[].kind == json_value.JsonValue.OBJECT:
             var fd = _json_scalar(xy.value()[], "fraction-digits")
             if fd:
                 _append_arg(t, "fraction-digits", fd.value())
@@ -393,7 +394,7 @@ def _type_from_schema(
     var has_json_len = min_len or max_len
 
     var xy_len = String()
-    if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+    if xy and xy.value()[].kind == json_value.JsonValue.OBJECT:
         xy_len = _json_string(xy.value()[], "length")
 
     var used_complex_xy_len = False
@@ -412,7 +413,7 @@ def _type_from_schema(
             _append_arg(t, "length", "0.." + max_len.value())
     var pat_invert = False
     var xy_pat = String()
-    if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+    if xy and xy.value()[].kind == json_value.JsonValue.OBJECT:
         pat_invert = _json_bool(xy.value()[], "patternInvert")
         xy_pat = _json_string(xy.value()[], "pattern")
     var json_pat = _json_scalar(schema, "pattern")
@@ -436,42 +437,42 @@ def _type_from_schema(
 
 def _append_cases_from_oneof(
     mut choice_node: YangConstruct,
-    read one_of_arr: json_parser.JsonValue,
-    read defs: json_parser.JsonValue,
+    read one_of_arr: json_value.JsonValue,
+    read defs: json_value.JsonValue,
 ) raises:
     ## Each `oneOf` branch becomes a `case`; branch `x-yang.name` is the case id.
-    if one_of_arr.kind != json_parser.JsonValue.ARRAY:
+    if one_of_arr.kind != json_value.JsonValue.ARRAY:
         return
-    for bi in range(len(one_of_arr.array_values)):
-        ref branch = one_of_arr.array_values[bi][]
-        if branch.kind != json_parser.JsonValue.OBJECT:
+    for bi in range(len(one_of_arr.payload[json_value.JsonArray].values)):
+        ref branch = one_of_arr.payload[json_value.JsonArray].values[bi][]
+        if branch.kind != json_value.JsonValue.OBJECT:
             continue
         var bxy = _xyang(branch)
         var case_id = String("case-") + String(bi)
-        if bxy and bxy.value()[].kind == json_parser.JsonValue.OBJECT:
+        if bxy and bxy.value()[].kind == json_value.JsonValue.OBJECT:
             var nn = _json_string(bxy.value()[], "name")
             if nn.byte_length() > 0:
                 case_id = nn.copy()
         var case_node = _stmt("case", case_id)
-        var props = json_parser.json_get(branch, "properties")
-        var required = json_parser.json_get(branch, "required")
-        if props and props.value()[].kind == json_parser.JsonValue.OBJECT:
-            for j in range(len(props.value()[].object_keys)):
-                var child_name = props.value()[].object_keys[j]
+        var props = json_value.json_get(branch, "properties")
+        var required = json_value.json_get(branch, "required")
+        if props and props.value()[].kind == json_value.JsonValue.OBJECT:
+            for j in range(len(props.value()[].payload[json_value.JsonObject].keys)):
+                var child_name = props.value()[].payload[json_value.JsonObject].keys[j]
                 var mandatory = Optional[Bool]()
                 if (
                     required
-                    and required.value()[].kind == json_parser.JsonValue.ARRAY
+                    and required.value()[].kind == json_value.JsonValue.ARRAY
                 ):
-                    for req in required.value()[].array_values:
+                    for req in required.value()[].payload[json_value.JsonArray].values:
                         if (
-                            req[].kind == json_parser.JsonValue.STRING
-                            and req[].text == child_name
+                            req[].kind == json_value.JsonValue.STRING
+                            and req[].payload[json_value.JsonString].value == child_name
                         ):
                             mandatory = Optional[Bool](True)
                 var child = _convert_property(
                     child_name,
-                    props.value()[].object_values[j][],
+                    props.value()[].payload[json_value.JsonObject].values[j][],
                     defs,
                     mandatory,
                 )
@@ -482,19 +483,19 @@ def _append_cases_from_oneof(
 
 def _append_choice_from_schema_oneof(
     mut container_node: YangConstruct,
-    read schema: json_parser.JsonValue,
-    read xy: json_parser.JsonValue,
-    read defs: json_parser.JsonValue,
+    read schema: json_value.JsonValue,
+    read xy: json_value.JsonValue,
+    read defs: json_value.JsonValue,
 ) raises:
     ## When a `container` schema uses `oneOf` for mutually exclusive branches,
     ## `x-yang.choice` supplies the YANG choice name and metadata.
-    var one_of_top = json_parser.json_get(schema, "oneOf")
-    var choice_blob = json_parser.json_get(xy, "choice")
+    var one_of_top = json_value.json_get(schema, "oneOf")
+    var choice_blob = json_value.json_get(xy, "choice")
     if (
         not one_of_top
-        or one_of_top.value()[].kind != json_parser.JsonValue.ARRAY
+        or one_of_top.value()[].kind != json_value.JsonValue.ARRAY
         or not choice_blob
-        or choice_blob.value()[].kind != json_parser.JsonValue.OBJECT
+        or choice_blob.value()[].kind != json_value.JsonValue.OBJECT
     ):
         return
     ref ch_xy = choice_blob.value()[]
@@ -511,15 +512,15 @@ def _append_choice_from_schema_oneof(
 
 def _convert_property(
     name: String,
-    read prop_value: json_parser.JsonValue,
-    read defs: json_parser.JsonValue,
+    read prop_value: json_value.JsonValue,
+    read defs: json_value.JsonValue,
     mandatory_override: Optional[Bool] = Optional[Bool](),
 ) raises -> Optional[YangConstruct]:
-    if prop_value.kind != json_parser.JsonValue.OBJECT:
+    if prop_value.kind != json_value.JsonValue.OBJECT:
         return Optional[YangConstruct]()
     ref schema = prop_value
     var xy = _xyang(schema)
-    if not xy or xy.value()[].kind != json_parser.JsonValue.OBJECT:
+    if not xy or xy.value()[].kind != json_value.JsonValue.OBJECT:
         return Optional[YangConstruct]()
     var node_type = _json_string(xy.value()[], "type")
     if (
@@ -536,25 +537,25 @@ def _convert_property(
         _append_if_features(node, xy.value()[])
         _append_when(node, xy.value()[])
         _append_musts(node, xy.value()[])
-        var props = json_parser.json_get(schema, "properties")
-        if props and props.value()[].kind == json_parser.JsonValue.OBJECT:
-            var required = json_parser.json_get(schema, "required")
-            for i in range(len(props.value()[].object_keys)):
-                var child_name = props.value()[].object_keys[i]
+        var props = json_value.json_get(schema, "properties")
+        if props and props.value()[].kind == json_value.JsonValue.OBJECT:
+            var required = json_value.json_get(schema, "required")
+            for i in range(len(props.value()[].payload[json_value.JsonObject].keys)):
+                var child_name = props.value()[].payload[json_value.JsonObject].keys[i]
                 var mandatory = Optional[Bool]()
                 if (
                     required
-                    and required.value()[].kind == json_parser.JsonValue.ARRAY
+                    and required.value()[].kind == json_value.JsonValue.ARRAY
                 ):
-                    for req in required.value()[].array_values:
+                    for req in required.value()[].payload[json_value.JsonArray].values:
                         if (
-                            req[].kind == json_parser.JsonValue.STRING
-                            and req[].text == child_name
+                            req[].kind == json_value.JsonValue.STRING
+                            and req[].payload[json_value.JsonString].value == child_name
                         ):
                             mandatory = Optional[Bool](True)
                 var child = _convert_property(
                     child_name,
-                    props.value()[].object_values[i][],
+                    props.value()[].payload[json_value.JsonObject].values[i][],
                     defs,
                     mandatory,
                 )
@@ -571,10 +572,10 @@ def _convert_property(
         _append_musts(ch_node, xy.value()[])
         if _json_bool(xy.value()[], "mandatory"):
             _append_arg(ch_node, "mandatory", "true")
-        var one_of_ch = json_parser.json_get(schema, "oneOf")
+        var one_of_ch = json_value.json_get(schema, "oneOf")
         if (
             not one_of_ch
-            or one_of_ch.value()[].kind != json_parser.JsonValue.ARRAY
+            or one_of_ch.value()[].kind != json_value.JsonValue.ARRAY
         ):
             return Optional[YangConstruct]()
         _append_cases_from_oneof(ch_node, one_of_ch.value()[], defs)
@@ -595,28 +596,28 @@ def _convert_property(
         _append_if_features(node, xy.value()[])
         _append_when(node, xy.value()[])
         _append_musts(node, xy.value()[])
-        var items = json_parser.json_get(schema, "items")
-        if items and items.value()[].kind == json_parser.JsonValue.OBJECT:
-            var props = json_parser.json_get(items.value()[], "properties")
-            var required = json_parser.json_get(items.value()[], "required")
-            if props and props.value()[].kind == json_parser.JsonValue.OBJECT:
-                for i in range(len(props.value()[].object_keys)):
-                    var child_name = props.value()[].object_keys[i]
+        var items = json_value.json_get(schema, "items")
+        if items and items.value()[].kind == json_value.JsonValue.OBJECT:
+            var props = json_value.json_get(items.value()[], "properties")
+            var required = json_value.json_get(items.value()[], "required")
+            if props and props.value()[].kind == json_value.JsonValue.OBJECT:
+                for i in range(len(props.value()[].payload[json_value.JsonObject].keys)):
+                    var child_name = props.value()[].payload[json_value.JsonObject].keys[i]
                     var mandatory = Optional[Bool]()
                     if (
                         required
                         and required.value()[].kind
-                        == json_parser.JsonValue.ARRAY
+                        == json_value.JsonValue.ARRAY
                     ):
-                        for req in required.value()[].array_values:
+                        for req in required.value()[].payload[json_value.JsonArray].values:
                             if (
-                                req[].kind == json_parser.JsonValue.STRING
-                                and req[].text == child_name
+                                req[].kind == json_value.JsonValue.STRING
+                                and req[].payload[json_value.JsonString].value == child_name
                             ):
                                 mandatory = Optional[Bool](True)
                     var child = _convert_property(
                         child_name,
-                        props.value()[].object_values[i][],
+                        props.value()[].payload[json_value.JsonObject].values[i][],
                         defs,
                         mandatory,
                     )
@@ -632,8 +633,8 @@ def _convert_property(
             _append_arg(
                 node, "ordered-by", _json_string(xy.value()[], "ordered-by")
             )
-            var items = json_parser.json_get(schema, "items")
-            if items and items.value()[].kind == json_parser.JsonValue.OBJECT:
+            var items = json_value.json_get(schema, "items")
+            if items and items.value()[].kind == json_value.JsonValue.OBJECT:
                 _append_stmt(node, _type_from_schema(items.value()[], defs))
             else:
                 _append_stmt(node, _type_from_schema(schema, defs))
@@ -644,9 +645,11 @@ def _convert_property(
             mandatory = mandatory_override.value()
         elif _json_bool(xy.value()[], "mandatory"):
             mandatory = True
-        if mandatory:
-            _append_arg(node, "mandatory", "true")
         var min_items = _json_scalar(schema, "minItems")
+        if mandatory and node_type == "leaf-list" and not min_items:
+            _append_arg(node, "min-elements", "1")
+        elif mandatory and node_type != "leaf-list":
+            _append_arg(node, "mandatory", "true")
         if min_items:
             _append_arg(node, "min-elements", min_items.value())
         var max_items = _json_scalar(schema, "maxItems")
@@ -674,14 +677,14 @@ def _convert_property(
 
 
 def _append_typedefs_and_identities(
-    mut module: YangConstruct, read defs: json_parser.JsonValue
+    mut module: YangConstruct, read defs: json_value.JsonValue
 ):
-    if defs.kind != json_parser.JsonValue.OBJECT:
+    if defs.kind != json_value.JsonValue.OBJECT:
         return
-    for i in range(len(defs.object_keys)):
-        var name = defs.object_keys[i]
-        ref schema = defs.object_values[i][]
-        if schema.kind != json_parser.JsonValue.OBJECT:
+    for i in range(len(defs.payload[json_value.JsonObject].keys)):
+        var name = defs.payload[json_value.JsonObject].keys[i]
+        ref schema = defs.payload[json_value.JsonObject].values[i][]
+        if schema.kind != json_value.JsonValue.OBJECT:
             continue
         var xy_type = _xyang_type(schema)
         if xy_type == "identity":
@@ -690,7 +693,7 @@ def _append_typedefs_and_identities(
                 ident, "description", _json_string(schema, "description")
             )
             var xy = _xyang(schema)
-            if xy and xy.value()[].kind == json_parser.JsonValue.OBJECT:
+            if xy and xy.value()[].kind == json_value.JsonValue.OBJECT:
                 _append_arg(ident, "base", _json_string(xy.value()[], "base"))
             _append_stmt(module, ident^)
             continue
@@ -710,11 +713,11 @@ def parse_yang_json(
 
     Callers that need a `YangModule` should use `parse_yang_json_module`.
     """
-    var root = json_parser.parse_json(source, source_path)
-    if root.kind != json_parser.JsonValue.OBJECT:
+    var root = parse_json(source, source_path)
+    if root.kind != json_value.JsonValue.OBJECT:
         raise Error("YANG JSON root must be an object")
     var xy = _xyang(root)
-    if not xy or xy.value()[].kind != json_parser.JsonValue.OBJECT:
+    if not xy or xy.value()[].kind != json_value.JsonValue.OBJECT:
         raise Error("YANG JSON root is missing object `x-yang` metadata")
 
     var module = _stmt(
@@ -733,26 +736,32 @@ def parse_yang_json(
     _append_arg(module, "contact", _json_string(xy.value()[], "contact"))
     _append_arg(module, "description", _json_string(root, "description"))
 
-    var defs = json_parser.json_get(root, "$defs")
+    var defs = json_value.json_get(root, "$defs")
     if defs:
         _append_typedefs_and_identities(module, defs.value()[])
 
-    var props = json_parser.json_get(root, "properties")
-    if props and props.value()[].kind == json_parser.JsonValue.OBJECT:
-        var empty_defs = json_parser.make_json(json_parser.JsonValue.OBJECT)
-        for i in range(len(props.value()[].object_keys)):
+    var props = json_value.json_get(root, "properties")
+    if props and props.value()[].kind == json_value.JsonValue.OBJECT:
+        var empty_defs = json_value.JsonValue(
+            json_value.JsonValue.OBJECT,
+            json_value.JsonPayload(json_value.JsonObject(
+                keys=List[String](),
+                values=List[ArcPointer[json_value.JsonValue]](),
+            )),
+        )
+        for i in range(len(props.value()[].payload[json_value.JsonObject].keys)):
             if defs:
                 var child = _convert_property(
-                    props.value()[].object_keys[i],
-                    props.value()[].object_values[i][],
+                    props.value()[].payload[json_value.JsonObject].keys[i],
+                    props.value()[].payload[json_value.JsonObject].values[i][],
                     defs.value()[],
                 )
                 if child:
                     _append_stmt(module, child.take())
             else:
                 var child = _convert_property(
-                    props.value()[].object_keys[i],
-                    props.value()[].object_values[i][],
+                    props.value()[].payload[json_value.JsonObject].keys[i],
+                    props.value()[].payload[json_value.JsonObject].values[i][],
                     empty_defs,
                 )
                 if child:

@@ -34,7 +34,7 @@ from xyang.api import (
     yang_module_from_model,
 )
 from xyang.json import parse_json, parse_yang_json_module
-from xyang.json.parser import JsonValue, json_get, make_json
+from xyang.json.value import JsonValue, JsonArray, JsonBool, JsonInt, JsonObject, JsonPayload, JsonString, json_escape, json_get
 from xyang.validator.document import validate_data
 from xyang.yang.ast.module import YangModule
 
@@ -453,14 +453,14 @@ def _line_sku(read line: JsonValue) raises -> String:
     var sku = json_get(line, "sku")
     if not sku or sku.value()[].kind != JsonValue.STRING:
         raise Error("purchase_request/item: expected sku")
-    return sku.value()[].text
+    return sku.value()[].payload[JsonString].value
 
 
 def _line_quantity(read line: JsonValue) raises -> Int:
     var q = json_get(line, "quantity")
     if not q or q.value()[].kind != JsonValue.INT:
         raise Error("purchase_request/item: expected quantity")
-    return Int(q.value()[].int_value)
+    return Int(q.value()[].payload[JsonInt].value)
 
 
 def _line_total_cents(read line: JsonValue) raises -> Int:
@@ -473,7 +473,7 @@ def purchase_line_count(read purchase: JsonValue) raises -> Int:
     var items = json_get(purchase, "item")
     if not items or items.value()[].kind != JsonValue.ARRAY:
         return 0
-    return len(items.value()[].array_values)
+    return len(items.value()[].payload[JsonArray].values)
 
 
 def purchase_discount_percent(read purchase: JsonValue) raises -> Int:
@@ -487,7 +487,7 @@ def purchase_subtotal_cents(read purchase: JsonValue) raises -> Int:
     if not items or items.value()[].kind != JsonValue.ARRAY:
         return 0
     var sum: Int = 0
-    ref arr = items.value()[].array_values
+    ref arr = items.value()[].payload[JsonArray].values
     for i in range(len(arr)):
         sum += _line_total_cents(arr[i][])
     return sum
@@ -506,7 +506,7 @@ def _cart_currency(read doc: JsonValue) raises -> String:
     var cur = json_get(c.value()[], "currency")
     if not cur or cur.value()[].kind != JsonValue.STRING:
         return "USD"
-    return cur.value()[].text
+    return cur.value()[].payload[JsonString].value
 
 
 def _json_purchase_response(
@@ -520,7 +520,7 @@ def _json_purchase_response(
     var discount = (subtotal * pct) // 100
     var total = subtotal - discount
     var s = String('{"purchase_response":{"item":[')
-    ref arr = items.value()[].array_values
+    ref arr = items.value()[].payload[JsonArray].values
     for i in range(len(arr)):
         if i > 0:
             s += ","
@@ -532,9 +532,9 @@ def _json_purchase_response(
         var line_total = q * unit
         s += (
             '{"sku":"'
-            + _json_escape(sku)
+            + json_escape(sku)
             + '","name":"'
-            + _json_escape(catalog_item[0])
+            + json_escape(catalog_item[0])
             + '","quantity":'
             + String(q)
             + ',"unit_price_cents":'
@@ -555,7 +555,7 @@ def _json_purchase_response(
         ',"total_cents":'
         + String(total)
         + ',"currency":"'
-        + _json_escape(currency)
+        + json_escape(currency)
         + '"}}'
     )
     return s^
@@ -578,7 +578,7 @@ def _http_ok_json(body: String) -> String:
 def _http_err(status: Int, message: String) -> String:
     var body = (
         '{"error":"'
-        + _json_escape(message)
+        + json_escape(message)
         + '","status":'
         + String(status)
         + "}"
@@ -593,10 +593,6 @@ def _http_err(status: Int, message: String) -> String:
         + "\r\n\r\n"
         + body
     )
-
-
-def _json_escape(read s: String) -> String:
-    return s.replace('"', '\\"')
 
 
 @always_inline
@@ -761,29 +757,35 @@ def _merge_cart(
     var out = _json_clone(base)
     var oc = json_get(out, "cart")
     if not oc or oc.value()[].kind != JsonValue.OBJECT:
-        out.object_keys.append("cart")
-        out.object_values.append(ArcJson(_json_clone(pc.value()[])))
+        out.payload[JsonObject].keys.append("cart")
+        out.payload[JsonObject].values.append(ArcJson(_json_clone(pc.value()[])))
         return out^
-    var inner = make_json(JsonValue.OBJECT)
+    var inner = JsonValue(
+        JsonValue.OBJECT,
+        JsonPayload(JsonObject(
+            keys=List[String](),
+            values=List[Arc[JsonValue]](),
+        )),
+    )
     ref bobj = oc.value()[]
-    for i in range(len(bobj.object_keys)):
-        inner.object_keys.append(bobj.object_keys[i])
-        inner.object_values.append(bobj.object_values[i].copy())
+    for i in range(len(bobj.payload[JsonObject].keys)):
+        inner.payload[JsonObject].keys.append(bobj.payload[JsonObject].keys[i])
+        inner.payload[JsonObject].values.append(bobj.payload[JsonObject].values[i].copy())
     ref pobj = pc.value()[]
-    for i in range(len(pobj.object_keys)):
-        var k = pobj.object_keys[i]
+    for i in range(len(pobj.payload[JsonObject].keys)):
+        var k = pobj.payload[JsonObject].keys[i]
         var replaced = False
-        for j in range(len(inner.object_keys)):
-            if inner.object_keys[j] == k:
-                inner.object_values[j] = pobj.object_values[i].copy()
+        for j in range(len(inner.payload[JsonObject].keys)):
+            if inner.payload[JsonObject].keys[j] == k:
+                inner.payload[JsonObject].values[j] = pobj.payload[JsonObject].values[i].copy()
                 replaced = True
                 break
         if not replaced:
-            inner.object_keys.append(k)
-            inner.object_values.append(pobj.object_values[i].copy())
-    for i in range(len(out.object_keys)):
-        if out.object_keys[i] == "cart":
-            out.object_values[i] = ArcJson(inner^)
+            inner.payload[JsonObject].keys.append(k)
+            inner.payload[JsonObject].values.append(pobj.payload[JsonObject].values[i].copy())
+    for i in range(len(out.payload[JsonObject].keys)):
+        if out.payload[JsonObject].keys[i] == "cart":
+            out.payload[JsonObject].values[i] = ArcJson(inner^)
             break
     return out^
 
@@ -792,44 +794,11 @@ def _json_cart_view(read doc: JsonValue) raises -> String:
     var c = json_get(doc, "cart")
     if not c:
         return "{}"
-    return _json_value_to_string(c.value()[])
-
-
-def _json_value_to_string(read v: JsonValue) raises -> String:
-    if v.kind == JsonValue.STRING:
-        return '"' + _json_escape(v.text) + '"'
-    if v.kind == JsonValue.INT:
-        return String(v.int_value)
-    if v.kind == JsonValue.REAL:
-        return v.text
-    if v.kind == JsonValue.BOOL:
-        if v.bool_value:
-            return "true"
-        return "false"
-    if v.kind == JsonValue.NULL:
-        return "null"
-    if v.kind == JsonValue.ARRAY:
-        var s = String("[")
-        for i in range(len(v.array_values)):
-            if i > 0:
-                s += ","
-            s += _json_value_to_string(v.array_values[i][])
-        s += "]"
-        return s^
-    if v.kind == JsonValue.OBJECT:
-        var s = String("{")
-        for i in range(len(v.object_keys)):
-            if i > 0:
-                s += ","
-            s += '"' + _json_escape(v.object_keys[i]) + '":'
-            s += _json_value_to_string(v.object_values[i][])
-        s += "}"
-        return s^
-    return "null"
+    return c.value()[].to_string()
 
 
 def _json_clone(read v: JsonValue) raises -> JsonValue:
-    return parse_json(_json_value_to_string(v), "clone.json")
+    return parse_json(v.to_string(), "clone.json")
 
 
 ## --- Demo client (background thread sends orders over TCP) -------------------

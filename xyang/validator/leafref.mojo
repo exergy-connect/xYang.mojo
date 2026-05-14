@@ -7,7 +7,7 @@
 from std.collections import Dict, List
 from std.memory import ArcPointer
 
-from xyang.json.parser import JsonValue, json_get, json_scalar_text
+from xyang.json.value import JsonValue, JsonArray, JsonObject, json_get, json_scalar_text
 import xyang.yang.ast.util as ast_util
 from xyang.yang.path import (
     YangPath,
@@ -115,9 +115,10 @@ def _json_arc_at_path(
         if node0.kind != JsonValue.ARRAY:
             raise Error("expected JSON array in instance path segment")
         var ixv = ix0.value()
-        if ixv < 0 or ixv >= len(node0.array_values):
+        ref arr0 = node0.payload[JsonArray]
+        if ixv < 0 or ixv >= len(arr0.values):
             raise Error("list index out of range in instance path")
-        cur_arc = node0.array_values[ixv].copy()
+        cur_arc = arr0.values[ixv].copy()
     else:
         cur_arc = slot0.value().copy()
     for sidx in range(1, len(segs)):
@@ -135,9 +136,10 @@ def _json_arc_at_path(
             if arrw.kind != JsonValue.ARRAY:
                 raise Error("expected JSON array in instance path")
             var jx = ix.value()
-            if jx < 0 or jx >= len(arrw.array_values):
+            ref arw = arrw.payload[JsonArray]
+            if jx < 0 or jx >= len(arw.values):
                 raise Error("list index out of range in instance path")
-            cur_arc = arrw.array_values[jx].copy()
+            cur_arc = arw.values[jx].copy()
         else:
             if node.kind != JsonValue.OBJECT:
                 raise Error("expected JSON object in instance path")
@@ -221,8 +223,9 @@ def _collect_resolved_values_from_object(
         return
     ref child = child_slot.value()[]
     if child.kind == JsonValue.ARRAY:
-        for i in range(len(child.array_values)):
-            ref elem = child.array_values[i][]
+        ref ca = child.payload[JsonArray]
+        for i in range(len(ca.values)):
+            ref elem = ca.values[i][]
             var cand_path = _join_path(
                 path_to_start, local + "[" + String(i) + "]"
             )

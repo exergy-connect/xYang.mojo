@@ -5,7 +5,7 @@
 
 from std.memory import ArcPointer
 
-from xyang.json.parser import JsonValue, json_get, json_scalar_text
+from xyang.json.value import JsonValue, JsonArray, JsonBool, JsonInt, JsonObject, JsonReal, JsonString, json_get, json_scalar_text
 import xyang.validator.schema_walk as schema_walk
 from xyang.validator.leafref import LeafrefCache
 from xyang.validator.pattern_match import (
@@ -67,7 +67,7 @@ def _validate_integer_type(
         _raise_json_path_error(
             json_path, value.source_line, path, ": expected " + type_name
         )
-    if value.int_value < min_val or value.int_value > max_val:
+    if value.payload[JsonInt].value < min_val or value.payload[JsonInt].value > max_val:
         _raise_json_path_error(
             json_path,
             value.source_line,
@@ -76,7 +76,7 @@ def _validate_integer_type(
         )
     var segs = module.leaf_range_segments(leaf)
     if len(segs) > 0:
-        var fv = Float64(value.int_value)
+        var fv = Float64(value.payload[JsonInt].value)
         var ok = False
         for i in range(len(segs)):
             var b = segs[i]
@@ -111,7 +111,7 @@ def validate_leaf_value(
             )
         var segs = module.leaf_length_segments(leaf)
         if len(segs) > 0:
-            var ulen = unicode_scalar_count(value.text)
+            var ulen = unicode_scalar_count(value.payload[JsonString].value)
             if not length_allows_scalar_count(segs, ulen):
                 _raise_json_path_error(
                     json_path,
@@ -121,7 +121,7 @@ def validate_leaf_value(
                 )
         var pats = module.leaf_pattern_specs(leaf)
         for i in range(len(pats)):
-            var ok = yang_string_matches_xsd_subset(pats[i].regex, value.text)
+            var ok = yang_string_matches_xsd_subset(pats[i].regex, value.payload[JsonString].value)
             if pats[i].invert:
                 ok = not ok
             if not ok:
@@ -131,7 +131,7 @@ def validate_leaf_value(
                     path,
                     ": string does not match `pattern` restriction",
                 )
-        if value.text.byte_length() == 0 and module.find_child(leaf, `must`):
+        if value.payload[JsonString].value.byte_length() == 0 and module.find_child(leaf, `must`):
             _raise_json_path_error(
                 json_path,
                 value.source_line,
@@ -165,7 +165,7 @@ def validate_leaf_value(
         var allowed = False
         for ch in eff.value()[].children:
             if ch[].spec == `enum` and ch[].has_argument():
-                if ch[].argument_text() == value.text:
+                if ch[].argument_text() == value.payload[JsonString].value:
                     allowed = True
                     break
         if not allowed:
@@ -229,7 +229,7 @@ def validate_leaf_value(
             )
         var segs = module.leaf_range_segments(leaf)
         if len(segs) > 0:
-            var fv = atof(value.text)
+            var fv = atof(json_scalar_text(value))
             var ok = False
             for i in range(len(segs)):
                 var b = segs[i]
@@ -252,8 +252,8 @@ def validate_leaf_value(
                 json_path, value.source_line, path, ": expected string for bits"
             )
         var eff = module.leaf_effective_type_stmt(leaf)
-        if eff and value.text.byte_length() > 0:
-            var tokens = value.text.split(" ")
+        if eff and value.payload[JsonString].value.byte_length() > 0:
+            var tokens = value.payload[JsonString].value.split(" ")
             for i in range(len(tokens)):
                 var tok = String(tokens[i]).strip()
                 if tok.byte_length() == 0:
@@ -281,7 +281,7 @@ def validate_leaf_value(
             )
         var segs = module.leaf_length_segments(leaf)
         if len(segs) > 0:
-            var decoded_len = _base64_decoded_length(value.text)
+            var decoded_len = _base64_decoded_length(value.payload[JsonString].value)
             if not length_allows_scalar_count(segs, decoded_len):
                 _raise_json_path_error(
                     json_path,
@@ -325,13 +325,13 @@ def validate_leaf_value(
             )
         var bases = module.leaf_identityref_bases(leaf)
         if len(bases) > 0:
-            if not module.identity_valid_for_bases(value.text, bases):
+            if not module.identity_valid_for_bases(value.payload[JsonString].value, bases):
                 _raise_json_path_error(
                     json_path,
                     value.source_line,
                     path,
                     ": identityref value `"
-                    + value.text
+                    + value.payload[JsonString].value
                     + "` does not match any declared identity",
                 )
         return
@@ -340,8 +340,8 @@ def validate_leaf_value(
     if ty == "empty":
         if value.kind == JsonValue.ARRAY:
             if (
-                len(value.array_values) == 1
-                and value.array_values[0][].kind == JsonValue.NULL
+                len(value.payload[JsonArray].values) == 1
+                and value.payload[JsonArray].values[0][].kind == JsonValue.NULL
             ):
                 return
         _raise_json_path_error(
@@ -402,7 +402,7 @@ def _validate_cardinality(
     json_path: String,
     node_kind: String,
 ) raises:
-    var count = len(value.array_values)
+    var count = len(value.payload[JsonArray].values)
     var min_stmt = module.find_child(schema, `min-elements`)
     if min_stmt and min_stmt.value()[].has_argument():
         var min_count = Int(atol(min_stmt.value()[].argument_text()))
@@ -439,13 +439,13 @@ def _validate_cardinality(
 
 def _json_unique_scalar(read value: JsonValue) -> Optional[String]:
     if value.kind == JsonValue.STRING:
-        return Optional[String]("s:" + value.text)
+        return Optional[String]("s:" + value.payload[JsonString].value)
     if value.kind == JsonValue.INT:
-        return Optional[String]("i:" + value.text)
+        return Optional[String]("i:" + value.payload[JsonInt].text)
     if value.kind == JsonValue.REAL:
-        return Optional[String]("r:" + value.text)
+        return Optional[String]("r:" + value.payload[JsonReal].text)
     if value.kind == JsonValue.BOOL:
-        return Optional[String]("b:" + ("true" if value.bool_value else "false"))
+        return Optional[String]("b:" + ("true" if value.payload[JsonBool].value else "false"))
     return Optional[String]()
 
 
@@ -493,8 +493,8 @@ def _validate_unique_constraints(
             continue
         ref arg = stmt.argument.get[UniqueArgument]()
         var seen = Dict[String, Int]()
-        for i in range(len(data.array_values)):
-            ref entry = data.array_values[i][]
+        for i in range(len(data.payload[JsonArray].values)):
+            ref entry = data.payload[JsonArray].values[i][]
             var tuple_key = String()
             var complete = True
             for j in range(len(arg.paths)):
@@ -536,9 +536,9 @@ def validate_leaf_list_value(
     proxy.spec = `leaf`
     for ch in leaf_list.children:
         proxy.children.append(ch.copy())
-    for i in range(len(value.array_values)):
+    for i in range(len(value.payload[JsonArray].values)):
         validate_leaf_value(
-            value.array_values[i][],
+            value.payload[JsonArray].values[i][],
             proxy,
             module,
             path + "[" + String(i) + "]",
@@ -587,9 +587,9 @@ def validate_object_against_construct(
         json_path,
     )
 
-    for i in range(len(data.object_keys)):
-        var key = data.object_keys[i]
-        ref slot = data.object_values[i][]
+    for i in range(len(data.payload[JsonObject].keys)):
+        var key = data.payload[JsonObject].keys[i]
+        ref slot = data.payload[JsonObject].values[i][]
         var data_child = schema_walk.find_schema_child_for_json_key(
             module,
             schema,
@@ -671,8 +671,8 @@ def validate_list_against_construct(
     _validate_cardinality(data, schema, module, path, json_path, "list")
     _validate_unique_constraints(data, schema, path, json_path)
     var key_stmt = module.find_child(schema, `key`)
-    for i in range(len(data.array_values)):
-        ref entry = data.array_values[i][]
+    for i in range(len(data.payload[JsonArray].values)):
+        ref entry = data.payload[JsonArray].values[i][]
         var entry_path = path + "[" + String(i) + "]"
         validate_object_against_construct(
             entry, schema, module, entry_path, json_path, schema_path,

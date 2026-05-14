@@ -644,8 +644,17 @@ struct YangModule(Movable & Iterable):
     def _validate_semantics(ref self) raises:
         if not self.root:
             return
+        from xyang.yang.visitor.uses_expand_visitor import (
+            expand_uses_throughout_module,
+        )
+        from ..spec import `module`, build_spec_table
+
+        var expanded_tree = expand_uses_throughout_module(self)
+        var specs = build_spec_table()
+        specs[Int(`module`)].validate(expanded_tree, specs)
+        var expanded_root = Arc[YangConstruct](expanded_tree^)
         var ancestry = List[Arc[YangConstruct]]()
-        _validate_semantics_in_subtree(self, self.root.value(), ancestry^)
+        _validate_semantics_in_subtree(self, expanded_root, ancestry^)
 
 
 def _line_prefix(line: UInt) -> String:
@@ -670,7 +679,7 @@ def _schema_data_node(read node: YangConstruct) -> Bool:
 def _schema_child_by_name(
     read module: YangModule, read parent: YangConstruct, read name: String
 ) raises -> Optional[Arc[YangConstruct]]:
-    from ..spec import `uses`
+    from ..spec import `case`, `choice`, `uses`
 
     for child in parent.children:
         if (
@@ -688,6 +697,15 @@ def _schema_child_by_name(
         var found = _schema_child_by_name(module, grouping.value()[], name)
         if found:
             return found^
+    for child in parent.children:
+        if child[].spec != `choice`:
+            continue
+        for ch in child[].children:
+            if ch[].spec != `case`:
+                continue
+            var found = _schema_child_by_name(module, ch[], name)
+            if found:
+                return found^
     return Optional[Arc[YangConstruct]]()
 
 
@@ -968,6 +986,10 @@ def _validate_semantics_in_subtree(
     read node: Arc[YangConstruct],
     read ancestry: List[Arc[YangConstruct]],
 ) raises:
+    from ..spec import `grouping`
+
+    if node[].spec == `grouping`:
+        return
     _validate_semantics_for_node(module, node[], ancestry)
     var child_ancestry = ancestry.copy()
     child_ancestry.append(node.copy())

@@ -5,7 +5,7 @@
 from std.collections import Dict, List
 from std.memory import ArcPointer
 
-from xyang.json.parser import JsonValue
+from xyang.json.value import JsonValue, JsonObject
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.yang.spec import (
@@ -28,8 +28,9 @@ def _instance_key_intersects_keyset(
 ) -> Bool:
     if instance.kind != JsonValue.OBJECT:
         return False
-    for i in range(len(instance.object_keys)):
-        if instance.object_keys[i] in keys:
+    ref io = instance.payload[JsonObject]
+    for i in range(len(io.keys)):
+        if io.keys[i] in keys:
             return True
     return False
 

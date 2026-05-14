@@ -4,7 +4,8 @@ from std.collections import Dict, List
 from std.memory import ArcPointer
 from std.reflection import reflect
 
-from xyang.json.parser import JsonValue, parse_json
+from xyang.json.parser import parse_json
+from xyang.json.value import JsonValue
 from xyang.validator.document import validate_data
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule

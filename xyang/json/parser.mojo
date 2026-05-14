@@ -5,6 +5,18 @@ from std.memory import ArcPointer, Span
 
 import xyang.yang.ast.util as ast_util
 
+from .value import (
+    JsonArray,
+    JsonBool,
+    JsonInt,
+    JsonNull,
+    JsonObject,
+    JsonPayload,
+    JsonReal,
+    JsonString,
+    JsonValue,
+)
+
 comptime Arc = ArcPointer
 comptime ByteView = Span[Byte, _]
 
@@ -27,41 +39,6 @@ comptime `\n` = ast_util.to_byte["\n"]()
 comptime `\r` = ast_util.to_byte["\r"]()
 comptime `\t` = ast_util.to_byte["\t"]()
 comptime `\\` = ast_util.to_byte["\\"]()
-
-
-@fieldwise_init
-struct JsonValue(ImplicitlyDestructible, Movable):
-    comptime Kind = UInt8
-    comptime OBJECT: Self.Kind = 0
-    comptime ARRAY: Self.Kind = 1
-    comptime STRING: Self.Kind = 2
-    comptime INT: Self.Kind = 3
-    comptime REAL: Self.Kind = 4
-    comptime BOOL: Self.Kind = 5
-    comptime NULL: Self.Kind = 6
-    comptime ValueList = List[Arc[JsonValue]]
-
-    var kind: Self.Kind
-    var text: String
-    var int_value: Int64
-    var bool_value: Bool
-    var object_keys: List[String]
-    var object_values: Self.ValueList
-    var array_values: Self.ValueList
-    var source_line: Int
-
-
-def make_json(kind: JsonValue.Kind, source_line: Int = 0) -> JsonValue:
-    return JsonValue(
-        kind,
-        "",
-        0,
-        False,
-        List[String](),
-        JsonValue.ValueList(),
-        JsonValue.ValueList(),
-        source_line,
-    )
 
 
 struct JsonParser[origin: ImmutOrigin]:
@@ -190,49 +167,61 @@ struct JsonParser[origin: ImmutOrigin]:
         var text = String(
             StringSlice(unsafe_from_utf8=self.input[start : self.pos])
         )
-        var kind = JsonValue.REAL if is_real else JsonValue.INT
-        var value = make_json(kind, ln)
-        value.text = text
-        if not is_real:
-            value.int_value = Int64(atol(text))
-        return value^
+        if is_real:
+            return JsonValue(JsonValue.REAL, JsonPayload(JsonReal(text=text^)), ln)
+        return JsonValue(
+            JsonValue.INT, JsonPayload(JsonInt(value=Int64(atol(text)), text=text^)), ln
+        )
 
     def parse_array(mut self) raises -> JsonValue:
         var ln = self.line
         self.consume(`[b`)
-        var value = make_json(JsonValue.ARRAY, ln)
+        var items = List[Arc[JsonValue]]()
         self.skip_ws()
         if not self.eof() and self.input[self.pos] == `]b`:
             self.pos += 1
-            return value^
+            return JsonValue(
+                JsonValue.ARRAY, JsonPayload(JsonArray(values=items^)), ln
+            )
         while True:
-            value.array_values.append(Arc[JsonValue](self.parse_value()))
+            items.append(Arc[JsonValue](self.parse_value()))
             self.skip_ws()
             if not self.eof() and self.input[self.pos] == `,b`:
                 self.pos += 1
                 continue
             self.consume(`]b`)
-            return value^
+            return JsonValue(
+                JsonValue.ARRAY, JsonPayload(JsonArray(values=items^)), ln
+            )
 
     def parse_object(mut self) raises -> JsonValue:
         var ln = self.line
         self.consume(`{b`)
-        var value = make_json(JsonValue.OBJECT, ln)
+        var keys = List[String]()
+        var values = List[Arc[JsonValue]]()
         self.skip_ws()
         if not self.eof() and self.input[self.pos] == `}b`:
             self.pos += 1
-            return value^
+            return JsonValue(
+                JsonValue.OBJECT,
+                JsonPayload(JsonObject(keys=keys^, values=values^)),
+                ln,
+            )
         while True:
             var key = self.parse_string()
             self.consume(`:b`)
-            value.object_keys.append(key^)
-            value.object_values.append(Arc[JsonValue](self.parse_value()))
+            keys.append(key^)
+            values.append(Arc[JsonValue](self.parse_value()))
             self.skip_ws()
             if not self.eof() and self.input[self.pos] == `,b`:
                 self.pos += 1
                 continue
             self.consume(`}b`)
-            return value^
+            return JsonValue(
+                JsonValue.OBJECT,
+                JsonPayload(JsonObject(keys=keys^, values=values^)),
+                ln,
+            )
 
     def parse_value(mut self) raises -> JsonValue:
         self.skip_ws()
@@ -245,26 +234,32 @@ struct JsonParser[origin: ImmutOrigin]:
         if ch == `[b`:
             return self.parse_array()
         if ch == `"`:
-            var value = make_json(JsonValue.STRING, ln)
-            value.text = self.parse_string()
-            return value^
+            return JsonValue(
+                JsonValue.STRING,
+                JsonPayload(JsonString(value=self.parse_string())),
+                ln,
+            )
         if ch == `-` or (ch >= `0b` and ch <= `9b`):
             return self.parse_number()
         if ch == ast_util.to_byte["t"]():
             self.consume_literal("true")
-            var value = make_json(JsonValue.BOOL, ln)
-            value.bool_value = True
-            return value^
+            return JsonValue(
+                JsonValue.BOOL, JsonPayload(JsonBool(value=True)), ln
+            )
         if ch == ast_util.to_byte["f"]():
             self.consume_literal("false")
-            var value = make_json(JsonValue.BOOL, ln)
-            value.bool_value = False
-            return value^
+            return JsonValue(
+                JsonValue.BOOL, JsonPayload(JsonBool(value=False)), ln
+            )
         if ch == ast_util.to_byte["n"]():
             self.consume_literal("null")
-            return make_json(JsonValue.NULL, ln)
+            return JsonValue(
+                JsonValue.NULL, JsonPayload(JsonNull()), ln
+            )
         self.syntax_error("Unexpected JSON token at byte " + String(self.pos))
-        return make_json(JsonValue.NULL, ln)
+        return JsonValue(
+            JsonValue.NULL, JsonPayload(JsonNull()), ln
+        )
 
 
 def parse_json(source: String, source_path: String = "") raises -> JsonValue:
@@ -279,20 +274,3 @@ def parse_json(source: String, source_path: String = "") raises -> JsonValue:
     return root^
 
 
-def json_get(read obj: JsonValue, key: String) -> Optional[Arc[JsonValue]]:
-    for i in range(len(obj.object_keys)):
-        if obj.object_keys[i] == key:
-            return Optional[Arc[JsonValue]](obj.object_values[i].copy())
-    return Optional[Arc[JsonValue]]()
-
-
-def json_scalar_text(read value: JsonValue) -> String:
-    if (
-        value.kind == JsonValue.STRING
-        or value.kind == JsonValue.INT
-        or value.kind == JsonValue.REAL
-    ):
-        return value.text
-    if value.kind == JsonValue.BOOL:
-        return "true" if value.bool_value else "false"
-    return "<non-scalar>"

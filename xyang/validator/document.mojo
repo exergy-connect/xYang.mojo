@@ -2,7 +2,8 @@
 ##
 ## A single pass validates structure, leaf types, and leafref resolution.
 
-from xyang.json.parser import JsonValue, parse_json
+from xyang.json.parser import parse_json
+from xyang.json.value import JsonValue, JsonObject
 from xyang.yang.ast.module import YangModule
 from xyang.yang.ast.lexer import AstLexer
 from xyang.validator.leafref import LeafrefCache
@@ -20,9 +21,10 @@ def validate_data(
             pfx += "line " + String(data.source_line) + ": "
         raise Error(pfx + "/: expected top-level JSON object")
     var leafref_cache = LeafrefCache()
-    for i in range(len(data.object_keys)):
-        var key = data.object_keys[i]
-        ref slot = data.object_values[i][]
+    ref obj = data.payload[JsonObject]
+    for i in range(len(obj.keys)):
+        var key = obj.keys[i]
+        ref slot = obj.values[i][]
         var container = module.top_container(key)
         if not container:
             var pfx2 = String()
