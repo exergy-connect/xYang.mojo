@@ -3,12 +3,32 @@
 ## and conditional `when` expressions.
 
 from xyang.yang.ast.module import YangModule
+from xyang.validator.pattern_match import yang_string_matches_xsd_subset
 
 
 trait StringLengthCap:
     @staticmethod
     def model_max_string_length() -> Int:
         ...
+
+
+trait StringPatternConstraint:
+    @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        ...
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        ...
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        ...
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        ...
+
 
 comptime StdTraits = Copyable & Defaultable & ImplicitlyDestructible & Movable & Writable
 
@@ -32,6 +52,65 @@ struct MaxStringLength[
     @staticmethod
     def model_max_string_length() -> Int:
         return Self.n
+
+
+@fieldwise_init
+struct NoStringPatternConstraints(
+    StdTraits,
+    StringPatternConstraint,
+):
+    @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return False
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return 0
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return False
+
+
+@fieldwise_init
+struct YangPattern[
+    *patterns: StaticString,
+](
+    StdTraits,
+    StringPatternConstraint,
+):
+    @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return String(Self.patterns[i])
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return False
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return len(Self.patterns)
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return len(Self.patterns) > 0
+
+    @staticmethod
+    def comptime_matches[value: StaticString]() -> Bool:
+        try:
+            var ok = True
+            comptime for i in range(len(Self.patterns)):
+                var matched = yang_string_matches_xsd_subset(
+                    String(Self.patterns[i]), String(value)
+                )
+                ok = ok and matched
+            return ok
+        except:
+            return False
 
 
 trait NumericRangeConstraint:
@@ -417,44 +496,8 @@ struct YangMust[
         return len(Self.conditions) > 0
 
 
-trait YangListKey:
-    @staticmethod
-    def yang_key_text() -> String:
-        ...
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        ...
-
-
-@fieldwise_init
-struct NoYangKey(
-    StdTraits,
-    YangListKey,
-):
-    @staticmethod
-    def yang_key_text() -> String:
-        return String()
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        return False
-
-
-@fieldwise_init
-struct YangKey[
-    name: StringLiteral,
-](
-    StdTraits,
-    YangListKey,
-):
-    @staticmethod
-    def yang_key_text() -> String:
-        return String(Self.name)
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        return True
+trait YangListItem:
+    comptime LIST_KEY: StaticString
 
 
 trait NodeModelSpec:
@@ -479,7 +522,7 @@ trait NodeModelSpec:
         ...
 
 
-comptime LeafModelSpec = StringLengthCap & NumericRangeConstraint & NodeModelSpec
+comptime LeafModelSpec = StringLengthCap & StringPatternConstraint & NumericRangeConstraint & NodeModelSpec
 
 
 trait YangModeled:
@@ -493,7 +536,9 @@ trait YangModeled:
 
 
 @fieldwise_init
-struct NoYangModel(ImplicitlyDestructible, Movable, YangModeled):
+struct NoYangModel(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
+    comptime LIST_KEY = ""
+
     @staticmethod
     def yang_container_name() -> String:
         return ""
@@ -505,8 +550,7 @@ struct NoYangModel(ImplicitlyDestructible, Movable, YangModeled):
 
 trait YangDataNodeSpec:
     comptime ChildType: YangModeled
-    comptime EntryType: YangModeled
-    comptime KeyType: YangListKey
+    comptime EntryType: YangModeled & YangListItem
 
     @staticmethod
     def yang_node_kind() -> String:
@@ -522,50 +566,6 @@ trait YangDataNodeSpec:
 
     @staticmethod
     def yang_enum_count() -> Int:
-        ...
-
-    @staticmethod
-    def model_max_string_length() -> Int:
-        ...
-
-    @staticmethod
-    def model_range_min() -> Int64:
-        ...
-
-    @staticmethod
-    def model_range_max() -> Int64:
-        ...
-
-    @staticmethod
-    def has_model_range() -> Bool:
-        ...
-
-    @staticmethod
-    def yang_when_condition() -> String:
-        ...
-
-    @staticmethod
-    def has_yang_when() -> Bool:
-        ...
-
-    @staticmethod
-    def yang_must_condition[i: Int]() -> String:
-        ...
-
-    @staticmethod
-    def yang_must_count() -> Int:
-        ...
-
-    @staticmethod
-    def has_yang_must() -> Bool:
-        ...
-
-    @staticmethod
-    def yang_key_text() -> String:
-        ...
-
-    @staticmethod
-    def has_yang_key() -> Bool:
         ...
 
 
@@ -598,6 +598,7 @@ struct NodeConstraints[
 struct YangConstraints[
     Constraints: StringLengthCap = NoStringConstraints,
     Range: NumericRangeConstraint = NoNumericRange,
+    Pattern: StringPatternConstraint = NoStringPatternConstraints,
     When: YangWhenPredicate = NoYangWhen,
     Must: YangMustConstraints = NoYangMust,
 ](LeafModelSpec):
@@ -605,6 +606,22 @@ struct YangConstraints[
     @staticmethod
     def model_max_string_length() -> Int:
         return Self.Constraints.model_max_string_length()
+
+    @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return Self.Pattern.yang_pattern_text[i]()
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return Self.Pattern.yang_pattern_invert[i]()
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return Self.Pattern.yang_pattern_count()
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return Self.Pattern.has_yang_pattern()
 
     @staticmethod
     def model_range_min() -> Int64:
@@ -652,7 +669,6 @@ struct YangLeaf[
     comptime ConstraintType = Self.C
     comptime ChildType = NoYangModel
     comptime EntryType = NoYangModel
-    comptime KeyType = NoYangKey
 
     var value: Self.Builtin.Value
 
@@ -680,6 +696,22 @@ struct YangLeaf[
         return Self.C.model_max_string_length()
 
     @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return Self.C.yang_pattern_text[i]()
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return Self.C.yang_pattern_invert[i]()
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return Self.C.yang_pattern_count()
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return Self.C.has_yang_pattern()
+
+    @staticmethod
     def model_range_min() -> Int64:
         return Self.C.model_range_min()
 
@@ -711,14 +743,6 @@ struct YangLeaf[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
-    @staticmethod
-    def yang_key_text() -> String:
-        return String()
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        return False
-
 
 struct YangLeafList[
     Builtin: YangBuiltinDescriptor,
@@ -734,7 +758,6 @@ struct YangLeafList[
     comptime ConstraintType = Self.C
     comptime ChildType = NoYangModel
     comptime EntryType = NoYangModel
-    comptime KeyType = NoYangKey
 
     var values: List[Self.Builtin.Value]
 
@@ -762,6 +785,22 @@ struct YangLeafList[
         return Self.C.model_max_string_length()
 
     @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return Self.C.yang_pattern_text[i]()
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return Self.C.yang_pattern_invert[i]()
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return Self.C.yang_pattern_count()
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return Self.C.has_yang_pattern()
+
+    @staticmethod
     def model_range_min() -> Int64:
         return Self.C.model_range_min()
 
@@ -793,14 +832,6 @@ struct YangLeafList[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
-    @staticmethod
-    def yang_key_text() -> String:
-        return String()
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        return False
-
 
 @fieldwise_init
 struct YangContainer[
@@ -808,13 +839,13 @@ struct YangContainer[
     C: NodeModelSpec = NodeConstraints[],
 ](
     ImplicitlyDestructible,
+    LeafModelSpec,
     Movable,
     NodeModelSpec,
     YangDataNodeSpec,
 ):
     comptime ChildType = Self.Child
     comptime EntryType = NoYangModel
-    comptime KeyType = NoYangKey
     comptime ConstraintType = Self.C
 
     var body: Self.Child
@@ -844,6 +875,22 @@ struct YangContainer[
         return -1
 
     @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return False
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return 0
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return False
+
+    @staticmethod
     def model_range_min() -> Int64:
         return 0
 
@@ -875,21 +922,13 @@ struct YangContainer[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
-    @staticmethod
-    def yang_key_text() -> String:
-        return String()
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        return False
-
 
 struct YangList[
-    Entry: Movable & ImplicitlyDestructible & YangModeled,
-    Key: YangListKey = NoYangKey,
+    Entry: Movable & ImplicitlyDestructible & YangListItem & YangModeled,
     C: NodeModelSpec = NodeConstraints[],
 ](
     ImplicitlyDestructible,
+    LeafModelSpec,
     Movable,
     Defaultable,
     NodeModelSpec,
@@ -897,7 +936,6 @@ struct YangList[
 ):
     comptime ChildType = NoYangModel
     comptime EntryType = Self.Entry
-    comptime KeyType = Self.Key
     comptime ConstraintType = Self.C
 
     def __init__(out self):
@@ -928,6 +966,22 @@ struct YangList[
         return -1
 
     @staticmethod
+    def yang_pattern_text[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_pattern_invert[i: Int]() -> Bool:
+        return False
+
+    @staticmethod
+    def yang_pattern_count() -> Int:
+        return 0
+
+    @staticmethod
+    def has_yang_pattern() -> Bool:
+        return False
+
+    @staticmethod
     def model_range_min() -> Int64:
         return 0
 
@@ -938,14 +992,6 @@ struct YangList[
     @staticmethod
     def has_model_range() -> Bool:
         return False
-
-    @staticmethod
-    def yang_key_text() -> String:
-        return Self.Key.yang_key_text()
-
-    @staticmethod
-    def has_yang_key() -> Bool:
-        return Self.Key.has_yang_key()
 
     @staticmethod
     def yang_when_condition() -> String:

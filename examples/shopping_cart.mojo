@@ -22,8 +22,8 @@ from xyang.api import (
     YangBuiltinInt32,
     YangBuiltinUInt16,
     YangConstraints,
-    YangKey,
     YangList,
+    YangListItem,
     YangModeled,
     YangMust,
     YangRange,
@@ -64,7 +64,9 @@ struct CartContainer(ImplicitlyDestructible, Movable, YangModeled):
 
 
 @fieldwise_init
-struct PurchaseItem(ImplicitlyDestructible, Movable, YangModeled):
+struct PurchaseItem(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
+    comptime LIST_KEY = "sku"
+
     @staticmethod
     def yang_container_name() -> String:
         return "item"
@@ -96,11 +98,13 @@ struct PurchaseRequestContainer(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         pass
 
-    var item: YangList[PurchaseItem, YangKey["sku"]]
+    var item: YangList[PurchaseItem]
 
 
 @fieldwise_init
-struct PurchaseResponseItem(ImplicitlyDestructible, Movable, YangModeled):
+struct PurchaseResponseItem(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
+    comptime LIST_KEY = "sku"
+
     @staticmethod
     def yang_container_name() -> String:
         return "item"
@@ -135,7 +139,7 @@ struct PurchaseResponseContainer(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         pass
 
-    var item: YangList[PurchaseResponseItem, YangKey["sku"]]
+    var item: YangList[PurchaseResponseItem]
     var subtotal_cents: YangLeaf[
         YangBuiltinInt32,
         YangConstraints[Range=YangRange[0, 2147483647]],

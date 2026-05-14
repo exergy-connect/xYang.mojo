@@ -26,6 +26,8 @@ from .types import (
     YangBuiltinUInt32,
     YangBuiltinUInt64,
     YangDataNodeSpec,
+    LeafModelSpec,
+    NodeModelSpec,
     YangModeled,
 )
 
@@ -273,10 +275,13 @@ def validate_yang_subtree[T: YangModeled](read module: YangModule) raises:
         comptime if (
             conforms_to(FieldType, Defaultable)
             and conforms_to(FieldType, YangDataNodeSpec)
+            and conforms_to(FieldType, LeafModelSpec)
             and conforms_to(FieldType, ImplicitlyDestructible)
         ):
+            comptime kind = FieldType.yang_node_kind()
             var field = FieldType()
-            validate_leaf_model_vs_module(module, want, fname, field)
+            comptime if kind == "leaf" or kind == "leaf-list":
+                validate_leaf_model_vs_module(module, want, fname, field)
         else:
             raise Error(
                 "reflection: Mojo field `"
@@ -286,13 +291,11 @@ def validate_yang_subtree[T: YangModeled](read module: YangModule) raises:
 
 
 def validate_leaf_model_vs_module[
-    FT: YangDataNodeSpec
+    FT: YangDataNodeSpec & LeafModelSpec
 ](
     read module: YangModule, read parent: String, read leaf: String, read field: FT
 ) raises:
     var kind = FT.yang_node_kind()
-    if kind != "leaf" and kind != "leaf-list":
-        return
     var yt = FT.yang_type_str()
     var c = module.top_container(parent)
     if not c:
@@ -346,6 +349,36 @@ def validate_leaf_model_vs_module[
                 + " != schema length upper bound "
                 + String(schema_max)
             )
+        var schema_patterns = module.leaf_pattern_specs(node.value()[])
+        if len(schema_patterns) != FT.yang_pattern_count():
+            raise Error(
+                "reflection: leaf `"
+                + parent
+                + "/"
+                + leaf
+                + "` model pattern count "
+                + String(FT.yang_pattern_count())
+                + " != schema pattern count "
+                + String(len(schema_patterns))
+            )
+        comptime for i in range(FT.yang_pattern_count()):
+            var model_pattern = FT.yang_pattern_text[i]()
+            var model_invert = FT.yang_pattern_invert[i]()
+            if (
+                schema_patterns[i].regex != model_pattern
+                or schema_patterns[i].invert != model_invert
+            ):
+                raise Error(
+                    "reflection: leaf `"
+                    + parent
+                    + "/"
+                    + leaf
+                    + "` model pattern `"
+                    + model_pattern
+                    + "` != schema `"
+                    + schema_patterns[i].regex
+                    + "`"
+                )
     else:
         if FT.model_max_string_length() != -1:
             raise Error(
@@ -354,6 +387,14 @@ def validate_leaf_model_vs_module[
                 + "/"
                 + leaf
                 + "` must use NoStringConstraints"
+            )
+        if FT.has_yang_pattern():
+            raise Error(
+                "reflection: non-string leaf `"
+                + parent
+                + "/"
+                + leaf
+                + "` must use NoStringPatternConstraints"
             )
         if FT.has_model_range():
             var model_range = (
@@ -376,21 +417,23 @@ def validate_leaf_model_vs_module[
                 )
 
 
-def _append_leaf_constraints[FT: YangDataNodeSpec](mut node: YangConstruct):
+def _append_leaf_constraints[FT: NodeModelSpec](mut node: YangConstruct):
     if FT.has_yang_when():
         _append_stmt(node, _stmt("when", FT.yang_when_condition()))
     comptime for i in range(FT.yang_must_count()):
         _append_stmt(node, _stmt("must", FT.yang_must_condition[i]()))
 
 
-def _append_node_constraints[FT: YangDataNodeSpec](mut node: YangConstruct):
+def _append_node_constraints[FT: NodeModelSpec](mut node: YangConstruct):
     if FT.has_yang_when():
         _append_stmt(node, _stmt("when", FT.yang_when_condition()))
     comptime for i in range(FT.yang_must_count()):
         _append_stmt(node, _stmt("must", FT.yang_must_condition[i]()))
 
 
-def _append_type_constraints_from_model[FT: YangDataNodeSpec](
+def _append_type_constraints_from_model[
+    FT: YangDataNodeSpec & LeafModelSpec
+](
     mut type_node: YangConstruct, read yt: String
 ):
     if yt == "enumeration":
@@ -400,6 +443,8 @@ def _append_type_constraints_from_model[FT: YangDataNodeSpec](
         var max_len = FT.model_max_string_length()
         if max_len >= 0:
             _append_arg(type_node, "length", "0.." + String(max_len))
+        comptime for i in range(FT.yang_pattern_count()):
+            _append_arg(type_node, "pattern", FT.yang_pattern_text[i]())
     else:
         if FT.has_model_range():
             _append_arg(
@@ -411,7 +456,9 @@ def _append_type_constraints_from_model[FT: YangDataNodeSpec](
             )
 
 
-def _leaf_from_model[FT: YangDataNodeSpec](read name: String) raises -> YangConstruct:
+def _leaf_from_model[
+    FT: YangDataNodeSpec & LeafModelSpec
+](read name: String) raises -> YangConstruct:
     var leaf_node = _stmt("leaf", name)
     var yt = FT.yang_type_str()
     var type_node = _stmt("type", yt)
@@ -421,7 +468,9 @@ def _leaf_from_model[FT: YangDataNodeSpec](read name: String) raises -> YangCons
     return leaf_node^
 
 
-def _leaf_list_from_model[FT: YangDataNodeSpec](read name: String) raises -> YangConstruct:
+def _leaf_list_from_model[
+    FT: YangDataNodeSpec & LeafModelSpec
+](read name: String) raises -> YangConstruct:
     var node = _stmt("leaf-list", name)
     var yt = FT.yang_type_str()
     var type_node = _stmt("type", yt)
@@ -439,13 +488,34 @@ def _append_model_fields[T: YangModeled](mut parent: YangConstruct) raises:
         comptime if (
             conforms_to(FieldType, Defaultable)
             and conforms_to(FieldType, YangDataNodeSpec)
+            and conforms_to(FieldType, LeafModelSpec)
             and conforms_to(FieldType, ImplicitlyDestructible)
         ):
-            var field = FieldType()
-            var child = construct_from_model_field(
-                String(info.field_names()[i]), field
-            )
-            _append_stmt(parent, child^)
+            comptime kind = FieldType.yang_node_kind()
+            comptime if kind == "leaf":
+                var child = _leaf_from_model[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(parent, child^)
+            elif kind == "leaf-list":
+                var child = _leaf_list_from_model[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(parent, child^)
+            elif kind == "container":
+                var child = _container_from_model_field[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(parent, child^)
+            elif kind == "list":
+                var child = _list_from_model_field[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(parent, child^)
+            else:
+                raise Error(
+                    "reflection: unsupported model node kind `" + kind + "`"
+                )
         else:
             raise Error(
                 "reflection: model field `"
@@ -454,7 +524,9 @@ def _append_model_fields[T: YangModeled](mut parent: YangConstruct) raises:
             )
 
 
-def _container_from_model_field[FT: YangDataNodeSpec](
+def _container_from_model_field[
+    FT: YangDataNodeSpec & LeafModelSpec
+](
     read name: String
 ) raises -> YangConstruct:
     var node = _stmt("container", name)
@@ -463,18 +535,23 @@ def _container_from_model_field[FT: YangDataNodeSpec](
     return node^
 
 
-def _list_from_model_field[FT: YangDataNodeSpec](
+def _list_from_model_field[
+    FT: YangDataNodeSpec & LeafModelSpec
+](
     read name: String
 ) raises -> YangConstruct:
     var node = _stmt("list", name)
-    if FT.has_yang_key():
-        _append_arg(node, "key", FT.yang_key_text())
+    var key = String(FT.EntryType.LIST_KEY)
+    if key.byte_length() > 0:
+        _append_arg(node, "key", key)
     _append_node_constraints[FT](node)
     _append_model_fields[FT.EntryType](node)
     return node^
 
 
-def construct_from_model_field[FT: YangDataNodeSpec](
+def construct_from_model_field[
+    FT: YangDataNodeSpec & LeafModelSpec
+](
     read name: String, read field: FT
 ) raises -> YangConstruct:
     comptime kind = FT.yang_node_kind()
@@ -499,13 +576,34 @@ def container_construct_from_model[T: YangModeled]() raises -> YangConstruct:
         comptime if (
             conforms_to(FieldType, Defaultable)
             and conforms_to(FieldType, YangDataNodeSpec)
+            and conforms_to(FieldType, LeafModelSpec)
             and conforms_to(FieldType, ImplicitlyDestructible)
         ):
-            var field = FieldType()
-            var child = construct_from_model_field(
-                String(info.field_names()[i]), field
-            )
-            _append_stmt(container, child^)
+            comptime kind = FieldType.yang_node_kind()
+            comptime if kind == "leaf":
+                var child = _leaf_from_model[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(container, child^)
+            elif kind == "leaf-list":
+                var child = _leaf_list_from_model[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(container, child^)
+            elif kind == "container":
+                var child = _container_from_model_field[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(container, child^)
+            elif kind == "list":
+                var child = _list_from_model_field[FieldType](
+                    String(info.field_names()[i])
+                )
+                _append_stmt(container, child^)
+            else:
+                raise Error(
+                    "reflection: unsupported model node kind `" + kind + "`"
+                )
         else:
             raise Error(
                 "reflection: model field `"

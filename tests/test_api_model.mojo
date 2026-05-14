@@ -6,13 +6,14 @@ from xyang.api import (
     YangBuiltinUInt16,
     YangConstraints,
     YangEnum,
-    YangKey,
     YangLeafList,
     YangList,
+    YangListItem,
     YangModeled,
     YangMust,
     YangBuiltinString,
     YangLeaf,
+    YangPattern,
     YangRange,
     YangWhen,
     parse_and_validate_json_against_model,
@@ -38,7 +39,8 @@ struct ApiCart(ImplicitlyDestructible, Movable, YangModeled):
         YangBuiltinString, YangConstraints[MaxStringLength[128]]
     ]
     var currency: YangLeaf[
-        YangBuiltinString, YangConstraints[MaxStringLength[3]]
+        YangBuiltinString,
+        YangConstraints[MaxStringLength[3], Pattern=YangPattern["[A-Z]{3}"]],
     ]
     var quantity: YangLeaf[
         YangBuiltinUInt16,
@@ -47,7 +49,9 @@ struct ApiCart(ImplicitlyDestructible, Movable, YangModeled):
 
 
 @fieldwise_init
-struct ApiServer(ImplicitlyDestructible, Movable, YangModeled):
+struct ApiServer(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
+    comptime LIST_KEY = "name"
+
     @staticmethod
     def yang_container_name() -> String:
         return "server"
@@ -79,7 +83,7 @@ struct ApiConfig(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         pass
 
-    var server: YangList[ApiServer, YangKey["name"]]
+    var server: YangList[ApiServer]
     var tag: YangLeafList[
         YangBuiltinString, YangConstraints[MaxStringLength[16]]
     ]
@@ -105,6 +109,14 @@ def _generated_model_ok() -> Bool:
 
 
 comptime _MODEL_OK = _generated_model_ok()
+
+
+comptime _PATTERN_ACCEPTS_USD = YangPattern["[A-Z]{3}"].comptime_matches[
+    "USD"
+]()
+comptime _PATTERN_REJECTS_LOWER = not YangPattern[
+    "[A-Z]{3}"
+].comptime_matches["usd"]()
 
 
 comptime API_CONFIG_YANG = """
@@ -202,6 +214,27 @@ def test_generated_module_rejects_bad_range() raises:
     raise Error("expected generated model validation to reject bad quantity")
 
 
+def test_generated_module_rejects_bad_pattern() raises:
+    comptime assert _PATTERN_ACCEPTS_USD, (
+        "comptime pattern evaluator rejected valid currency"
+    )
+    comptime assert _PATTERN_REJECTS_LOWER, (
+        "comptime pattern evaluator accepted invalid currency"
+    )
+    try:
+        _ = parse_and_validate_json_against_model[ApiCart](
+            '{"cart":{"customer_id":"guest","currency":"usd","quantity":1}}',
+            "api-cart",
+            "urn:test:api-cart",
+            "ac",
+            "bad-pattern.json",
+        )
+    except e:
+        if String(e).find("pattern") >= 0:
+            return
+    raise Error("expected generated model validation to reject bad currency")
+
+
 def test_model_constructs_match_parsed_yang_ast() raises:
     comptime assert _API_CONFIG_AST_PARITY_OK, (
         "generated ApiConfig AST did not match parsed YANG AST at compile time"
@@ -251,6 +284,7 @@ def main() raises:
     test_generated_module_from_model()
     test_generated_module_rejects_bad_json()
     test_generated_module_rejects_bad_range()
+    test_generated_module_rejects_bad_pattern()
     test_model_constructs_match_parsed_yang_ast()
     test_generated_enum_accepts_declared_value()
     test_generated_enum_rejects_unknown_value()

@@ -6,10 +6,12 @@ from .types import (
     NodeConstraints,
     NodeModelSpec,
     NumericRangeConstraint,
+    StringPatternConstraint,
     StringLengthCap,
     YangConstraints,
     YangMust,
     YangMustConstraints,
+    YangPattern,
     YangRange,
     YangWhen,
     YangWhenPredicate,
@@ -29,13 +31,11 @@ from .types import (
     ## Data node wrappers
     YangContainer,
     YangDataNodeSpec,
-    YangKey,
     YangLeaf,
     YangLeafList,
     YangList,
-    YangListKey,
+    YangListItem,
     YangModeled,
-    NoYangModel,
 )
 from .model import (
     ## Reflection and validation helpers
