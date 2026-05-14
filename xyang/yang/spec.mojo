@@ -97,9 +97,8 @@ struct YangConstructSpec[
     def __init__(out self):
         pass
 
-# Not included: augment, rpc
-# TODO: Move notification out of here, treat separately
-comptime COMMON_DATA_NODES = fields[9](
+# Not included: augment, notification, rpc
+comptime COMMON_DATA_NODES = fields[8](
         (`anydata`, `0..n`),
         (`anyxml`, `0..n`),
         (`choice`, `0..n`),
@@ -107,7 +106,6 @@ comptime COMMON_DATA_NODES = fields[9](
         (`leaf`, `0..n`),
         (`leaf-list`, `0..n`),
         (`list`, `0..n`),
-        (`notification`, `0..n`),
         (`uses`, `0..n`),
     )
 
@@ -117,7 +115,7 @@ comptime MODULE_SPEC = YangConstructSpec[
     `module`,
     yarg.IdentifierArgument,
     COMMON_DATA_NODES,
-    fields[18](
+    fields[19](
         (`augment`, `0..n`),
         (`contact`, `0..1`),
         (`description`, `0..1`),
@@ -129,6 +127,7 @@ comptime MODULE_SPEC = YangConstructSpec[
         (`import`, `0..n`),
         (`include`, `0..n`),
         (`namespace`, `1`),
+        (`notification`, `0..n`),
         (`organization`, `0..1`),
         (`prefix`, `1`),
         (`reference`, `0..1`),
@@ -144,13 +143,14 @@ comptime CONTAINER_SPEC = YangConstructSpec[
     `container`,
     yarg.IdentifierArgument,
     COMMON_DATA_NODES,
-    fields[11](
+    fields[12](
         (`action`, `0..n`),
         (`config`, `0..1`),
         (`description`, `0..1`),
         (`grouping`, `0..n`),
         (`if-feature`, `0..n`),
         (`must`, `0..n`),
+        (`notification`, `0..n`),
         (`presence`, `0..1`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
@@ -164,7 +164,7 @@ comptime LIST_SPEC = YangConstructSpec[
     `list`,
     yarg.IdentifierArgument,
     COMMON_DATA_NODES,
-    fields[15](
+    fields[16](
         (`action`, `0..n`),
         (`config`, `0..1`),
         (`description`, `0..1`),
@@ -174,6 +174,7 @@ comptime LIST_SPEC = YangConstructSpec[
         (`max-elements`, `0..1`),
         (`min-elements`, `0..1`),
         (`must`, `0..n`),
+        (`notification`, `0..n`),
         (`ordered-by`, `0..1`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
@@ -332,10 +333,11 @@ comptime GROUPING_SPEC = YangConstructSpec[
     `grouping`,
     yarg.IdentifierArgument,
     COMMON_DATA_NODES,
-    fields[6](
+    fields[7](
         (`action`, `0..n`),
         (`description`, `0..1`),
         (`grouping`, `0..n`),
+        (`notification`, `0..n`),
         (`reference`, `0..1`),
         (`status`, `0..1`),
         (`typedef`, `0..n`),
@@ -372,16 +374,7 @@ comptime CHOICE_SPEC = YangConstructSpec[
 comptime CASE_SPEC = YangConstructSpec[
     `case`,
     yarg.IdentifierArgument,
-    fields[8](
-        (`anydata`, `0..n`),
-        (`anyxml`, `0..n`),
-        (`choice`, `0..n`),
-        (`container`, `0..n`),
-        (`leaf`, `0..n`),
-        (`leaf-list`, `0..n`),
-        (`list`, `0..n`),
-        (`uses`, `0..n`),
-    ),
+    COMMON_DATA_NODES,
     fields[5](
         (`description`, `0..1`),
         (`if-feature`, `0..n`),
