@@ -2,8 +2,8 @@ from std.testing import assert_equal
 
 from xyang.api import (
     MaxStringLength,
-    NoStringConstraints,
     YangBuiltinUInt16,
+    YangConstraints,
     YangModeled,
     YangBuiltinString,
     YangLeaf,
@@ -25,10 +25,15 @@ struct ApiCart(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         validate_yang_subtree[Self](module)
 
-    var customer_id: YangLeaf[YangBuiltinString, MaxStringLength[128]]
-    var currency: YangLeaf[YangBuiltinString, MaxStringLength[3]]
+    var customer_id: YangLeaf[
+        YangBuiltinString, YangConstraints[MaxStringLength[128]]
+    ]
+    var currency: YangLeaf[
+        YangBuiltinString, YangConstraints[MaxStringLength[3]]
+    ]
     var quantity: YangLeaf[
-        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+        YangBuiltinUInt16,
+        YangConstraints[Range=YangRange[0, 65535]],
     ]
 
 
@@ -89,7 +94,10 @@ def test_generated_module_rejects_bad_range() raises:
             "bad-range.json",
         )
     except e:
-        if String(e).find("range") >= 0 or String(e).find("expected uint16") >= 0:
+        if (
+            String(e).find("range") >= 0
+            or String(e).find("expected uint16") >= 0
+        ):
             return
     raise Error("expected generated model validation to reject bad quantity")
 

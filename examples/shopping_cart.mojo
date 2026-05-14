@@ -19,12 +19,13 @@ from std.python import Python
 
 from xyang.api import (
     MaxStringLength,
-    NoStringConstraints,
     YangBuiltinInt32,
     YangBuiltinUInt16,
+    YangConstraints,
     YangKey,
     YangList,
     YangModeled,
+    YangMust,
     YangRange,
     YangBuiltinString,
     YangLeaf,
@@ -54,8 +55,12 @@ struct CartContainer(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         validate_yang_subtree[Self](module)
 
-    var customer_id: YangLeaf[YangBuiltinString, MaxStringLength[128]]
-    var currency: YangLeaf[YangBuiltinString, MaxStringLength[3]]
+    var customer_id: YangLeaf[
+        YangBuiltinString, YangConstraints[MaxStringLength[128]]
+    ]
+    var currency: YangLeaf[
+        YangBuiltinString, YangConstraints[MaxStringLength[3]]
+    ]
 
 
 @fieldwise_init
@@ -68,9 +73,16 @@ struct PurchaseItem(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         pass
 
-    var sku: YangLeaf[YangBuiltinString, MaxStringLength[64]]
+    var sku: YangLeaf[
+        YangBuiltinString,
+        YangConstraints[
+            MaxStringLength[64],
+            Must=YangMust["/catalog/item[sku = current()]"],
+        ],
+    ]
     var quantity: YangLeaf[
-        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+        YangBuiltinUInt16,
+        YangConstraints[Range=YangRange[0, 65535]],
     ]
 
 
@@ -97,16 +109,19 @@ struct PurchaseResponseItem(ImplicitlyDestructible, Movable, YangModeled):
     def comptime_validate(read module: YangModule) raises:
         pass
 
-    var sku: YangLeaf[YangBuiltinString, MaxStringLength[64]]
-    var name: YangLeaf[YangBuiltinString, MaxStringLength[128]]
+    var sku: YangLeaf[YangBuiltinString, YangConstraints[MaxStringLength[64]]]
+    var name: YangLeaf[YangBuiltinString, YangConstraints[MaxStringLength[128]]]
     var quantity: YangLeaf[
-        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+        YangBuiltinUInt16,
+        YangConstraints[Range=YangRange[0, 65535]],
     ]
     var unit_price_cents: YangLeaf[
-        YangBuiltinUInt16, NoStringConstraints, YangRange[0, 65535]
+        YangBuiltinUInt16,
+        YangConstraints[Range=YangRange[0, 65535]],
     ]
     var line_total_cents: YangLeaf[
-        YangBuiltinInt32, NoStringConstraints, YangRange[0, 2147483647]
+        YangBuiltinInt32,
+        YangConstraints[Range=YangRange[0, 2147483647]],
     ]
 
 
@@ -122,24 +137,30 @@ struct PurchaseResponseContainer(ImplicitlyDestructible, Movable, YangModeled):
 
     var item: YangList[PurchaseResponseItem, YangKey["sku"]]
     var subtotal_cents: YangLeaf[
-        YangBuiltinInt32, NoStringConstraints, YangRange[0, 2147483647]
+        YangBuiltinInt32,
+        YangConstraints[Range=YangRange[0, 2147483647]],
     ]
     var discount_percent: YangLeaf[
         YangBuiltinUInt16,
-        NoStringConstraints,
-        YangRange[0, 100],
-        YangWhen["count(../item) >= 3"],
+        YangConstraints[
+            Range=YangRange[0, 100],
+            When=YangWhen["count(../item) >= 3"],
+        ],
     ]
     var discount_cents: YangLeaf[
         YangBuiltinInt32,
-        NoStringConstraints,
-        YangRange[0, 2147483647],
-        YangWhen["count(../item) >= 3"],
+        YangConstraints[
+            Range=YangRange[0, 2147483647],
+            When=YangWhen["count(../item) >= 3"],
+        ],
     ]
     var total_cents: YangLeaf[
-        YangBuiltinInt32, NoStringConstraints, YangRange[0, 2147483647]
+        YangBuiltinInt32,
+        YangConstraints[Range=YangRange[0, 2147483647]],
     ]
-    var currency: YangLeaf[YangBuiltinString, MaxStringLength[3]]
+    var currency: YangLeaf[
+        YangBuiltinString, YangConstraints[MaxStringLength[3]]
+    ]
 
 
 ## --- Embedded JSON Schema + YANG (catalog, purchase request, itemized response) ---
@@ -225,7 +246,15 @@ comptime APP_SCHEMA_JSON = """{
                 "type": "string",
                 "maxLength": 64,
                 "description": "Product sku",
-                "x-yang": {"type": "leaf"}
+                "x-yang": {
+                  "type": "leaf",
+                  "must": [
+                    {
+                      "must": "/catalog/item[sku = current()]",
+                      "error-message": "SKU must exist in catalog"
+                    }
+                  ]
+                }
               },
               "quantity": {
                 "type": "integer",
@@ -404,27 +433,15 @@ def _catalog_json() -> String:
     )
 
 
-def _catalog_name(read sku: String) raises -> String:
+def _catalog_item(read sku: String) raises -> Tuple[String, Int]:
     if sku == "tea":
-        return "Jasmine green tea"
+        return ("Jasmine green tea", 450)
     if sku == "mug":
-        return "Stoneware mug"
+        return ("Stoneware mug", 1200)
     if sku == "beans":
-        return "House espresso beans"
+        return ("House espresso beans", 1600)
     if sku == "filter":
-        return "Paper filter pack"
-    raise Error("unknown catalog sku `" + sku + "`")
-
-
-def _catalog_unit_price_cents(read sku: String) raises -> Int:
-    if sku == "tea":
-        return 450
-    if sku == "mug":
-        return 1200
-    if sku == "beans":
-        return 1600
-    if sku == "filter":
-        return 650
+        return ("Paper filter pack", 650)
     raise Error("unknown catalog sku `" + sku + "`")
 
 
@@ -445,14 +462,14 @@ def _line_quantity(read line: JsonValue) raises -> Int:
 def _line_total_cents(read line: JsonValue) raises -> Int:
     var sku = _line_sku(line)
     var q = _line_quantity(line)
-    return q * _catalog_unit_price_cents(sku)
+    return q * _catalog_item(sku)[1]
 
 
 def purchase_line_count(read purchase: JsonValue) raises -> Int:
     var items = json_get(purchase, "item")
     if not items or items.value()[].kind != JsonValue.ARRAY:
         return 0
-    return len(items.value()[].array_values.copy())
+    return len(items.value()[].array_values)
 
 
 def purchase_discount_percent(read purchase: JsonValue) raises -> Int:
@@ -466,7 +483,7 @@ def purchase_subtotal_cents(read purchase: JsonValue) raises -> Int:
     if not items or items.value()[].kind != JsonValue.ARRAY:
         return 0
     var sum: Int = 0
-    var arr = items.value()[].array_values.copy()
+    ref arr = items.value()[].array_values
     for i in range(len(arr)):
         sum += _line_total_cents(arr[i][])
     return sum
@@ -499,20 +516,21 @@ def _json_purchase_response(
     var discount = (subtotal * pct) // 100
     var total = subtotal - discount
     var s = String('{"purchase_response":{"item":[')
-    var arr = items.value()[].array_values.copy()
+    ref arr = items.value()[].array_values
     for i in range(len(arr)):
         if i > 0:
             s += ","
         ref line = arr[i][]
         var sku = _line_sku(line)
         var q = _line_quantity(line)
-        var unit = _catalog_unit_price_cents(sku)
+        var catalog_item = _catalog_item(sku)
+        var unit = catalog_item[1]
         var line_total = q * unit
         s += (
             '{"sku":"'
             + _json_escape(sku)
             + '","name":"'
-            + _json_escape(_catalog_name(sku))
+            + _json_escape(catalog_item[0])
             + '","quantity":'
             + String(q)
             + ',"unit_price_cents":'
@@ -521,14 +539,16 @@ def _json_purchase_response(
             + String(line_total)
             + "}"
         )
+    s += '],"subtotal_cents":' + String(subtotal)
+    if pct > 0:
+        s += (
+            ',"discount_percent":'
+            + String(pct)
+            + ',"discount_cents":'
+            + String(discount)
+        )
     s += (
-        '],"subtotal_cents":'
-        + String(subtotal)
-        + ',"discount_percent":'
-        + String(pct)
-        + ',"discount_cents":'
-        + String(discount)
-        + ',"total_cents":'
+        ',"total_cents":'
         + String(total)
         + ',"currency":"'
         + _json_escape(currency)

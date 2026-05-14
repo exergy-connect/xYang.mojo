@@ -10,15 +10,12 @@ trait StringLengthCap:
     def model_max_string_length() -> Int:
         ...
 
+comptime StdTraits = Copyable & Defaultable & ImplicitlyDestructible & Movable & Writable
 
 @fieldwise_init
 struct NoStringConstraints(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
+    StdTraits,
     StringLengthCap,
-    Writable,
 ):
     @staticmethod
     def model_max_string_length() -> Int:
@@ -29,12 +26,8 @@ struct NoStringConstraints(
 struct MaxStringLength[
     n: Int,
 ](
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
+    StdTraits,
     StringLengthCap,
-    Writable,
 ):
     @staticmethod
     def model_max_string_length() -> Int:
@@ -57,12 +50,8 @@ trait NumericRangeConstraint:
 
 @fieldwise_init
 struct NoNumericRange(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
+    StdTraits,
     NumericRangeConstraint,
-    Writable,
 ):
     @staticmethod
     def model_range_min() -> Int64:
@@ -82,12 +71,8 @@ struct YangRange[
     min: Int64,
     max: Int64,
 ](
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
+    StdTraits,
     NumericRangeConstraint,
-    Writable,
 ):
     @staticmethod
     def model_range_min() -> Int64:
@@ -103,7 +88,7 @@ struct YangRange[
 
 
 trait YangBuiltinDescriptor:
-    comptime Value: Writable & Copyable & Movable & ImplicitlyDestructible & Defaultable
+    comptime Value: StdTraits
 
     @staticmethod
     def yang_type_keyword() -> String:
@@ -112,11 +97,7 @@ trait YangBuiltinDescriptor:
 
 @fieldwise_init
 struct YangBuiltinString(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = String
@@ -128,11 +109,7 @@ struct YangBuiltinString(
 
 @fieldwise_init
 struct YangBuiltinBool(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Bool
@@ -144,11 +121,7 @@ struct YangBuiltinBool(
 
 @fieldwise_init
 struct YangBuiltinInt8(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int
@@ -160,11 +133,7 @@ struct YangBuiltinInt8(
 
 @fieldwise_init
 struct YangBuiltinInt16(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int
@@ -176,11 +145,7 @@ struct YangBuiltinInt16(
 
 @fieldwise_init
 struct YangBuiltinInt32(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int
@@ -192,11 +157,7 @@ struct YangBuiltinInt32(
 
 @fieldwise_init
 struct YangBuiltinInt64(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int64
@@ -208,11 +169,7 @@ struct YangBuiltinInt64(
 
 @fieldwise_init
 struct YangBuiltinUInt8(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int
@@ -224,11 +181,7 @@ struct YangBuiltinUInt8(
 
 @fieldwise_init
 struct YangBuiltinUInt16(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int
@@ -240,11 +193,7 @@ struct YangBuiltinUInt16(
 
 @fieldwise_init
 struct YangBuiltinUInt32(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int64
@@ -256,11 +205,7 @@ struct YangBuiltinUInt32(
 
 @fieldwise_init
 struct YangBuiltinUInt64(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangBuiltinDescriptor,
 ):
     comptime Value = Int64
@@ -282,11 +227,7 @@ trait YangWhenPredicate:
 
 @fieldwise_init
 struct NoYangWhen(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangWhenPredicate,
 ):
     @staticmethod
@@ -302,11 +243,7 @@ struct NoYangWhen(
 struct YangWhen[
     condition: StringLiteral,
 ](
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangWhenPredicate,
 ):
     @staticmethod
@@ -316,6 +253,58 @@ struct YangWhen[
     @staticmethod
     def has_yang_when() -> Bool:
         return True
+
+
+trait YangMustConstraints:
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        ...
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        ...
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        ...
+
+
+@fieldwise_init
+struct NoYangMust(
+    StdTraits,
+    YangMustConstraints,
+):
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return ""
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return 0
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return False
+
+
+@fieldwise_init
+struct YangMust[
+    *conditions: StaticString,
+](
+    StdTraits,
+    YangMustConstraints,
+):
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return String(Self.conditions[i])
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return len(Self.conditions)
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return len(Self.conditions) > 0
 
 
 trait YangListKey:
@@ -330,11 +319,7 @@ trait YangListKey:
 
 @fieldwise_init
 struct NoYangKey(
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangListKey,
 ):
     @staticmethod
@@ -350,11 +335,7 @@ struct NoYangKey(
 struct YangKey[
     name: StringLiteral,
 ](
-    Copyable,
-    Defaultable,
-    ImplicitlyDestructible,
-    Movable,
-    Writable,
+    StdTraits,
     YangListKey,
 ):
     @staticmethod
@@ -372,11 +353,29 @@ trait YangDataNodeSpec:
         ...
 
 
-trait LeafModelSpec:
+trait NodeModelSpec:
     @staticmethod
-    def yang_type_str() -> String:
+    def yang_when_condition() -> String:
         ...
 
+    @staticmethod
+    def has_yang_when() -> Bool:
+        ...
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        ...
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        ...
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        ...
+
+
+trait LeafModelSpec:
     @staticmethod
     def model_max_string_length() -> Int:
         ...
@@ -399,6 +398,18 @@ trait LeafModelSpec:
 
     @staticmethod
     def has_yang_when() -> Bool:
+        ...
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        ...
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        ...
+
+    @staticmethod
+    def has_yang_must() -> Bool:
         ...
 
 
@@ -412,12 +423,79 @@ trait YangModeled:
         ...
 
 
-@fieldwise_init
-struct YangLeaf[
-    Builtin: YangBuiltinDescriptor,
+struct NodeConstraints[
+    When: YangWhenPredicate = NoYangWhen,
+    Must: YangMustConstraints = NoYangMust,
+](NodeModelSpec):
+
+    @staticmethod
+    def yang_when_condition() -> String:
+        return Self.When.yang_when_condition()
+
+    @staticmethod
+    def has_yang_when() -> Bool:
+        return Self.When.has_yang_when()
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return Self.Must.yang_must_condition[i]()
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return Self.Must.yang_must_count()
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return Self.Must.has_yang_must()
+
+
+struct YangConstraints[
     Constraints: StringLengthCap = NoStringConstraints,
     Range: NumericRangeConstraint = NoNumericRange,
     When: YangWhenPredicate = NoYangWhen,
+    Must: YangMustConstraints = NoYangMust,
+](LeafModelSpec):
+
+    @staticmethod
+    def model_max_string_length() -> Int:
+        return Self.Constraints.model_max_string_length()
+
+    @staticmethod
+    def model_range_min() -> Int64:
+        return Self.Range.model_range_min()
+
+    @staticmethod
+    def model_range_max() -> Int64:
+        return Self.Range.model_range_max()
+
+    @staticmethod
+    def has_model_range() -> Bool:
+        return Self.Range.has_model_range()
+
+    @staticmethod
+    def yang_when_condition() -> String:
+        return Self.When.yang_when_condition()
+
+    @staticmethod
+    def has_yang_when() -> Bool:
+        return Self.When.has_yang_when()
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return Self.Must.yang_must_condition[i]()
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return Self.Must.yang_must_count()
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return Self.Must.has_yang_must()
+
+@fieldwise_init
+struct YangLeaf[
+    Builtin: YangBuiltinDescriptor,
+    C: LeafModelSpec = YangConstraints[],
 ](ImplicitlyDestructible, LeafModelSpec, Movable, YangDataNodeSpec):
     var value: Self.Builtin.Value
 
@@ -431,35 +509,45 @@ struct YangLeaf[
 
     @staticmethod
     def model_max_string_length() -> Int:
-        return Self.Constraints.model_max_string_length()
+        return Self.C.model_max_string_length()
 
     @staticmethod
     def model_range_min() -> Int64:
-        return Self.Range.model_range_min()
+        return Self.C.model_range_min()
 
     @staticmethod
     def model_range_max() -> Int64:
-        return Self.Range.model_range_max()
+        return Self.C.model_range_max()
 
     @staticmethod
     def has_model_range() -> Bool:
-        return Self.Range.has_model_range()
+        return Self.C.has_model_range()
 
     @staticmethod
     def yang_when_condition() -> String:
-        return Self.When.yang_when_condition()
+        return Self.C.yang_when_condition()
 
     @staticmethod
     def has_yang_when() -> Bool:
-        return Self.When.has_yang_when()
+        return Self.C.has_yang_when()
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return Self.C.yang_must_condition[i]()
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return Self.C.yang_must_count()
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return Self.C.has_yang_must()
 
 
 @fieldwise_init
 struct YangLeafList[
     Builtin: YangBuiltinDescriptor,
-    Constraints: StringLengthCap = NoStringConstraints,
-    Range: NumericRangeConstraint = NoNumericRange,
-    When: YangWhenPredicate = NoYangWhen,
+    C: LeafModelSpec = YangConstraints[],
 ](ImplicitlyDestructible, LeafModelSpec, Movable, YangDataNodeSpec):
     var values: List[Self.Builtin.Value]
 
@@ -473,34 +561,46 @@ struct YangLeafList[
 
     @staticmethod
     def model_max_string_length() -> Int:
-        return Self.Constraints.model_max_string_length()
+        return Self.C.model_max_string_length()
 
     @staticmethod
     def model_range_min() -> Int64:
-        return Self.Range.model_range_min()
+        return Self.C.model_range_min()
 
     @staticmethod
     def model_range_max() -> Int64:
-        return Self.Range.model_range_max()
+        return Self.C.model_range_max()
 
     @staticmethod
     def has_model_range() -> Bool:
-        return Self.Range.has_model_range()
+        return Self.C.has_model_range()
 
     @staticmethod
     def yang_when_condition() -> String:
-        return Self.When.yang_when_condition()
+        return Self.C.yang_when_condition()
 
     @staticmethod
     def has_yang_when() -> Bool:
-        return Self.When.has_yang_when()
+        return Self.C.has_yang_when()
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return Self.C.yang_must_condition[i]()
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return Self.C.yang_must_count()
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return Self.C.has_yang_must()
 
 
 @fieldwise_init
 struct YangContainer[
     Child: Movable & ImplicitlyDestructible & YangModeled,
-    When: YangWhenPredicate = NoYangWhen,
-](ImplicitlyDestructible, Movable, YangDataNodeSpec):
+    C: NodeModelSpec = NodeConstraints[],
+](ImplicitlyDestructible, Movable, NodeModelSpec, YangDataNodeSpec):
     var body: Self.Child
 
     @staticmethod
@@ -513,19 +613,31 @@ struct YangContainer[
 
     @staticmethod
     def yang_when_condition() -> String:
-        return Self.When.yang_when_condition()
+        return Self.C.yang_when_condition()
 
     @staticmethod
     def has_yang_when() -> Bool:
-        return Self.When.has_yang_when()
+        return Self.C.has_yang_when()
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return Self.C.yang_must_condition[i]()
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return Self.C.yang_must_count()
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return Self.C.has_yang_must()
 
 
 @fieldwise_init
 struct YangList[
     Entry: Movable & ImplicitlyDestructible & YangModeled,
     Key: YangListKey = NoYangKey,
-    When: YangWhenPredicate = NoYangWhen,
-](ImplicitlyDestructible, Movable, YangDataNodeSpec):
+    C: NodeModelSpec = NodeConstraints[],
+](ImplicitlyDestructible, Movable, NodeModelSpec, YangDataNodeSpec):
     @staticmethod
     def yang_node_kind() -> String:
         return "list"
@@ -544,8 +656,20 @@ struct YangList[
 
     @staticmethod
     def yang_when_condition() -> String:
-        return Self.When.yang_when_condition()
+        return Self.C.yang_when_condition()
 
     @staticmethod
     def has_yang_when() -> Bool:
-        return Self.When.has_yang_when()
+        return Self.C.has_yang_when()
+
+    @staticmethod
+    def yang_must_condition[i: Int]() -> String:
+        return Self.C.yang_must_condition[i]()
+
+    @staticmethod
+    def yang_must_count() -> Int:
+        return Self.C.yang_must_count()
+
+    @staticmethod
+    def has_yang_must() -> Bool:
+        return Self.C.has_yang_must()

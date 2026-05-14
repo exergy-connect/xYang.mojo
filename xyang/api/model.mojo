@@ -13,6 +13,7 @@ from xyang.yang.spec import `leaf`
 from .types import (
     NoNumericRange,
     NoStringConstraints,
+    NoYangMust,
     NoYangWhen,
     YangBuiltinBool,
     YangBuiltinInt8,
@@ -322,6 +323,30 @@ def validate_leaf_model_vs_module[
                 )
 
 
+def _model_must_conditions_from_reflection[FT: AnyType]() raises -> List[String]:
+    comptime reflected_ty = reflect[FT].name()
+    if "NoYangMust" in reflected_ty:
+        return List[String]()
+    var marker = "YangMust["
+    var start = reflected_ty.find(marker)
+    if start < 0 or "<unprintable>" in reflected_ty:
+        return List[String]()
+    start += marker.byte_length()
+    var b = reflected_ty.as_bytes()
+    var depth = 1
+    var end = start
+    while end < len(b) and depth > 0:
+        if b[end] == UInt8(ord("[")):
+            depth += 1
+        elif b[end] == UInt8(ord("]")):
+            depth -= 1
+        if depth > 0:
+            end += 1
+    if end <= start:
+        return List[String]()
+    return [_byte_slice_str(reflected_ty, start, end)]
+
+
 def _leaf_from_model[FT: AnyType](read name: String) raises -> YangConstruct:
     var leaf_node = _stmt("leaf", name)
     var yt = _model_type_keyword_from_reflection[FT]()
@@ -335,6 +360,9 @@ def _leaf_from_model[FT: AnyType](read name: String) raises -> YangConstruct:
         if range_text.byte_length() > 0:
             _append_arg(type_node, "range", range_text)
     _append_stmt(leaf_node, type_node^)
+    var musts = _model_must_conditions_from_reflection[FT]()
+    for i in range(len(musts)):
+        _append_stmt(leaf_node, _stmt("must", musts[i]))
     return leaf_node^
 
 
