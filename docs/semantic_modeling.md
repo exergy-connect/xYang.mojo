@@ -10,7 +10,7 @@ xYang brings that layer to Mojo. It is a semantic modeling framework that encode
 
 Today, LLM-powered services validate their API contracts ad-hoc: JSON schemas as strings, function declarations hand-written, auto-generated and untested, enum values hardcoded against a data model that may have drifted. When a Gemini function call returns an unexpected value, or an LLM hallucinates a parameter that was never valid, the error surfaces at the worst possible moment — after inference, inside application logic just before interacting with a user.
 
-This is the same problem compilers solved for GPU compute. Manually written CUDA kernels are fast but brittle, opaque to anyone who didn't write them, and resistant to generalization. The answer was not better kernels — it was a generalized compiler that encodes domain knowledge into the artifact.
+This is the same problem compilers solved for GPU compute. Manually written CUDA kernels are fast but brittle, opaque to anyone who didn't write them, and resistant to generalization. The answer was not better kernels — it was a generalized compiler that encodes structured domain knowledge into the artifact.
 
 xYang applies that same insight one layer up: to the semantic contracts between services, data models, and LLMs.
 
@@ -20,9 +20,9 @@ YANG (RFC 7950) is not a networking protocol. It is a data modeling language —
 
 Critically, YANG is a semantic IR from which target-specific representations can be derived. xYang already parses YANG-annotated JSON Schema (`x-yang` extensions) and will emit JSON Schema and OpenAPI from the same model. The YANG type system is the source of truth; the LLM API artifact is a projection of it. This is the same principle as MLIR: one well-designed intermediate representation, multiple lowerings. xYang uses a subset of YANG — not the NETCONF transport machinery, not the management plane protocols, just the data modeling core — as that intermediate representation for Mojo service semantics. A mature, open, RFC-backed standard chosen not for its domain of origin but for its semantic expressiveness, which is unmatched among open schema languages.
 
-## The Architecture
+## The Architecture from an Application perspective
 
-The full system is structured as a three-layer stack:
+A typical application is structured as a three-layer stack:
 
 **xYang (Mojo)** — the meta-layer. YANG-derived constraints encoded as parametric types. A `YangLeaf[YangBuiltinUInt8, YangConstraints[Range=YangRange[18,120]]]` is not a comment or a doc string — it is a type. Constraint violations surface at compile time via `comptime assert`. The type system generates a validator; the validator does not generate the type.
 
@@ -32,33 +32,29 @@ The full system is structured as a three-layer stack:
 
 ## What Build-Time Specialization Means
 
-When the stamp catalog changes, CI/CD recompiles the consolidated JSON data model, xFrame derives updated enum constraints, and the Mojo binary is rebuilt with those constraints encoded. The LLM always operates against a specialized binary — not a generic one patched at runtime with hope.
+When the stamp catalog changes, CI/CD recompiles the consolidated JSON data model, xFrame derives updated enum constraints, and the Mojo appraisal binary is rebuilt with those constraints encoded. The LLM always operates against a specialized binary — not a generic one that leaves room for interpretation.
 
 This is the orthogonality and composability that makes generalized systems preferable to hand-tuned ones: the derivation process is principled, so it works for any catalog, any provider, any function schema. Changing the data model updates the constraints automatically. There is no separate validation layer to keep in sync.
 
-## Why This Cannot Be Done as Well in Any Other Language
+## What Makes Mojo Particularly Suitable to Implement This?
 
-The question a skeptical reviewer should ask: why isn't this just a Python codegen script that emits JSON Schema? Or a Rust macro crate? Or a TypeScript validator?
+Several Mojo capabilities combine to make xYang's guarantees structural rather than conventional — properties of the compiled binary, not of discipline or documentation.
 
-The answer is that xYang's guarantees are not portable to those languages without losing what makes them guarantees.
+**Parametric types as the constraint carrier.** In Python or TypeScript, a range constraint is metadata — a dict entry, a decorator argument, a comment. It exists at runtime or is erased entirely. In Mojo, `YangRange[0, 65535]` is a type parameter. It participates in overload resolution, trait conformance, and comptime evaluation. The constraint *is* the type; there is no runtime object that could be wrong or missing.
 
-**Parametric types as the constraint carrier.** In Python or TypeScript, a range constraint is metadata — a dict entry, a decorator argument, a comment. It exists at runtime or is erased entirely. In Mojo, `YangRange[0, 65535]` is a type parameter. It participates in overload resolution, trait conformance, and comptime evaluation. The constraint is the type; there is no runtime object that could be wrong or missing.
+**Comptime execution over the full parser.** `comptime_validate` runs the YANG schema parser — a complete recursive-descent parser over UTF-8 bytes — at compile time, against the struct's declared field types. This is not a macro that pattern-matches syntax; it is full program execution during compilation. Mojo's comptime makes the parser itself a compile-time tool.
 
-**Comptime execution over the full parser.** `comptime_validate` runs the YANG schema parser — a complete recursive-descent parser over UTF-8 bytes — at compile time, against the struct's declared field types. This is not a macro that pattern-matches syntax; it is full program execution during compilation. Rust macros operate on token streams. Python decorators run at import time with no compiler integration. Mojo's comptime makes the parser itself a compile-time tool.
+**Zero-cost specialization.** `yang_module_from_model[CartContainer]` generates a `YangModule` from the struct's type descriptors with no runtime overhead — the module is fully determined by the types, resolved at compile time, with static dispatch throughout. In a dynamic language, this would require reflection at runtime. In a compiled language without parametric metaprogramming, it would require a separate codegen step outside the language. In Mojo, it is a generic function call.
 
-**Zero-cost specialization.** `yang_module_from_model[CartContainer]` generates a `YangModule` from the struct's type descriptors with no runtime overhead — the module is fully determined by the types, resolved at compile time, with static dispatch throughout. In a dynamic language, this requires reflection at runtime. In a compiled language without parametric metaprogramming, it requires a separate codegen step outside the language. In Mojo, it is a generic function call.
+**Ahead-of-time schema specialization as a first-class build artifact.** The CI/CD pipeline that compiles enum constraints from a live data model into the Mojo binary is not a workaround — it is Mojo's intended model for AI inference infrastructure. The compiled binary encodes the valid value set in its types, the same principle Mojo applies to kernel specialization for hardware targets: compile-time knowledge produces better, safer artifacts than runtime discovery.
 
-**Ahead-of-time schema specialization as a first-class build artifact.** The CI/CD pipeline that compiles enum constraints from the live data model into the Mojo binary is not a workaround — it is Mojo's intended model for AI inference infrastructure. A Mojo binary is not a script that validates at startup; it is a compiled artifact where the valid value set is encoded in the types. This is the same principle Mojo applies to kernel specialization for hardware targets: compile-time knowledge produces better, safer artifacts than runtime discovery.
-
-**Unified systems and AI runtime.** Mojo's ambition is to be the language where the kernel and the service live in the same codebase, with the same performance model, the same type system, the same build toolchain. xYang puts the semantic contract layer in that same space — not in a sidecar Python service, not in a YAML file processed by a separate tool, but in Mojo types that the compiler verifies. No other language is simultaneously targeting systems-level performance, AI inference infrastructure, and the expressiveness needed to make this work without a runtime tax.
-
-xYang is not portable middleware. It is infrastructure that only makes sense inside Mojo's specific combination of capabilities — and that demonstrates those capabilities working together in a non-trivial domain.
+**Unified systems and AI runtime.** Mojo is designed so that the kernel and the service live in the same codebase, with the same performance model, type system, and build toolchain. xYang puts the semantic contract layer in that same space — in Mojo types that the compiler verifies, not in a sidecar service or a YAML file processed by a separate tool.
 
 ## What Exists Today
 
 The following are ordered by strategic significance, not implementation chronology.
 
-**`comptime_validate`** — schema conformance as a compile error. A Mojo struct declares its YANG shape via parametric type descriptors. `comptime_validate` runs the full YANG schema parser at compile time and checks the struct's field declarations against it. A field rename, type mismatch, or constraint violation does not produce a runtime error — it does not compile. This is the central guarantee: structural correctness is a property of the binary, not a property of the test suite.
+**`comptime_validate`** — schema conformance as a compile error. A Mojo struct declares its YANG shape via parametric type descriptors. `comptime_validate` runs the full YANG schema parser at compile time and checks the struct's field declarations against it. A field rename, type mismatch, or constraint violation does not produce a runtime error — it does not compile. This is the central guarantee: structural correctness and semantic consistency is a validated property of the binary, not a property of the test suite.
 
 **`yang_module_from_model`** — self-describing types. Given only a Mojo struct's type descriptors, this function generates a complete `YangModule` — a validated, queryable schema object. The struct does not reference an external schema file at runtime; it *is* the schema. Services built on xYang can expose their own schema to clients, tools, and gateways without maintaining a separate document.
 
