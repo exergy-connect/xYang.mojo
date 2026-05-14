@@ -90,6 +90,23 @@ struct ApiConfig(ImplicitlyDestructible, Movable, YangModeled):
     var mode: YangLeaf[YangEnum["active", "standby"]]
 
 
+@fieldwise_init
+struct BadWhenConfig(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "config"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var name: YangLeaf[YangBuiltinString]
+    var enabled: YangLeaf[
+        YangBuiltinBool,
+        YangConstraints[When=YangWhen["../missing = 'primary'"]],
+    ]
+
+
 def _generated_model_ok() -> Bool:
     try:
         var module = yang_module_from_model[ApiCart](
@@ -109,6 +126,19 @@ def _generated_model_ok() -> Bool:
 
 
 comptime _MODEL_OK = _generated_model_ok()
+
+
+def _bad_when_model_rejected() -> Bool:
+    try:
+        _ = yang_module_from_model[BadWhenConfig](
+            "bad-when", "urn:test:bad-when", "bw"
+        )
+        return False
+    except e:
+        return String(e).find("unknown schema node `missing`") >= 0
+
+
+comptime _BAD_WHEN_MODEL_REJECTED = _bad_when_model_rejected()
 
 
 comptime _PATTERN_ACCEPTS_USD = YangPattern["[A-Z]{3}"].comptime_matches[
@@ -179,6 +209,12 @@ def test_generated_module_from_model() raises:
     assert_equal(module.get_namespace(), "urn:test:api-cart")
     assert_equal(module.get_prefix(), "ac")
     ApiCart.comptime_validate(module)
+
+
+def test_generated_module_rejects_bad_when_at_compile_time() raises:
+    comptime assert _BAD_WHEN_MODEL_REJECTED, (
+        "generated model accepted YangWhen XPath referencing a missing node"
+    )
 
 
 def test_generated_module_rejects_bad_json() raises:
@@ -282,6 +318,7 @@ def test_generated_enum_rejects_unknown_value() raises:
 
 def main() raises:
     test_generated_module_from_model()
+    test_generated_module_rejects_bad_when_at_compile_time()
     test_generated_module_rejects_bad_json()
     test_generated_module_rejects_bad_range()
     test_generated_module_rejects_bad_pattern()

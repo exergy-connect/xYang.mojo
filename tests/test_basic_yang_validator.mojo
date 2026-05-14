@@ -169,6 +169,32 @@ module feature-demo {
     )
 
 
+def test_yang_text_rejects_when_referencing_missing_node() raises:
+    var yang_text = """
+module when-demo {
+  yang-version 1.1;
+  namespace "urn:when-demo";
+  prefix w;
+
+  container cfg {
+    leaf name {
+      type string;
+    }
+    leaf enabled {
+      type boolean;
+      when "../missing = 'primary'";
+    }
+  }
+}
+"""
+    try:
+        validate_yang_document(yang_text, """{"cfg": {"name": "primary"}}""")
+    except e:
+        if String(e).find("unknown schema node `missing`") >= 0:
+            return
+    raise Error("expected YANG `when` to reject missing schema node")
+
+
 def main() raises:
     test_basic_yang_files_validate()
     test_json_parser_distinguishes_int_and_real_numbers()
@@ -177,3 +203,4 @@ def main() raises:
     test_if_feature_disables_nested_leaf()
     test_if_feature_feature_dependency_enables_leaf()
     test_if_feature_boolean_expression_disables_top_container()
+    test_yang_text_rejects_when_referencing_missing_node()
