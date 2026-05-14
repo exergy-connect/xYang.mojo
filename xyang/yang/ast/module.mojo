@@ -11,7 +11,6 @@ from .util import _strip_spaces
 from ..arguments import (
     LengthSegment,
     RangeBounds,
-    XPathExpressionArgument,
     YangPatternSpec,
     length_allows_scalar_count,
     try_parse_length_segments,
@@ -25,6 +24,7 @@ from ..xpath.pratt_parser import (
     XPathPath,
     XPathStep,
 )
+from ..xpath.api import parse_xpath_expression, xpath_slash_expr_to_path
 from ..xpath.token import Token
 
 
@@ -647,11 +647,7 @@ struct YangModule(Movable & Iterable):
         from xyang.yang.visitor.uses_expand_visitor import (
             expand_uses_throughout_module,
         )
-        from ..spec import `module`, build_spec_table
-
         var expanded_tree = expand_uses_throughout_module(self)
-        var specs = build_spec_table()
-        specs[Int(`module`)].validate(expanded_tree, specs)
         var expanded_root = Arc[YangConstruct](expanded_tree^)
         var ancestry = List[Arc[YangConstruct]]()
         _validate_semantics_in_subtree(self, expanded_root, ancestry^)
@@ -709,6 +705,51 @@ def _schema_child_by_name(
     return Optional[Arc[YangConstruct]]()
 
 
+def _choice_case_name(read case_node: YangConstruct) -> String:
+    if case_node.has_argument():
+        return case_node.argument_text()
+    return "<unnamed>"
+
+
+def _collect_choice_case_keys(read case_node: YangConstruct, mut keys: Dict[String, Bool]):
+    from ..spec import `case`, `choice`
+
+    for child in case_node.children:
+        ref c = child[]
+        if _schema_data_node(c) and c.has_argument():
+            keys[_local_name(c.argument_text())] = True
+            continue
+        if c.spec == `choice`:
+            for ch in c.children:
+                if ch[].spec == `case`:
+                    _collect_choice_case_keys(ch[], keys)
+
+
+def _validate_choice_cases_distinguishable(read choice_node: YangConstruct) raises:
+    from ..spec import `case`
+
+    var seen = Dict[String, String]()
+    for ch in choice_node.children:
+        if ch[].spec != `case`:
+            continue
+        var keys = Dict[String, Bool]()
+        _collect_choice_case_keys(ch[], keys)
+        var case_name = _choice_case_name(ch[])
+        for key in keys.keys():
+            if key in seen:
+                raise Error(
+                    _line_prefix(ch[].line)
+                    + "YANG `choice` cases must be uniquely distinguishable; key `"
+                    + key
+                    + "` appears in both case `"
+                    + seen[key]
+                    + "` and case `"
+                    + case_name
+                    + "`"
+                )
+            seen[key] = case_name
+
+
 def _xpath_step_name(read step: XPathExpr, read source: String) -> String:
     return _local_name(step.value.text(source.as_bytes()))
 
@@ -728,6 +769,7 @@ def _xpath_resolve_path(
     read path: XPathExpr,
     read source: String,
     line: UInt,
+    allow_missing: Bool = False,
 ) raises -> Optional[Arc[YangConstruct]]:
     if path.kind() != XPathExpr.PATH:
         return Optional[Arc[YangConstruct]]()
@@ -788,99 +830,8 @@ def _xpath_resolve_path(
             return Optional[Arc[YangConstruct]]()
         var child = _schema_child_by_name(module, current.value()[], step_name)
         if not child:
-            raise Error(
-                _line_prefix(line)
-                + "XPath references unknown schema node `"
-                + step_name
-                + "` in `"
-                + source
-                + "`"
-            )
-        parents.append(current.value().copy())
-        current = child.copy()
-        i += 1
-
-    return current^
-
-
-def _xpath_collect_slash_steps(
-    read expr: XPathExpr, read source: String, mut steps: List[String]
-) raises:
-    if expr.kind() == XPathExpr.BINARY and expr.value.type == Token.SLASH:
-        ref bin = expr.payload[XPathBinaryOp]
-        _xpath_collect_slash_steps(bin.left[], source, steps)
-        _xpath_collect_slash_steps(bin.right[], source, steps)
-        return
-    if expr.kind() == XPathExpr.NAME or expr.kind() == XPathExpr.STEP:
-        steps.append(_local_name(expr.value.text(source.as_bytes())))
-
-
-def _xpath_resolve_step_names(
-    read module: YangModule,
-    read context: Arc[YangConstruct],
-    read ancestry: List[Arc[YangConstruct]],
-    read steps: List[String],
-    read source: String,
-    line: UInt,
-) raises -> Optional[Arc[YangConstruct]]:
-    if len(steps) == 0:
-        return Optional[Arc[YangConstruct]]()
-
-    var parents = ancestry.copy()
-    var first_name = steps[0]
-    var i: Int
-    var current: Optional[Arc[YangConstruct]]
-
-    if first_name == ".":
-        current = Optional[Arc[YangConstruct]](context.copy())
-        i = 1
-    elif first_name == "..":
-        current = Optional[Arc[YangConstruct]](
-            _xpath_parent_for_relative_step(ancestry, context[])
-        )
-        if len(parents) > 0:
-            _ = parents.pop()
-        if len(parents) > 0:
-            _ = parents.pop()
-        i = 1
-    else:
-        current = _schema_child_by_name(module, context[], first_name)
-        if not current:
-            var top = module.top_container(first_name)
-            if top:
-                current = top.copy()
-                parents = List[Arc[YangConstruct]]()
-            else:
-                raise Error(
-                    _line_prefix(line)
-                    + "XPath references unknown schema node `"
-                    + first_name
-                    + "` in `"
-                    + source
-                    + "`"
-                )
-        i = 1
-
-    while i < len(steps):
-        var step_name = steps[i]
-        if step_name == ".":
-            i += 1
-            continue
-        if step_name == "..":
-            if len(parents) == 0:
-                raise Error(
-                    _line_prefix(line)
-                    + "XPath parent step has no schema parent in `"
-                    + source
-                    + "`"
-                )
-            current = Optional[Arc[YangConstruct]](parents.pop())
-            i += 1
-            continue
-        if not current:
-            return Optional[Arc[YangConstruct]]()
-        var child = _schema_child_by_name(module, current.value()[], step_name)
-        if not child:
+            if allow_missing:
+                return Optional[Arc[YangConstruct]]()
             raise Error(
                 _line_prefix(line)
                 + "XPath references unknown schema node `"
@@ -903,51 +854,106 @@ def _validate_xpath_expr_schema_refs(
     read expr: XPathExpr,
     read source: String,
     line: UInt,
+    allow_missing_paths: Bool = False,
 ) raises:
     if expr.kind() == XPathExpr.PATH:
         ref path = expr.payload[XPathPath]
-        _ = _xpath_resolve_path(module, context, ancestry, expr, source, line)
+        _ = _xpath_resolve_path(
+            module, context, ancestry, expr, source, line, allow_missing_paths
+        )
         for i in range(len(path.steps)):
             ref st = path.steps[i][].payload[XPathStep]
             for j in range(len(st.predicates)):
                 _validate_xpath_expr_schema_refs(
-                    module, context, ancestry, st.predicates[j][], source, line
+                    module,
+                    context,
+                    ancestry,
+                    st.predicates[j][],
+                    source,
+                    line,
+                    allow_missing_paths,
                 )
         return
     if expr.kind() == XPathExpr.STEP:
         ref st = expr.payload[XPathStep]
         for i in range(len(st.predicates)):
             _validate_xpath_expr_schema_refs(
-                module, context, ancestry, st.predicates[i][], source, line
+                module,
+                context,
+                ancestry,
+                st.predicates[i][],
+                source,
+                line,
+                allow_missing_paths,
             )
         return
     if expr.kind() == XPathExpr.BINARY:
         ref bin = expr.payload[XPathBinaryOp]
         if expr.value.type == Token.SLASH:
-            var steps = List[String]()
-            _xpath_collect_slash_steps(expr, source, steps)
-            _ = _xpath_resolve_step_names(
-                module, context, ancestry, steps, source, line
+            var path = xpath_slash_expr_to_path(expr)
+            if path:
+                _ = _xpath_resolve_path(
+                    module,
+                    context,
+                    ancestry,
+                    path.value()[],
+                    source,
+                    line,
+                    allow_missing_paths,
+                )
+            _validate_xpath_expr_schema_refs(
+                module,
+                context,
+                ancestry,
+                bin.left[],
+                source,
+                line,
+                allow_missing_paths,
             )
             _validate_xpath_expr_schema_refs(
-                module, context, ancestry, bin.left[], source, line
-            )
-            _validate_xpath_expr_schema_refs(
-                module, context, ancestry, bin.right[], source, line
+                module,
+                context,
+                ancestry,
+                bin.right[],
+                source,
+                line,
+                allow_missing_paths,
             )
             return
         _validate_xpath_expr_schema_refs(
-            module, context, ancestry, bin.left[], source, line
+            module,
+            context,
+            ancestry,
+            bin.left[],
+            source,
+            line,
+            allow_missing_paths,
         )
         _validate_xpath_expr_schema_refs(
-            module, context, ancestry, bin.right[], source, line
+            module,
+            context,
+            ancestry,
+            bin.right[],
+            source,
+            line,
+            allow_missing_paths,
         )
         return
     if expr.kind() == XPathExpr.CALL:
         ref call = expr.payload[XPathCall]
+        var call_name = _local_name(expr.value.text(source.as_bytes()))
+        var probe_allows_missing = (
+            call_name == "boolean" or call_name == "count" or call_name == "not"
+        )
         for i in range(len(call.args)):
             _validate_xpath_expr_schema_refs(
-                module, context, ancestry, call.args[i][], source, line
+                module,
+                context,
+                ancestry,
+                call.args[i][],
+                source,
+                line,
+                allow_missing_paths or probe_allows_missing,
             )
 
 
@@ -959,12 +965,12 @@ def _validate_when_semantics(
     if len(ancestry) == 0:
         return
     var context = ancestry[len(ancestry) - 1].copy()
-    ref arg = node.argument.get[XPathExpressionArgument]()
+    var root = parse_xpath_expression(node.argument_text(), node.line)
     _validate_xpath_expr_schema_refs(
         module,
         context,
         ancestry,
-        arg.root[],
+        root[],
         node.argument_text(),
         node.line,
     )
@@ -975,8 +981,10 @@ def _validate_semantics_for_node(
     read node: YangConstruct,
     read ancestry: List[Arc[YangConstruct]],
 ) raises:
-    from ..spec import `when`
+    from ..spec import `choice`, `when`
 
+    if node.spec == `choice`:
+        _validate_choice_cases_distinguishable(node)
     if node.spec == `when`:
         _validate_when_semantics(module, node, ancestry)
 

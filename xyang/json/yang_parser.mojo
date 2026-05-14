@@ -33,6 +33,7 @@
 ## - `parse_yang_json` — assemble module header, `$defs`, then properties.
 ## - `parse_yang_json_module` — same tree, then `YangModule.ingest_construct_tree`.
 
+from std.collections import Dict
 from std.memory import ArcPointer
 
 import xyang.json.value as json_value
@@ -435,10 +436,83 @@ def _type_from_schema(
 ## --- JSON Schema `oneOf` + `x-yang.choice` → YANG `choice` / `case` ---
 
 
+def _required_contains(
+    read required: Optional[Arc[json_value.JsonValue]], read name: String
+) -> Bool:
+    if not required or required.value()[].kind != json_value.JsonValue.ARRAY:
+        return False
+    for req in required.value()[].payload[json_value.JsonArray].values:
+        if (
+            req[].kind == json_value.JsonValue.STRING
+            and req[].payload[json_value.JsonString].value == name
+        ):
+            return True
+    return False
+
+
+def _nonrequired_repeated_oneof_props(
+    read one_of_arr: json_value.JsonValue,
+) raises -> Dict[String, Bool]:
+    var counts = Dict[String, Int]()
+    var repeated = Dict[String, Bool]()
+    if one_of_arr.kind != json_value.JsonValue.ARRAY:
+        return repeated^
+    for branch in one_of_arr.payload[json_value.JsonArray].values:
+        if branch[].kind != json_value.JsonValue.OBJECT:
+            continue
+        var props = json_value.json_get(branch[], "properties")
+        if not props or props.value()[].kind != json_value.JsonValue.OBJECT:
+            continue
+        var required = json_value.json_get(branch[], "required")
+        for key in props.value()[].payload[json_value.JsonObject].keys:
+            if _required_contains(required, key):
+                continue
+            if key in counts:
+                var count = counts[key]
+                counts[key] = count + 1
+            else:
+                counts[key] = 1
+    for key in counts.keys():
+        var key_copy = key.copy()
+        if counts[key_copy] > 1:
+            repeated[key_copy] = True
+    return repeated^
+
+
+def _append_hoisted_oneof_props(
+    mut container_node: YangConstruct,
+    read one_of_arr: json_value.JsonValue,
+    read defs: json_value.JsonValue,
+    read hoisted: Dict[String, Bool],
+) raises:
+    var emitted = Dict[String, Bool]()
+    if one_of_arr.kind != json_value.JsonValue.ARRAY:
+        return
+    for branch in one_of_arr.payload[json_value.JsonArray].values:
+        if branch[].kind != json_value.JsonValue.OBJECT:
+            continue
+        var props = json_value.json_get(branch[], "properties")
+        if not props or props.value()[].kind != json_value.JsonValue.OBJECT:
+            continue
+        for j in range(len(props.value()[].payload[json_value.JsonObject].keys)):
+            var child_name = props.value()[].payload[json_value.JsonObject].keys[j]
+            if not (child_name in hoisted) or child_name in emitted:
+                continue
+            var child = _convert_property(
+                child_name,
+                props.value()[].payload[json_value.JsonObject].values[j][],
+                defs,
+            )
+            if child:
+                _append_stmt(container_node, child.take())
+                emitted[child_name] = True
+
+
 def _append_cases_from_oneof(
     mut choice_node: YangConstruct,
     read one_of_arr: json_value.JsonValue,
     read defs: json_value.JsonValue,
+    read hoisted: Dict[String, Bool],
 ) raises:
     ## Each `oneOf` branch becomes a `case`; branch `x-yang.name` is the case id.
     if one_of_arr.kind != json_value.JsonValue.ARRAY:
@@ -459,17 +533,11 @@ def _append_cases_from_oneof(
         if props and props.value()[].kind == json_value.JsonValue.OBJECT:
             for j in range(len(props.value()[].payload[json_value.JsonObject].keys)):
                 var child_name = props.value()[].payload[json_value.JsonObject].keys[j]
+                if child_name in hoisted:
+                    continue
                 var mandatory = Optional[Bool]()
-                if (
-                    required
-                    and required.value()[].kind == json_value.JsonValue.ARRAY
-                ):
-                    for req in required.value()[].payload[json_value.JsonArray].values:
-                        if (
-                            req[].kind == json_value.JsonValue.STRING
-                            and req[].payload[json_value.JsonString].value == child_name
-                        ):
-                            mandatory = Optional[Bool](True)
+                if _required_contains(required, child_name):
+                    mandatory = Optional[Bool](True)
                 var child = _convert_property(
                     child_name,
                     props.value()[].payload[json_value.JsonObject].values[j][],
@@ -503,7 +571,11 @@ def _append_choice_from_schema_oneof(
     _append_arg(ch, "description", _json_string(ch_xy, "description"))
     if _json_bool(ch_xy, "mandatory"):
         _append_arg(ch, "mandatory", "true")
-    _append_cases_from_oneof(ch, one_of_top.value()[], defs)
+    var hoisted = _nonrequired_repeated_oneof_props(one_of_top.value()[])
+    _append_hoisted_oneof_props(
+        container_node, one_of_top.value()[], defs, hoisted
+    )
+    _append_cases_from_oneof(ch, one_of_top.value()[], defs, hoisted)
     _append_stmt(container_node, ch^)
 
 
@@ -578,7 +650,8 @@ def _convert_property(
             or one_of_ch.value()[].kind != json_value.JsonValue.ARRAY
         ):
             return Optional[YangConstruct]()
-        _append_cases_from_oneof(ch_node, one_of_ch.value()[], defs)
+        var hoisted = Dict[String, Bool]()
+        _append_cases_from_oneof(ch_node, one_of_ch.value()[], defs, hoisted)
         return Optional[YangConstruct](ch_node^)
 
     if node_type == "list":
