@@ -2,17 +2,25 @@ from std.testing import assert_equal
 
 from xyang.api import (
     MaxStringLength,
+    YangBuiltinBool,
     YangBuiltinUInt16,
     YangConstraints,
+    YangKey,
+    YangLeafList,
+    YangList,
     YangModeled,
+    YangMust,
     YangBuiltinString,
     YangLeaf,
     YangRange,
+    YangWhen,
     parse_and_validate_json_against_model,
     validate_yang_subtree,
     yang_module_from_model,
 )
+from xyang.yang.ast.lexer import AstLexer
 from xyang.yang.ast.module import YangModule
+from xyang.yang.ast.parser import parse_module
 
 
 @fieldwise_init
@@ -34,6 +42,45 @@ struct ApiCart(ImplicitlyDestructible, Movable, YangModeled):
     var quantity: YangLeaf[
         YangBuiltinUInt16,
         YangConstraints[Range=YangRange[0, 65535]],
+    ]
+
+
+@fieldwise_init
+struct ApiServer(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "server"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var name: YangLeaf[
+        YangBuiltinString,
+        YangConstraints[
+            MaxStringLength[64],
+            Must=YangMust["string-length(.) > 0"],
+        ],
+    ]
+    var enabled: YangLeaf[
+        YangBuiltinBool,
+        YangConstraints[When=YangWhen["../name = 'primary'"]],
+    ]
+
+
+@fieldwise_init
+struct ApiConfig(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return "config"
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    var server: YangList[ApiServer, YangKey["name"]]
+    var tag: YangLeafList[
+        YangBuiltinString, YangConstraints[MaxStringLength[16]]
     ]
 
 
@@ -102,7 +149,45 @@ def test_generated_module_rejects_bad_range() raises:
     raise Error("expected generated model validation to reject bad quantity")
 
 
+def test_model_constructs_match_parsed_yang_ast() raises:
+    var yang_text = """
+module api-config {
+  yang-version 1.1;
+  namespace "urn:test:api-config";
+  prefix ac;
+  container config {
+    list server {
+      key "name";
+      leaf name {
+        type string {
+          length "0..64";
+        }
+        must "string-length(.) > 0";
+      }
+      leaf enabled {
+        type boolean;
+        when "../name = 'primary'";
+      }
+    }
+    leaf-list tag {
+      type string {
+        length "0..16";
+      }
+    }
+  }
+}
+"""
+    var lexer = AstLexer(yang_text.as_bytes())
+    var parsed_tree = parse_module(lexer)
+    var generated_module = yang_module_from_model[ApiConfig](
+        "api-config", "urn:test:api-config", "ac"
+    )
+    var generated_tree = generated_module.root_construct()
+    assert_equal(generated_tree[].format(0), parsed_tree.format(0))
+
+
 def main() raises:
     test_generated_module_from_model()
     test_generated_module_rejects_bad_json()
     test_generated_module_rejects_bad_range()
+    test_model_constructs_match_parsed_yang_ast()

@@ -2,7 +2,6 @@
 
 from .types import (
     ## Constraint traits and defaults
-    LeafModelSpec,
     MaxStringLength,
     NodeConstraints,
     NodeModelSpec,
@@ -35,10 +34,12 @@ from .types import (
     YangList,
     YangListKey,
     YangModeled,
+    NoYangModel,
 )
 from .model import (
     ## Reflection and validation helpers
     container_construct_from_model,
+    construct_from_model_field,
     effective_leaf_names_under,
     parse_and_validate_json_against_model,
     validate_data_against_model,

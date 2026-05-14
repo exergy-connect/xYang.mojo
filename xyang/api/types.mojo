@@ -347,12 +347,6 @@ struct YangKey[
         return True
 
 
-trait YangDataNodeSpec:
-    @staticmethod
-    def yang_node_kind() -> String:
-        ...
-
-
 trait NodeModelSpec:
     @staticmethod
     def yang_when_condition() -> String:
@@ -375,7 +369,43 @@ trait NodeModelSpec:
         ...
 
 
-trait LeafModelSpec:
+comptime LeafModelSpec = StringLengthCap & NumericRangeConstraint & NodeModelSpec
+
+
+trait YangModeled:
+    @staticmethod
+    def yang_container_name() -> String:
+        ...
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        ...
+
+
+@fieldwise_init
+struct NoYangModel(ImplicitlyDestructible, Movable, YangModeled):
+    @staticmethod
+    def yang_container_name() -> String:
+        return ""
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+
+trait YangDataNodeSpec:
+    comptime ChildType: YangModeled
+    comptime EntryType: YangModeled
+    comptime KeyType: YangListKey
+
+    @staticmethod
+    def yang_node_kind() -> String:
+        ...
+
+    @staticmethod
+    def yang_type_str() -> String:
+        ...
+
     @staticmethod
     def model_max_string_length() -> Int:
         ...
@@ -412,14 +442,12 @@ trait LeafModelSpec:
     def has_yang_must() -> Bool:
         ...
 
-
-trait YangModeled:
     @staticmethod
-    def yang_container_name() -> String:
+    def yang_key_text() -> String:
         ...
 
     @staticmethod
-    def comptime_validate(read module: YangModule) raises:
+    def has_yang_key() -> Bool:
         ...
 
 
@@ -492,12 +520,26 @@ struct YangConstraints[
     def has_yang_must() -> Bool:
         return Self.Must.has_yang_must()
 
-@fieldwise_init
 struct YangLeaf[
     Builtin: YangBuiltinDescriptor,
     C: LeafModelSpec = YangConstraints[],
-](ImplicitlyDestructible, LeafModelSpec, Movable, YangDataNodeSpec):
+](
+    ImplicitlyDestructible,
+    LeafModelSpec,
+    Movable,
+    Defaultable,
+    YangDataNodeSpec,
+):
+    comptime BuiltinType = Self.Builtin
+    comptime ConstraintType = Self.C
+    comptime ChildType = NoYangModel
+    comptime EntryType = NoYangModel
+    comptime KeyType = NoYangKey
+
     var value: Self.Builtin.Value
+
+    def __init__(out self):
+        self.value = Self.Builtin.Value()
 
     @staticmethod
     def yang_node_kind() -> String:
@@ -543,13 +585,35 @@ struct YangLeaf[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
+    @staticmethod
+    def yang_key_text() -> String:
+        return String()
 
-@fieldwise_init
+    @staticmethod
+    def has_yang_key() -> Bool:
+        return False
+
+
 struct YangLeafList[
     Builtin: YangBuiltinDescriptor,
     C: LeafModelSpec = YangConstraints[],
-](ImplicitlyDestructible, LeafModelSpec, Movable, YangDataNodeSpec):
+](
+    ImplicitlyDestructible,
+    LeafModelSpec,
+    Movable,
+    Defaultable,
+    YangDataNodeSpec,
+):
+    comptime BuiltinType = Self.Builtin
+    comptime ConstraintType = Self.C
+    comptime ChildType = NoYangModel
+    comptime EntryType = NoYangModel
+    comptime KeyType = NoYangKey
+
     var values: List[Self.Builtin.Value]
+
+    def __init__(out self):
+        self.values = List[Self.Builtin.Value]()
 
     @staticmethod
     def yang_node_kind() -> String:
@@ -595,12 +659,30 @@ struct YangLeafList[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
+    @staticmethod
+    def yang_key_text() -> String:
+        return String()
+
+    @staticmethod
+    def has_yang_key() -> Bool:
+        return False
+
 
 @fieldwise_init
 struct YangContainer[
     Child: Movable & ImplicitlyDestructible & YangModeled,
     C: NodeModelSpec = NodeConstraints[],
-](ImplicitlyDestructible, Movable, NodeModelSpec, YangDataNodeSpec):
+](
+    ImplicitlyDestructible,
+    Movable,
+    NodeModelSpec,
+    YangDataNodeSpec,
+):
+    comptime ChildType = Self.Child
+    comptime EntryType = NoYangModel
+    comptime KeyType = NoYangKey
+    comptime ConstraintType = Self.C
+
     var body: Self.Child
 
     @staticmethod
@@ -608,8 +690,28 @@ struct YangContainer[
         return "container"
 
     @staticmethod
+    def yang_type_str() -> String:
+        return String()
+
+    @staticmethod
     def yang_name() -> String:
         return Self.Child.yang_container_name()
+
+    @staticmethod
+    def model_max_string_length() -> Int:
+        return -1
+
+    @staticmethod
+    def model_range_min() -> Int64:
+        return 0
+
+    @staticmethod
+    def model_range_max() -> Int64:
+        return 0
+
+    @staticmethod
+    def has_model_range() -> Bool:
+        return False
 
     @staticmethod
     def yang_when_condition() -> String:
@@ -631,20 +733,61 @@ struct YangContainer[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
+    @staticmethod
+    def yang_key_text() -> String:
+        return String()
 
-@fieldwise_init
+    @staticmethod
+    def has_yang_key() -> Bool:
+        return False
+
+
 struct YangList[
     Entry: Movable & ImplicitlyDestructible & YangModeled,
     Key: YangListKey = NoYangKey,
     C: NodeModelSpec = NodeConstraints[],
-](ImplicitlyDestructible, Movable, NodeModelSpec, YangDataNodeSpec):
+](
+    ImplicitlyDestructible,
+    Movable,
+    Defaultable,
+    NodeModelSpec,
+    YangDataNodeSpec,
+):
+    comptime ChildType = NoYangModel
+    comptime EntryType = Self.Entry
+    comptime KeyType = Self.Key
+    comptime ConstraintType = Self.C
+
+    def __init__(out self):
+        pass
+
     @staticmethod
     def yang_node_kind() -> String:
         return "list"
 
     @staticmethod
+    def yang_type_str() -> String:
+        return String()
+
+    @staticmethod
     def yang_name() -> String:
         return Self.Entry.yang_container_name()
+
+    @staticmethod
+    def model_max_string_length() -> Int:
+        return -1
+
+    @staticmethod
+    def model_range_min() -> Int64:
+        return 0
+
+    @staticmethod
+    def model_range_max() -> Int64:
+        return 0
+
+    @staticmethod
+    def has_model_range() -> Bool:
+        return False
 
     @staticmethod
     def yang_key_text() -> String:
