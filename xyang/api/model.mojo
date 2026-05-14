@@ -8,7 +8,7 @@ from xyang.json.parser import JsonValue, parse_json
 from xyang.validator.document import validate_data
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
-from xyang.yang.spec import `leaf`
+from xyang.yang.spec import `container`, `leaf`, `leaf-list`, `list`
 
 from .types import (
     NoNumericRange,
@@ -182,10 +182,24 @@ def _schema_string_max_length(
 def effective_leaf_names_under(
     read module: YangModule, read parent: YangConstruct
 ) raises -> List[String]:
+    return effective_data_node_names_under(module, parent)
+
+
+def effective_data_node_names_under(
+    read module: YangModule, read parent: YangConstruct
+) raises -> List[String]:
     var out = List[String]()
     var seen = Dict[String, Bool]()
     for child in parent.children:
-        if child[].spec == `leaf` and child[].has_argument():
+        if (
+            (
+                child[].spec == `leaf`
+                or child[].spec == `leaf-list`
+                or child[].spec == `container`
+                or child[].spec == `list`
+            )
+            and child[].has_argument()
+        ):
             var name = child[].argument_text()
             if name not in seen:
                 seen[name] = True
@@ -196,7 +210,7 @@ def effective_leaf_names_under(
         var grouping = module.find_grouping(child[].argument_text())
         if not grouping:
             continue
-        var inner = effective_leaf_names_under(module, grouping.value()[])
+        var inner = effective_data_node_names_under(module, grouping.value()[])
         for i in range(len(inner)):
             var n = inner[i]
             if n not in seen:
@@ -214,7 +228,7 @@ def validate_yang_subtree[T: YangModeled](read module: YangModule) raises:
         raise Error(
             "reflection: Yang subtree missing top container `" + want + "`"
         )
-    var schema_leaves = effective_leaf_names_under(module, c.value()[])
+    var schema_leaves = effective_data_node_names_under(module, c.value()[])
     if len(schema_leaves) != _nfc:
         raise Error(
             "reflection: container `"
@@ -276,16 +290,27 @@ def validate_leaf_model_vs_module[
 ](
     read module: YangModule, read parent: String, read leaf: String, read field: FT
 ) raises:
-    if FT.yang_node_kind() != "leaf" and FT.yang_node_kind() != "leaf-list":
+    var kind = FT.yang_node_kind()
+    if kind != "leaf" and kind != "leaf-list":
         return
     var yt = FT.yang_type_str()
     var c = module.top_container(parent)
     if not c:
         raise Error("reflection: missing container `" + parent + "`")
-    var lf = module.find_effective_leaf(c.value()[], leaf)
-    if not lf:
-        raise Error("reflection: missing leaf `" + parent + "/" + leaf + "`")
-    var schema_ty = module.leaf_type(lf.value()[])
+    var node = module.find_effective_leaf(c.value()[], leaf)
+    if kind == "leaf-list":
+        node = module.find_effective_child(c.value()[], `leaf-list`, leaf)
+    if not node:
+        raise Error(
+            "reflection: missing "
+            + kind
+            + " `"
+            + parent
+            + "/"
+            + leaf
+            + "`"
+        )
+    var schema_ty = module.leaf_type(node.value()[])
     if schema_ty != yt:
         raise Error(
             "reflection: leaf `"
@@ -299,7 +324,16 @@ def validate_leaf_model_vs_module[
             + "`"
         )
     if yt == "string":
-        var schema_max = _schema_string_max_length(module, parent, leaf)
+        var segs = module.leaf_length_segments(node.value()[])
+        var schema_max = -1
+        if len(segs) > 0:
+            var hi: Int64 = -1
+            for i in range(len(segs)):
+                if segs[i].hi > hi:
+                    hi = segs[i].hi
+            comptime _BIG: Int64 = 9223372036854775807
+            if hi < _BIG:
+                schema_max = Int(hi)
         var model_max = FT.model_max_string_length()
         if schema_max != model_max:
             raise Error(
@@ -327,7 +361,7 @@ def validate_leaf_model_vs_module[
                 + ".."
                 + String(FT.model_range_max())
             )
-            var schema_range = module.leaf_range(lf.value()[])
+            var schema_range = module.leaf_range(node.value()[])
             if schema_range != model_range:
                 raise Error(
                     "reflection: leaf `"
@@ -359,7 +393,10 @@ def _append_node_constraints[FT: YangDataNodeSpec](mut node: YangConstruct):
 def _append_type_constraints_from_model[FT: YangDataNodeSpec](
     mut type_node: YangConstruct, read yt: String
 ):
-    if yt == "string":
+    if yt == "enumeration":
+        comptime for i in range(FT.yang_enum_count()):
+            _append_arg(type_node, "enum", FT.yang_enum_value[i]())
+    elif yt == "string":
         var max_len = FT.model_max_string_length()
         if max_len >= 0:
             _append_arg(type_node, "length", "0.." + String(max_len))

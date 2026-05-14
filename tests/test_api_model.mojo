@@ -5,6 +5,7 @@ from xyang.api import (
     YangBuiltinBool,
     YangBuiltinUInt16,
     YangConstraints,
+    YangEnum,
     YangKey,
     YangLeafList,
     YangList,
@@ -82,6 +83,7 @@ struct ApiConfig(ImplicitlyDestructible, Movable, YangModeled):
     var tag: YangLeafList[
         YangBuiltinString, YangConstraints[MaxStringLength[16]]
     ]
+    var mode: YangLeaf[YangEnum["active", "standby"]]
 
 
 def _generated_model_ok() -> Bool:
@@ -127,6 +129,12 @@ module api-config {
     leaf-list tag {
       type string {
         length "0..16";
+      }
+    }
+    leaf mode {
+      type enumeration {
+        enum active;
+        enum standby;
       }
     }
   }
@@ -208,8 +216,41 @@ def test_model_constructs_match_parsed_yang_ast() raises:
     assert_equal(generated_tree[].format(0), parsed_tree.format(0))
 
 
+def test_generated_enum_accepts_declared_value() raises:
+    _ = parse_and_validate_json_against_model[ApiConfig](
+        (
+            '{"config":{"server":[{"name":"primary","enabled":true}],'
+            + '"tag":["edge"],"mode":"active"}}'
+        ),
+        "api-config",
+        "urn:test:api-config",
+        "ac",
+        "api-config-ok.json",
+    )
+
+
+def test_generated_enum_rejects_unknown_value() raises:
+    try:
+        _ = parse_and_validate_json_against_model[ApiConfig](
+            (
+                '{"config":{"server":[{"name":"primary","enabled":true}],'
+                + '"tag":["edge"],"mode":"retired"}}'
+            ),
+            "api-config",
+            "urn:test:api-config",
+            "ac",
+            "api-config-bad-enum.json",
+        )
+    except e:
+        if String(e).find("enumeration value not allowed") >= 0:
+            return
+    raise Error("expected generated enum model validation to reject bad value")
+
+
 def main() raises:
     test_generated_module_from_model()
     test_generated_module_rejects_bad_json()
     test_generated_module_rejects_bad_range()
     test_model_constructs_match_parsed_yang_ast()
+    test_generated_enum_accepts_declared_value()
+    test_generated_enum_rejects_unknown_value()

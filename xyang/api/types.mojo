@@ -94,6 +94,14 @@ trait YangBuiltinDescriptor:
     def yang_type_keyword() -> String:
         ...
 
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        ...
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        ...
+
 
 @fieldwise_init
 struct YangBuiltinString(
@@ -105,6 +113,36 @@ struct YangBuiltinString(
     @staticmethod
     def yang_type_keyword() -> String:
         return "string"
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
+
+
+@fieldwise_init
+struct YangEnum[
+    *values: StaticString,
+](
+    StdTraits,
+    YangBuiltinDescriptor,
+):
+    comptime Value = String
+
+    @staticmethod
+    def yang_type_keyword() -> String:
+        return "enumeration"
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String(Self.values[i])
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return len(Self.values)
 
 
 @fieldwise_init
@@ -118,6 +156,14 @@ struct YangBuiltinBool(
     def yang_type_keyword() -> String:
         return "boolean"
 
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
+
 
 @fieldwise_init
 struct YangBuiltinInt8(
@@ -129,6 +175,14 @@ struct YangBuiltinInt8(
     @staticmethod
     def yang_type_keyword() -> String:
         return "int8"
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
 
 
 @fieldwise_init
@@ -142,6 +196,14 @@ struct YangBuiltinInt16(
     def yang_type_keyword() -> String:
         return "int16"
 
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
+
 
 @fieldwise_init
 struct YangBuiltinInt32(
@@ -153,6 +215,14 @@ struct YangBuiltinInt32(
     @staticmethod
     def yang_type_keyword() -> String:
         return "int32"
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
 
 
 @fieldwise_init
@@ -166,6 +236,14 @@ struct YangBuiltinInt64(
     def yang_type_keyword() -> String:
         return "int64"
 
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
+
 
 @fieldwise_init
 struct YangBuiltinUInt8(
@@ -177,6 +255,14 @@ struct YangBuiltinUInt8(
     @staticmethod
     def yang_type_keyword() -> String:
         return "uint8"
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
 
 
 @fieldwise_init
@@ -190,6 +276,14 @@ struct YangBuiltinUInt16(
     def yang_type_keyword() -> String:
         return "uint16"
 
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
+
 
 @fieldwise_init
 struct YangBuiltinUInt32(
@@ -202,6 +296,14 @@ struct YangBuiltinUInt32(
     def yang_type_keyword() -> String:
         return "uint32"
 
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
+
 
 @fieldwise_init
 struct YangBuiltinUInt64(
@@ -213,6 +315,14 @@ struct YangBuiltinUInt64(
     @staticmethod
     def yang_type_keyword() -> String:
         return "uint64"
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
 
 
 trait YangWhenPredicate:
@@ -407,6 +517,14 @@ trait YangDataNodeSpec:
         ...
 
     @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        ...
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        ...
+
+    @staticmethod
     def model_max_string_length() -> Int:
         ...
 
@@ -550,6 +668,14 @@ struct YangLeaf[
         return Self.Builtin.yang_type_keyword()
 
     @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return Self.Builtin.yang_enum_value[i]()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return Self.Builtin.yang_enum_count()
+
+    @staticmethod
     def model_max_string_length() -> Int:
         return Self.C.model_max_string_length()
 
@@ -624,6 +750,14 @@ struct YangLeafList[
         return Self.Builtin.yang_type_keyword()
 
     @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return Self.Builtin.yang_enum_value[i]()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return Self.Builtin.yang_enum_count()
+
+    @staticmethod
     def model_max_string_length() -> Int:
         return Self.C.model_max_string_length()
 
@@ -692,6 +826,14 @@ struct YangContainer[
     @staticmethod
     def yang_type_str() -> String:
         return String()
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
 
     @staticmethod
     def yang_name() -> String:
@@ -768,6 +910,14 @@ struct YangList[
     @staticmethod
     def yang_type_str() -> String:
         return String()
+
+    @staticmethod
+    def yang_enum_value[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def yang_enum_count() -> Int:
+        return 0
 
     @staticmethod
     def yang_name() -> String:

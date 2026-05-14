@@ -25,6 +25,7 @@ from .types import (
     YangBuiltinUInt16,
     YangBuiltinUInt32,
     YangBuiltinUInt64,
+    YangEnum,
     ## Data node wrappers
     YangContainer,
     YangDataNodeSpec,
