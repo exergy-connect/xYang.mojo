@@ -105,6 +105,51 @@ def _generated_model_ok() -> Bool:
 comptime _MODEL_OK = _generated_model_ok()
 
 
+comptime API_CONFIG_YANG = """
+module api-config {
+  yang-version 1.1;
+  namespace "urn:test:api-config";
+  prefix ac;
+  container config {
+    list server {
+      key "name";
+      leaf name {
+        type string {
+          length "0..64";
+        }
+        must "string-length(.) > 0";
+      }
+      leaf enabled {
+        type boolean;
+        when "../name = 'primary'";
+      }
+    }
+    leaf-list tag {
+      type string {
+        length "0..16";
+      }
+    }
+  }
+}
+"""
+
+
+def _model_constructs_match_parsed_yang_ast() -> Bool:
+    try:
+        var lexer = AstLexer(String(API_CONFIG_YANG).as_bytes())
+        var parsed_tree = parse_module(lexer)
+        var generated_module = yang_module_from_model[ApiConfig](
+            "api-config", "urn:test:api-config", "ac"
+        )
+        var generated_tree = generated_module.root_construct()
+        return generated_tree[].format(0) == parsed_tree.format(0)
+    except:
+        return False
+
+
+comptime _API_CONFIG_AST_PARITY_OK = _model_constructs_match_parsed_yang_ast()
+
+
 def test_generated_module_from_model() raises:
     comptime assert _MODEL_OK, "generated model failed at compile time"
     var module = yang_module_from_model[ApiCart](
@@ -150,33 +195,10 @@ def test_generated_module_rejects_bad_range() raises:
 
 
 def test_model_constructs_match_parsed_yang_ast() raises:
-    var yang_text = """
-module api-config {
-  yang-version 1.1;
-  namespace "urn:test:api-config";
-  prefix ac;
-  container config {
-    list server {
-      key "name";
-      leaf name {
-        type string {
-          length "0..64";
-        }
-        must "string-length(.) > 0";
-      }
-      leaf enabled {
-        type boolean;
-        when "../name = 'primary'";
-      }
-    }
-    leaf-list tag {
-      type string {
-        length "0..16";
-      }
-    }
-  }
-}
-"""
+    comptime assert _API_CONFIG_AST_PARITY_OK, (
+        "generated ApiConfig AST did not match parsed YANG AST at compile time"
+    )
+    var yang_text = String(API_CONFIG_YANG)
     var lexer = AstLexer(yang_text.as_bytes())
     var parsed_tree = parse_module(lexer)
     var generated_module = yang_module_from_model[ApiConfig](
