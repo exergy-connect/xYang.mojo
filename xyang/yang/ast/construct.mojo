@@ -7,7 +7,6 @@ from xyang.yang.path import YangPath
 from xyang.yang.arguments import (
     BoolArgument,
     FractionDigitsArgument,
-    IdentifierArgument,
     LengthArgument,
     ModifierArgument,
     NoArgument,

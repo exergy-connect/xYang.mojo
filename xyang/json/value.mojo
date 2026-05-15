@@ -109,7 +109,13 @@ struct JsonValue(ImplicitlyDestructible, Movable):
 
 
 def json_escape(read s: String) -> String:
-    return s.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
 
 
 def json_get(read obj: JsonValue, key: String) -> Optional[Arc[JsonValue]]:

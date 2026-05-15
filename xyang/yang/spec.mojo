@@ -63,18 +63,19 @@ comptime `prefix`: Keyword = 44
 comptime `presence`: Keyword = 45
 comptime `range-stmt`: Keyword = 46
 comptime `reference`: Keyword = 47
-comptime `require-instance`: Keyword = 48
-comptime `revision`: Keyword = 49
-comptime `rpc`: Keyword = 50
-comptime `status`: Keyword = 51
-comptime `type`: Keyword = 52
-comptime `typedef`: Keyword = 53
-comptime `unique`: Keyword = 54
-comptime `units`: Keyword = 55
-comptime `uses`: Keyword = 56
-comptime `value`: Keyword = 57
-comptime `when`: Keyword = 58
-comptime `yang-version`: Keyword = 59
+comptime `refine`: Keyword = 48
+comptime `require-instance`: Keyword = 49
+comptime `revision`: Keyword = 50
+comptime `rpc`: Keyword = 51
+comptime `status`: Keyword = 52
+comptime `type`: Keyword = 53
+comptime `typedef`: Keyword = 54
+comptime `unique`: Keyword = 55
+comptime `units`: Keyword = 56
+comptime `uses`: Keyword = 57
+comptime `value`: Keyword = 58
+comptime `when`: Keyword = 59
+comptime `yang-version`: Keyword = 60
 
 
 struct YangConstructSpec[
@@ -245,7 +246,7 @@ comptime TYPEDEF_SPEC = YangConstructSpec[
 ## The `type` argument is an `identifier-ref` (built-in name or `prefix:typedef`).
 comptime TYPE_SPEC = YangConstructSpec[
     `type`,
-    yarg.QNameArgument,
+    yarg.TypeArgument,
     fields[1]((`type`, `0..n`)),
     fields[9](
         (`base`, `0..n`),
@@ -460,6 +461,42 @@ comptime AUGMENT_SPEC = YangConstructSpec[
     ),
 ]
 
+## Source: RFC 7950 section 7.13.2, "The uses's Substatements".
+## Accept the supported substatements so real modules can attach conditions,
+## refinements, and annotations to uses.
+comptime USES_SPEC = YangConstructSpec[
+    `uses`,
+    yarg.QNameArgument,
+    fields[0](),
+    fields[7](
+        (`augment`, `0..n`),
+        (`description`, `0..1`),
+        (`if-feature`, `0..n`),
+        (`reference`, `0..1`),
+        (`refine`, `0..n`),
+        (`status`, `0..1`),
+        (`when`, `0..1`),
+    ),
+]
+
+## Source: RFC 7950 section 7.13.2.1, "The refine's Substatements".
+## This table includes the built-in refinements supported by the current parser.
+comptime REFINE_SPEC = YangConstructSpec[
+    `refine`,
+    yarg.PathArgument,
+    fields[0](),
+    fields[8](
+        (`config`, `0..1`),
+        (`default`, `0..n`),
+        (`description`, `0..1`),
+        (`mandatory`, `0..1`),
+        (`max-elements`, `0..1`),
+        (`min-elements`, `0..1`),
+        (`must`, `0..n`),
+        (`reference`, `0..1`),
+    ),
+]
+
 
 ## Table rows for `augment` and `identity` must be composite specs (RFC 7950 §7.17,
 ## §7.18): a scalar-only row rejects every substatement and breaks real modules.
@@ -521,6 +558,7 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_scalar_spec[`presence`, yarg.StringArgument]()
     add_spec[RANGE_STMT_SPEC]()
     add_scalar_spec[`reference`, yarg.StringArgument]()
+    add_spec[REFINE_SPEC]()
     add_scalar_spec[`require-instance`, yarg.BoolArgument]()
     add_spec[REVISION_SPEC]()
     add_scalar_spec[`rpc`, yarg.IdentifierArgument]()
@@ -529,7 +567,7 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_spec[TYPEDEF_SPEC]()
     add_scalar_spec[`unique`, yarg.UniqueArgument]()
     add_scalar_spec[`units`, yarg.StringArgument]()
-    add_scalar_spec[`uses`, yarg.QNameArgument]()
+    add_spec[USES_SPEC]()
     add_scalar_spec[`value`, yarg.EnumArgument]()
     add_scalar_spec[`when`, yarg.XPathExpressionArgument]()
     add_scalar_spec[`yang-version`, yarg.YangVersionArgument]()

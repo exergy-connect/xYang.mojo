@@ -283,6 +283,123 @@ struct QNameArgument(Movable, YangArgument):
             node.update_argument(IdentifierArgument(argument.copy()))
 
 
+struct YangTypeKind:
+    comptime Value = UInt8
+    comptime DERIVED: Self.Value = 0
+    comptime STRING: Self.Value = 1
+    comptime BOOLEAN: Self.Value = 2
+    comptime DECIMAL64: Self.Value = 3
+    comptime INTEGER: Self.Value = 4
+    comptime ENUMERATION: Self.Value = 5
+    comptime EMPTY: Self.Value = 6
+    comptime UNION: Self.Value = 7
+    comptime LEAFREF: Self.Value = 8
+    comptime IDENTITYREF: Self.Value = 9
+    comptime INSTANCE_IDENTIFIER: Self.Value = 10
+    comptime BITS: Self.Value = 11
+
+    def __init__(out self):
+        pass
+
+
+def _builtin_type_kind(read name: String) -> YangTypeKind.Value:
+    if name == "binary" or name == "string":
+        return YangTypeKind.STRING
+    if name == "boolean":
+        return YangTypeKind.BOOLEAN
+    if name == "decimal64":
+        return YangTypeKind.DECIMAL64
+    if (
+        name == "int8"
+        or name == "int16"
+        or name == "int32"
+        or name == "int64"
+        or name == "uint8"
+        or name == "uint16"
+        or name == "uint32"
+        or name == "uint64"
+    ):
+        return YangTypeKind.INTEGER
+    if name == "enumeration":
+        return YangTypeKind.ENUMERATION
+    if name == "empty":
+        return YangTypeKind.EMPTY
+    if name == "union":
+        return YangTypeKind.UNION
+    if name == "leafref":
+        return YangTypeKind.LEAFREF
+    if name == "identityref":
+        return YangTypeKind.IDENTITYREF
+    if name == "instance-identifier":
+        return YangTypeKind.INSTANCE_IDENTIFIER
+    if name == "bits":
+        return YangTypeKind.BITS
+    return YangTypeKind.DERIVED
+
+
+@fieldwise_init
+struct TypeArgument(Copyable, Movable, YangArgument):
+    var prefix: String
+    var local_name: String
+    var kind: YangTypeKind.Value
+
+    @staticmethod
+    def parse_and_store(mut node: YangConstruct) raises -> None:
+        ref argument = node.argument_text()
+        if not is_qname(argument):
+            raise _argument_error(
+                node, "expected built-in type or identifier-ref"
+            )
+        var parts = argument.split(":")
+        if len(parts) == 2:
+            var prefix = String(parts[0])
+            var local_name = String(parts[1])
+            node.update_argument(
+                TypeArgument(
+                    prefix^, local_name^, YangTypeKind.DERIVED
+                )
+            )
+            return
+        var local_name = argument.copy()
+        var kind = _builtin_type_kind(local_name)
+        node.update_argument(
+            TypeArgument(String(), local_name^, kind)
+        )
+
+    def is_derived(read self) -> Bool:
+        return self.kind == YangTypeKind.DERIVED
+
+    def is_boolean(read self) -> Bool:
+        return self.kind == YangTypeKind.BOOLEAN
+
+    def is_number(read self) -> Bool:
+        return self.kind == YangTypeKind.DECIMAL64
+
+    def is_integer(read self) -> Bool:
+        return self.kind == YangTypeKind.INTEGER
+
+    def is_enumeration(read self) -> Bool:
+        return self.kind == YangTypeKind.ENUMERATION
+
+    def is_empty(read self) -> Bool:
+        return self.kind == YangTypeKind.EMPTY
+
+    def is_union(read self) -> Bool:
+        return self.kind == YangTypeKind.UNION
+
+    def is_leafref(read self) -> Bool:
+        return self.kind == YangTypeKind.LEAFREF
+
+    def is_identityref(read self) -> Bool:
+        return self.kind == YangTypeKind.IDENTITYREF
+
+    def is_instance_identifier(read self) -> Bool:
+        return self.kind == YangTypeKind.INSTANCE_IDENTIFIER
+
+    def is_bits(read self) -> Bool:
+        return self.kind == YangTypeKind.BITS
+
+
 @fieldwise_init
 struct RangeArgument(Movable, YangArgument):
     var segments: List[RangeBounds]
@@ -433,6 +550,7 @@ comptime YangArgumentPayload = Variant[
     OrderedByArgument,
     KeyArgument,
     UniqueArgument,
+    TypeArgument,
     Int32Argument,  # EnumArgument
     UInt32Argument,  # PositionArgument and MinElementsArgument
 ]
@@ -449,6 +567,82 @@ struct YangArgumentValue(Movable):
     def __init__[T: Movable](out self, var text: String, var inner: T):
         self.text = text^
         self.payload = YangArgumentPayload(inner^)
+
+    def copy(read self) -> Self:
+        var text = self.text.copy()
+        if self.payload.isa[NoArgument]():
+            return YangArgumentValue(text^, NoArgument())
+        if self.payload.isa[StringArgument]():
+            ref v = self.payload[StringArgument]
+            return YangArgumentValue(text^, StringArgument(v.content.copy()))
+        if self.payload.isa[IdentifierArgument]():
+            ref v = self.payload[IdentifierArgument]
+            return YangArgumentValue(text^, IdentifierArgument(v.name.copy()))
+        if self.payload.isa[QNameArgument]():
+            ref v = self.payload[QNameArgument]
+            return YangArgumentValue(
+                text^, QNameArgument(v.prefix.copy(), v.local_name.copy())
+            )
+        if self.payload.isa[PathArgument]():
+            ref v = self.payload[PathArgument]
+            return YangArgumentValue(text^, PathArgument(v.path.copy()))
+        if self.payload.isa[XPathExpressionArgument]():
+            ref v = self.payload[XPathExpressionArgument]
+            return YangArgumentValue(
+                text^, XPathExpressionArgument(v.root.copy())
+            )
+        if self.payload.isa[RevisionDateArgument]():
+            ref v = self.payload[RevisionDateArgument]
+            return YangArgumentValue(
+                text^, RevisionDateArgument(v.date.copy())
+            )
+        if self.payload.isa[RangeArgument]():
+            ref v = self.payload[RangeArgument]
+            return YangArgumentValue(text^, RangeArgument(v.segments.copy()))
+        if self.payload.isa[LengthArgument]():
+            ref v = self.payload[LengthArgument]
+            return YangArgumentValue(text^, LengthArgument(v.segments.copy()))
+        if self.payload.isa[PatternArgument]():
+            ref v = self.payload[PatternArgument]
+            return YangArgumentValue(text^, PatternArgument(v.regex.copy()))
+        if self.payload.isa[ModifierArgument]():
+            ref v = self.payload[ModifierArgument]
+            return YangArgumentValue(
+                text^, ModifierArgument(v.invert_match)
+            )
+        if self.payload.isa[FractionDigitsArgument]():
+            ref v = self.payload[FractionDigitsArgument]
+            return YangArgumentValue(
+                text^, FractionDigitsArgument(v.digits)
+            )
+        if self.payload.isa[BoolArgument]():
+            ref v = self.payload[BoolArgument]
+            return YangArgumentValue(text^, BoolArgument(v.truth))
+        if self.payload.isa[MaxElementsArgument]():
+            ref v = self.payload[MaxElementsArgument]
+            return YangArgumentValue(text^, MaxElementsArgument(v.count))
+        if self.payload.isa[StatusArgument]():
+            ref v = self.payload[StatusArgument]
+            return YangArgumentValue(text^, StatusArgument(v.state.copy()))
+        if self.payload.isa[OrderedByArgument]():
+            ref v = self.payload[OrderedByArgument]
+            return YangArgumentValue(text^, OrderedByArgument(v.ordering))
+        if self.payload.isa[KeyArgument]():
+            return YangArgumentValue(text^, KeyArgument())
+        if self.payload.isa[UniqueArgument]():
+            ref v = self.payload[UniqueArgument]
+            return YangArgumentValue(text^, UniqueArgument(v.paths.copy()))
+        if self.payload.isa[TypeArgument]():
+            ref v = self.payload[TypeArgument]
+            return YangArgumentValue(
+                text^,
+                TypeArgument(v.prefix.copy(), v.local_name.copy(), v.kind),
+            )
+        if self.payload.isa[Int32Argument]():
+            ref v = self.payload[Int32Argument]
+            return YangArgumentValue(text^, Int32Argument(v.value))
+        ref v = self.payload[UInt32Argument]
+        return YangArgumentValue(text^, UInt32Argument(v.value))
 
     def isa[T: AnyType](read self) -> Bool:
         return self.payload.isa[T]()

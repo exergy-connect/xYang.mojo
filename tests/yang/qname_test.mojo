@@ -9,7 +9,9 @@ from xyang.yang.arguments import (
     KeyArgument,
     PathArgument,
     QNameArgument,
+    TypeArgument,
     UniqueArgument,
+    XPathExpressionArgument,
 )
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.lexer import AstLexer
@@ -82,7 +84,14 @@ module ex-mod {
         base ex:id-root;
       }
     }
-    uses ex:ex-group;
+    uses ex:ex-group {
+      when "not(boolean(./scalar))";
+      description "conditional grouping use";
+      refine g {
+        mandatory false;
+        must "string-length(.) >= 0";
+      }
+    }
 
     list row {
       key "id ex:aux";
@@ -130,10 +139,22 @@ module ex-mod {
     var uses_top = _find_keyword_under(root_arc, "uses", "ex:ex-group")
     assert_true(uses_top)
     assert_true(uses_top.value()[].argument.isa[QNameArgument]())
+    var uses_when = _find_keyword_under(
+        uses_top.value(), "when", "not(boolean(./scalar))"
+    )
+    assert_true(uses_when)
+    assert_true(uses_when.value()[].argument.isa[XPathExpressionArgument]())
+    var refine_stmt = _find_keyword_under(uses_top.value(), "refine", "g")
+    assert_true(refine_stmt)
+    assert_true(refine_stmt.value()[].argument.isa[PathArgument]())
 
     var scalar_ty = _find_keyword_under(root_arc, "type", "ex:ex-int")
     assert_true(scalar_ty)
-    assert_true(scalar_ty.value()[].argument.isa[QNameArgument]())
+    assert_true(scalar_ty.value()[].argument.isa[TypeArgument]())
+    ref scalar_type_arg = scalar_ty.value()[].argument.get[TypeArgument]()
+    assert_true(scalar_type_arg.is_derived())
+    assert_true(scalar_type_arg.prefix == "ex")
+    assert_true(scalar_type_arg.local_name == "ex-int")
 
     var key_stmt = _find_first_keyword(root_arc, "key")
     assert_true(key_stmt)
@@ -158,6 +179,39 @@ module ex-mod {
     var path_stmt = _find_first_keyword(root_arc, "path")
     assert_true(path_stmt)
     assert_true(path_stmt.value()[].argument.isa[PathArgument]())
+
+
+def test_prefixed_uses_rejects_non_local_prefix() raises:
+    var yang_text = String(
+        """
+module ex-mod {
+  yang-version 1.1;
+  namespace "urn:ex";
+  prefix ex;
+
+  grouping ex-group {
+    leaf g {
+      type string;
+    }
+  }
+
+  container top {
+    uses other:ex-group;
+  }
+}
+"""
+    )
+    try:
+        var lexer = AstLexer(yang_text.as_bytes())
+        var mod = YangModule()
+        mod.parse(lexer)
+        raise Error("expected non-local uses prefix to fail")
+    except e:
+        var msg = String(e)
+        assert_true(
+            "external grouping reference" in msg,
+            "expected external grouping reference error, got: " + msg,
+        )
 
 
 def main() raises:

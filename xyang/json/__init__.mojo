@@ -16,3 +16,4 @@ from .value import (
     json_scalar_text,
 )
 from .yang_parser import parse_yang_json, parse_yang_json_module
+from .schema_generator import yang_module_to_json_schema

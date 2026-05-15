@@ -1,42 +1,125 @@
-## `YangConstruct` tree walking with a **visitor trait** (same idea as `XPathExprVisitor`
-## in `xyang/yang/xpath/pratt_parser.mojo` / `ASTVisitor` in `alternatives/xpath/ast.mojo`):
-## default implementations recurse into children; override `visit_uses` to expand
-## `grouping` bodies via `YangModule.find_grouping`.
-##
-## Walk the module root after parse (override `visit_uses` on a custom visitor, or
-## use `UsesExpandVisitor` which inlines grouping bodies without cloning the AST):
-##   var v = UsesExpandVisitor()
-##   walk_yang_construct(v, yang_module, yang_module.root_construct())
-##
-## Deep copy with every `uses` inlined (separate traversal API):
-##   var expanded = expand_uses_throughout_module(yang_module)
+## Deep-copy `YangConstruct` trees with every `uses` statement replaced by the
+## referenced grouping body. Clones preserve typed argument payloads.
 
 from std.collections import List
 from std.memory import ArcPointer
 
+from xyang.yang.arguments import QNameArgument
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.yang.spec import (
-    `case`,
-    `choice`,
-    `container`,
-    `grouping`,
-    `leaf`,
-    `leaf-list`,
-    `list`,
-    `module`,
-    `typedef`,
+    `if-feature`,
+    `reference`,
+    `refine`,
+    `status`,
     `uses`,
+    `when`,
 )
 
 comptime Arc = ArcPointer
 
 
+def _line_prefix(line: UInt) -> String:
+    if line > 0:
+        return "line " + String(line) + ": "
+    return ""
+
+
+def _slice_string(read text: String, start: Int, end: Int) -> String:
+    return String(StringSlice(unsafe_from_utf8=text.as_bytes()[start:end]))
+
+
+def _uses_grouping_name(
+    read module: YangModule, ref node: YangConstruct
+) raises -> String:
+    if node.argument.isa[QNameArgument]():
+        ref qname = node.argument.get[QNameArgument]()
+        var module_prefix = module.get_prefix()
+        if qname.prefix != module_prefix:
+            raise Error(
+                _line_prefix(node.line)
+                + "uses expansion: external grouping reference `"
+                + node.argument_text()
+                + "` uses prefix `"
+                + qname.prefix
+                + "`, expected local module prefix `"
+                + module_prefix
+                + "`"
+            )
+        return qname.local_name.copy()
+    return node.argument_text()
+
+
 def _clone_statement_header(read n: YangConstruct) -> YangConstruct:
     var c = YangConstruct(n.keyword.copy(), n.line)
     c.spec = n.spec
-    c.set_raw_argument(n.argument_text())
+    c.set_argument(n.argument.copy())
     return c^
+
+
+def _clone_statement(read n: YangConstruct) -> YangConstruct:
+    var c = _clone_statement_header(n)
+    for child in n.children:
+        c.children.append(Arc[YangConstruct](_clone_statement(child[])))
+    return c^
+
+
+def _replace_or_append_child(mut node: YangConstruct, read stmt: YangConstruct):
+    var replacement = Arc[YangConstruct](_clone_statement(stmt))
+    for i in range(len(node.children)):
+        if node.children[i][].spec == stmt.spec:
+            node.children[i] = replacement.copy()
+            return
+    node.children.append(replacement^)
+
+
+def _append_uses_conditionals(mut node: YangConstruct, read uses_node: YangConstruct):
+    for child in uses_node.children:
+        if (
+            child[].spec == `when`
+            or child[].spec == `if-feature`
+            or child[].spec == `status`
+            or child[].spec == `reference`
+        ):
+            node.children.append(Arc[YangConstruct](_clone_statement(child[])))
+
+
+def _path_first_segment(read path: String) -> String:
+    var slash = path.find("/")
+    if slash < 0:
+        return path.copy()
+    return _slice_string(path, 0, slash)
+
+
+def _path_tail(read path: String) -> String:
+    var slash = path.find("/")
+    if slash < 0:
+        return String()
+    return _slice_string(path, slash + 1, path.byte_length())
+
+
+def _apply_refine(mut node: YangConstruct, read refine_stmt: YangConstruct) -> Bool:
+    if not refine_stmt.has_argument():
+        return False
+    var segment = _path_first_segment(refine_stmt.argument_text())
+    if segment != node.argument_text():
+        return False
+    var tail = _path_tail(refine_stmt.argument_text())
+    if tail.byte_length() > 0:
+        for child in node.children:
+            if _apply_refine(child[], refine_stmt):
+                return True
+        return False
+    # Refine body: only REFINE_SPEC substatements (parser-validated).
+    for rchild in refine_stmt.children:
+        _replace_or_append_child(node, rchild[])
+    return True
+
+
+def _apply_uses_refines(mut node: YangConstruct, read uses_node: YangConstruct):
+    for child in uses_node.children:
+        if child[].spec == `refine`:
+            _ = _apply_refine(node, child[])
 
 
 def _stack_includes(read stack: List[String], read name: String) -> Bool:
@@ -54,149 +137,6 @@ def _stack_with_name(
         out.append(stack[i])
     out.append(name)
     return out^
-
-
-## -----------------------------------------------------------------------------
-## Visitor trait (default bodies recurse like `ASTVisitor` in alternatives/xpath).
-## -----------------------------------------------------------------------------
-
-
-trait YangConstructVisitor:
-    def visit_leaf(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_leaf_list(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_container(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_list(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_choice(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_case(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_uses(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_grouping(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_typedef(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_yang_module(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-    def visit_other(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        walk_yang_children(self, yang, node)
-
-
-def walk_yang_children[
-    V: YangConstructVisitor
-](
-    mut visitor: V, read yang: YangModule, read parent: Arc[YangConstruct]
-) raises -> None:
-    for ch in parent[].children:
-        walk_yang_construct(visitor, yang, ch)
-
-
-def walk_yang_construct[
-    V: YangConstructVisitor
-](
-    mut visitor: V, read yang: YangModule, read node: Arc[YangConstruct]
-) raises -> None:
-    var kw = node[].spec
-    if kw == `leaf`:
-        visitor.visit_leaf(yang, node)
-    elif kw == `leaf-list`:
-        visitor.visit_leaf_list(yang, node)
-    elif kw == `container`:
-        visitor.visit_container(yang, node)
-    elif kw == `list`:
-        visitor.visit_list(yang, node)
-    elif kw == `choice`:
-        visitor.visit_choice(yang, node)
-    elif kw == `case`:
-        visitor.visit_case(yang, node)
-    elif kw == `uses`:
-        visitor.visit_uses(yang, node)
-    elif kw == `grouping`:
-        visitor.visit_grouping(yang, node)
-    elif kw == `typedef`:
-        visitor.visit_typedef(yang, node)
-    elif kw == `module`:
-        visitor.visit_yang_module(yang, node)
-    else:
-        visitor.visit_other(yang, node)
-
-
-## -----------------------------------------------------------------------------
-## Example visitor: expand `uses` by walking grouping bodies (no AST clone).
-## -----------------------------------------------------------------------------
-
-
-@fieldwise_init
-struct UsesExpandVisitor(YangConstructVisitor):
-    ## Tracks `uses` expansion stack to reject cycles.
-
-    var stack: List[String]
-
-    def __init__(out self):
-        self.stack = List[String]()
-
-    def visit_uses(
-        mut self, read yang: YangModule, read node: Arc[YangConstruct]
-    ) raises -> None:
-        if not node[].has_argument():
-            return
-        var gname = node[].argument_text()
-        if _stack_includes(self.stack, gname):
-            raise Error(
-                "uses expansion cycle involving grouping `" + gname + "`"
-            )
-        var g = yang.find_grouping(gname)
-        if not g:
-            raise Error("uses expansion: unknown grouping `" + gname + "`")
-        self.stack.append(gname)
-        for gc in g.value()[].children:
-            walk_yang_construct(self, yang, gc)
-        ## Pop one grouping name (supports nested `uses` in groupings).
-        var prev = List[String]()
-        for i in range(len(self.stack) - 1):
-            prev.append(self.stack[i])
-        self.stack = prev^
-
-
-## -----------------------------------------------------------------------------
-## Deep copy + splice `uses` (tree materialisation, not the visitor walk).
-## -----------------------------------------------------------------------------
 
 
 def expand_uses_throughout_module(
@@ -235,7 +175,7 @@ def _expand_child_list(
     for ch in children:
         ref c = ch[]
         if c.spec == `uses` and c.has_argument():
-            var gname = c.argument_text()
+            var gname = _uses_grouping_name(module, c)
             if _stack_includes(stack, gname):
                 raise Error(
                     "uses expansion cycle involving grouping `" + gname + "`"
@@ -244,8 +184,14 @@ def _expand_child_list(
             if not g:
                 raise Error("uses expansion: unknown grouping `" + gname + "`")
             var stack2 = _stack_with_name(stack, gname)
-            for gc in g.value()[].children:
-                out.append(Arc[YangConstruct](_expand_arc(module, gc, stack2)))
+            var expanded_children = _expand_child_list(
+                module, g.value()[].children, stack2
+            )
+            for expanded_child in expanded_children:
+                var expanded = _clone_statement(expanded_child[])
+                _append_uses_conditionals(expanded, c)
+                _apply_uses_refines(expanded, c)
+                out.append(Arc[YangConstruct](expanded^))
         else:
             out.append(Arc[YangConstruct](_expand_arc(module, ch, stack)))
     return out^

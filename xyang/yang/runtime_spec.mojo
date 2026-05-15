@@ -11,7 +11,7 @@ from xyang.yang.keyword import Keyword
 
 comptime ArgumentParser = def(mut YangConstruct) raises thin -> None
 
-comptime KEYWORD_COUNT: Int = 60
+comptime KEYWORD_COUNT: Int = 61
 comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "<INVALID>",
     "action",
@@ -61,6 +61,7 @@ comptime SPELLING: InlineArray[String, KEYWORD_COUNT] = [
     "presence",
     "range",
     "reference",
+    "refine",
     "require-instance",
     "revision",
     "rpc",
