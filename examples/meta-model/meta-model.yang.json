@@ -2294,7 +2294,6 @@
     "date":     {
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-      "x-yang": {"string-patterns": [{"pattern": "\\d{4}-\\d{2}-\\d{2}", "invert-match": false}]},
       "description": "Date in YYYY-MM-DD format",
       "x-yang": {
         "type": "typedef"
@@ -2303,7 +2302,6 @@
     "date-and-time":     {
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?$",
-      "x-yang": {"string-patterns": [{"pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?", "invert-match": false}]},
       "description": "ISO 8601 date and time in format YYYY-MM-DDTHH:mm:ss[.sss][Z|±HH:mm]",
       "x-yang": {
         "type": "typedef"
@@ -2314,7 +2312,6 @@
       "minLength": 1,
       "maxLength": 64,
       "pattern": "^[a-z_][a-z0-9_]*$",
-      "x-yang": {"string-patterns": [{"pattern": "[a-z_][a-z0-9_]*", "invert-match": false, "description": "Entity names must start with a letter or underscore, followed by\n           letters, digits, or underscores. They are normalized to lower case."}]},
       "description": "Entity name (letters, digits, underscores only, lowercase). The underscore count limit is configurable via max_name_underscores property (default: 2).",
       "x-yang": {
         "type": "typedef"
@@ -2323,7 +2320,6 @@
     "version-string":     {
       "type": "string",
       "pattern": "^\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d+$",
-      "x-yang": {"string-patterns": [{"pattern": "\\d{2}\\.\\d{2}\\.\\d{2}\\.\\d+", "invert-match": false, "description": "Version format: YY.MM.DD.N where YY is 2-digit year, MM is month, DD is day, and N is sequence number"}]},
       "description": "Version string in format YY.MM.DD.N, auto-incremented during consolidation when changes are detected",
       "x-yang": {
         "type": "typedef"
@@ -2361,8 +2357,7 @@
         },
         {
           "type": "string",
-          "pattern": "^\\*$",
-          "x-yang": {"string-patterns": [{"pattern": "\\*", "invert-match": false}]}
+          "pattern": "^\\*$"
         }
       ],
       "description": "Change history retention policy. Can be:\n       - An integer N: Keep last N modification change IDs (default: 3)\n       - '*': Keep infinite history\n       - 0: Disabled (no modification history tracked)",
@@ -2375,7 +2370,6 @@
       "minLength": 1,
       "maxLength": 128,
       "pattern": "^[a-z_][a-z0-9_]*$",
-      "x-yang": {"string-patterns": [{"pattern": "[a-z_][a-z0-9_]*", "invert-match": false, "description": "Field names must start with a letter or underscore, and are normalized to lower case."}]},
       "description": "Field name for computed references and leafrefs (same rules as entity fields).",
       "x-yang": {
         "type": "typedef"

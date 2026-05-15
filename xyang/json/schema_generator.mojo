@@ -183,23 +183,6 @@ def _append_type_schema_pairs(
         )
         break
 
-    var patterns = String("[")
-    var pattern_count = 0
-    for child in type_stmt.children:
-        if child[].spec != `pattern` or not child[].has_argument():
-            continue
-        if pattern_count > 0:
-            patterns += ", "
-        var inverted = _has_child_arg(child[], `modifier`, "invert-match")
-        patterns += '{"pattern": ' + _q(child[].argument_text())
-        patterns += ', "invert-match": ' + _json_bool(inverted)
-        _append_child_metadata(patterns, child[])
-        patterns += "}"
-        pattern_count += 1
-    if pattern_count > 0:
-        patterns += "]"
-        _append_pair(out, count, indent, "x-yang", '{"string-patterns": ' + patterns + "}")
-
 
 def _emit_type_only_schema(
     read module: YangModule, read type_stmt: YangConstruct, indent: Int
@@ -254,9 +237,11 @@ def _append_x_yang_common(
         `mandatory`,
         `max-elements`,
         `min-elements`,
+        `modifier`,
         `must`,
         `ordered-by`,
         `path`,
+        `pattern`,
         `presence`,
         `reference`,
         `require-instance`,
@@ -368,6 +353,32 @@ def _append_x_yang_common(
                     _append_pair(
                         xyang, count, indent, "fraction-digits", fd.value()
                     )
+            elif ty_name == "string":
+                # JSON Schema `pattern` carries the first non-inverted pattern only.
+                # `invert-match` is not expressible there; use x-yang (see yang_parser).
+                var has_non_inverted = False
+                for pch in ty.children:
+                    if pch[].spec != `pattern` or not pch[].has_argument():
+                        continue
+                    if not _has_child_arg(pch[], `modifier`, "invert-match"):
+                        has_non_inverted = True
+                        break
+                if not has_non_inverted:
+                    for pch in ty.children:
+                        if pch[].spec != `pattern` or not pch[].has_argument():
+                            continue
+                        if _has_child_arg(pch[], `modifier`, "invert-match"):
+                            _append_pair(
+                                xyang,
+                                count,
+                                indent,
+                                "pattern",
+                                _q(pch[].argument_text()),
+                            )
+                            _append_pair(
+                                xyang, count, indent, "patternInvert", "true"
+                            )
+                            break
 
     var musts = String("[")
     var must_count = 0
