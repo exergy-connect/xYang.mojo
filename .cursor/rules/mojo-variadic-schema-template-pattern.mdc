@@ -1,0 +1,126 @@
+---
+description: Mojo pattern — variadic schema templates with derived row/value storage
+globs: **/*.mojo
+alwaysApply: false
+---
+
+# Mojo variadic schema template pattern
+
+Use this pattern when a model/schema can be expressed as a compile-time list of
+field template types and runtime values should derive from that same list. This
+is a non-reflection alternative for small typed schemas: the schema is the type
+parameter pack, and runtime storage follows the pack.
+
+## Shape
+
+Define leaf templates that expose their runtime value type and any per-leaf
+serialization or validation:
+
+```mojo
+trait SchemaLeaf:
+    comptime Value: Copyable & Defaultable & ImplicitlyDestructible & Movable
+
+    @staticmethod
+    def field_name() -> String:
+        ...
+
+    @staticmethod
+    def json_value(var value: Self.Value) raises -> JsonValue:
+        ...
+```
+
+Define an object template that owns the variadic field pack:
+
+```mojo
+struct SchemaObject[
+    name: StaticString,
+    *Fields: SchemaLeaf,
+]:
+    @staticmethod
+    def object_name() -> String:
+        return String(Self.name)
+
+    @staticmethod
+    def field_count() -> Int:
+        return len(Self.Fields)
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Fields[i].field_name()
+```
+
+Define the runtime row directly from the same `name, *Fields` pack. Do not pass
+a separate schema alias and the same fields again.
+
+```mojo
+comptime LeafValue[
+    Leaf: SchemaLeaf,
+]: Copyable & Defaultable & ImplicitlyDestructible & Movable = Leaf.Value
+
+struct SchemaRow[
+    name: StaticString,
+    *Fields: SchemaLeaf,
+](ImplicitlyDestructible, Movable):
+    comptime Schema = SchemaObject[Self.name, *Self.Fields]
+    comptime ValueTypes = TypeList.of[
+        Trait=SchemaLeaf, *Self.Fields
+    ]().map[
+        ToTrait=Copyable & Defaultable & ImplicitlyDestructible & Movable,
+        LeafValue,
+    ]()
+
+    var values: Tuple[*Self.ValueTypes]
+
+    def __init__(out self):
+        self.values = Tuple[*Self.ValueTypes]()
+
+    def set[i: Int](mut self, var value: Self.ValueTypes[i]):
+        comptime assert i >= 0 and i < len(Self.Fields)
+        self.values[i] = value^
+```
+
+Then give call sites a single alias:
+
+```mojo
+comptime CatalogLineRow = SchemaRow[
+    "catalog_line",
+    YangString["title"],
+    YangUInt16["units"],
+]
+
+var row = CatalogLineRow()
+row.set[0](String("mug"))
+row.set[1](3)
+```
+
+## Why
+
+Avoid this duplicate shape:
+
+```mojo
+comptime CatalogLineSchema = SchemaObject[
+    "catalog_line", YangString["title"], YangUInt16["units"]
+]
+
+var row = SchemaRow[
+    CatalogLineSchema, YangString["title"], YangUInt16["units"]
+]()
+```
+
+The fields appear twice and can drift. Instead, make the row derive its schema
+and value tuple from one pack.
+
+## Notes
+
+1. This pattern avoids `std.reflection`; it uses explicit compile-time template
+   parameters and `comptime for`.
+2. If a trait boundary hides the concrete `Fields` pack, do not try to recover
+   it through the trait. Carry the concrete pack on the row type and derive the
+   schema alias internally.
+3. For heterogeneous runtime values, map leaf templates to value types with a
+   `TypeList.map[...]()` helper, then store `Tuple[*ValueTypes]`.
+4. When a tuple element type needs to be passed back to its leaf template, use
+   `rebind_var[Fields[i].Value](...)` if the compiler cannot prove the mapped
+   tuple element and `Fields[i].Value` are identical.
+5. Prefer a named row alias (`CatalogLineRow`) at call sites; it keeps the
+   schema declaration single-source and construction short.
