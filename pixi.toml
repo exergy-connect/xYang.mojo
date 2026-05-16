@@ -8,6 +8,7 @@ version = "0.1.0"
 [dependencies]
 mblack = ">=26.2.0"
 mojo = ">=1.0.0b2.dev2026050106,<2"
+python = ">=3.11"
 
 [tasks.build-lib]
 cmd = "mojo package xyang -o build/xyang.mojopkg"
@@ -37,7 +38,6 @@ tests = "bash -lc 'set -e; M=\"$PWD/.pixi/envs/default/lib/mojo\"; for f in test
 
 basic-yang-example = "mojo -I . -I examples examples/basic_yang/validator.mojo"
 
-
 # CLI (same commands as Python `xyang`: parse, validate, convert). Example: `pixi run xyang -- parse file.yang`
 [tasks.xyang]
 depends-on = ["build-xyang-bin"]
@@ -46,3 +46,7 @@ cmd = "build/xyang"
 [tasks.convert]
 depends-on = ["build-xyang-bin"]
 cmd = "build/xyang convert examples/meta-model/meta-model.yang -o examples/meta-model/meta-model.yang.json"
+
+[tasks.openrouter-demo]
+depends-on = ["package"]
+cmd = "bash -lc 'M=\"$PWD/.pixi/envs/default/lib/mojo\"; mojo -I build -I \"$M\" examples/openrouter_tool_demo.mojo'"

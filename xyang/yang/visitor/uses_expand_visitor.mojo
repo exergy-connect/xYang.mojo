@@ -59,9 +59,17 @@ def _clone_statement_header(read n: YangConstruct) -> YangConstruct:
 
 def _clone_statement(read n: YangConstruct) -> YangConstruct:
     var c = _clone_statement_header(n)
-    for child in n.children:
-        c.children.append(Arc[YangConstruct](_clone_statement(child[])))
+    c.children = _clone_statement_children(n.children)
     return c^
+
+
+def _clone_statement_children(
+    read children: List[Arc[YangConstruct]]
+) -> List[Arc[YangConstruct]]:
+    var out = List[Arc[YangConstruct]]()
+    for child in children:
+        out.append(Arc[YangConstruct](_clone_statement(child[])))
+    return out^
 
 
 def _replace_or_append_child(mut node: YangConstruct, read stmt: YangConstruct):

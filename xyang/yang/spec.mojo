@@ -500,7 +500,7 @@ comptime REFINE_SPEC = YangConstructSpec[
 
 ## Table rows for `augment` and `identity` must be composite specs (RFC 7950 §7.17,
 ## §7.18): a scalar-only row rejects every substatement and breaks real modules.
-def build_spec_table() raises -> RuntimeConstructSpec.Table:
+def build_spec_table_unchecked() -> RuntimeConstructSpec.Table:
     var specs = RuntimeConstructSpec.Table(
         fill=RuntimeConstructSpec.scalar[`<INVALID>`, yarg.NoArgument]()
     )
@@ -572,17 +572,28 @@ def build_spec_table() raises -> RuntimeConstructSpec.Table:
     add_scalar_spec[`when`, yarg.XPathExpressionArgument]()
     add_scalar_spec[`yang-version`, yarg.YangVersionArgument]()
 
+    return specs^
+
+
+def _spec_table_is_complete(read specs: RuntimeConstructSpec.Table) -> Bool:
     for i in range(len(specs)):
-        var expected_kw = Keyword(i)
-        if specs[i].kw != expected_kw:
-            raise Error(
-                "build_spec_table: missing or wrong spec for `"
-                + keyword_spelling(expected_kw)
-                + "` (index "
-                + String(i)
-                + ")"
-            )
-    return specs
+        if specs[i].kw != Keyword(i):
+            return False
+    return True
+
+
+comptime SPEC_TABLE = build_spec_table_unchecked()
+
+
+def _assert_spec_table_complete():
+    comptime assert _spec_table_is_complete(SPEC_TABLE), (
+        "build_spec_table: missing or wrong spec row"
+    )
+
+
+def build_spec_table() -> RuntimeConstructSpec.Table:
+    _assert_spec_table_complete()
+    return SPEC_TABLE
 
 
 def lookup_spec(
