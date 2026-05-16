@@ -17,9 +17,18 @@ comptime Arc = ArcPointer
 
 
 trait JsonFromYangWalkInstance(Movable):
-    """Supply JSON for each `leaf` under this instance’s modeled container."""
+    """Supply JSON for leaves and nested data nodes under this instance."""
 
     def json_leaf_value(read self, read leaf_name: String) raises -> JsonValue:
+        ...
+
+    def json_nested_value(
+        read self,
+        read child_keyword: String,
+        read child_name: String,
+        read module: YangModule,
+        read child_node: YangConstruct,
+    ) raises -> JsonValue:
         ...
 
 
@@ -34,54 +43,76 @@ def _is_json_walk_data_node(read node: YangConstruct) -> Bool:
     )
 
 
+def _json_from_construct_node[
+    T: JsonFromYangWalkInstance
+](
+    read instance: T,
+    read module: YangModule,
+    read root_node: YangConstruct,
+) raises -> JsonValue:
+    from xyang.yang.spec import `container`, `leaf`, `leaf-list`, `list`
+
+    var keys = List[String]()
+    var vals = List[Arc[JsonValue]]()
+    for ch in root_node.children:
+        if not _is_json_walk_data_node(ch[]):
+            continue
+        if not ch[].has_argument():
+            continue
+        var nm = ch[].argument_text()
+        if ch[].spec == `leaf`:
+            keys.append(nm.copy())
+            vals.append(Arc[JsonValue](instance.json_leaf_value(nm)))
+            continue
+        if ch[].spec == `container`:
+            keys.append(nm.copy())
+            vals.append(
+                Arc[JsonValue](
+                    instance.json_nested_value(
+                        "container", nm, module, ch[]
+                    )
+                )
+            )
+            continue
+        if ch[].spec == `list` or ch[].spec == `leaf-list`:
+            keys.append(nm.copy())
+            vals.append(
+                Arc[JsonValue](
+                    instance.json_nested_value(
+                        ch[].keyword, nm, module, ch[]
+                    )
+                )
+            )
+            continue
+        raise Error(
+            "json_from_modeled_instance: unsupported child `"
+            + ch[].keyword
+            + "`",
+        )
+    return JsonValue(
+        JsonValue.OBJECT,
+        JsonPayload(JsonObject(keys=keys^, values=vals^)),
+        0,
+    )
+
+
 def json_from_modeled_instance[
     T: YangModeled & JsonFromYangWalkInstance
 ](read instance: T, read module: YangModule) raises -> JsonValue:
-    """Serialize a modeled **instance** to a JSON object for its top container.
+    """Serialize a modeled **instance** to JSON for its top container.
 
-    The caller passes the whole `T` value plus the `YangModule` that describes
-    it. The implementation walks that module’s direct data children under
-    ``T.yang_container_name()`` and fills JSON keys from YANG; leaf values come
-    from ``JsonFromYangWalkInstance.json_leaf_value`` on ``instance``.
+    Walks the ``YangConstruct`` subtree for ``T.yang_container_name()`` in
+    ``module`` and projects JSON keys from that IR. Leaf values come from
+    ``json_leaf_value``; nested ``container`` / ``list`` / ``leaf-list`` nodes
+    from ``json_nested_value`` (typically delegating back into this walker).
     """
-    from xyang.yang.spec import `container`, `leaf`, `leaf-list`, `list`
-
     var want = T.yang_container_name()
     var opt = module.top_container(want)
     if not opt:
         raise Error(
             "json_from_modeled_instance: missing top container `" + want + "`"
         )
-    ref root = opt.value()[]
-    var keys = List[String]()
-    var vals = List[Arc[JsonValue]]()
-    for ch in root.children:
-        if not _is_json_walk_data_node(ch[]):
-            continue
-        if ch[].spec == `leaf`:
-            if not ch[].has_argument():
-                continue
-            var nm = ch[].argument_text()
-            keys.append(nm.copy())
-            vals.append(Arc[JsonValue](instance.json_leaf_value(nm)))
-            continue
-        if (
-            ch[].spec == `container`
-            or ch[].spec == `list`
-            or ch[].spec == `leaf-list`
-        ):
-            raise Error(
-                "json_from_modeled_instance: nested `"
-                + ch[].keyword
-                + "` `"
-                + ch[].argument_text()
-                + "` is not supported yet (only direct `leaf` children)",
-            )
-    return JsonValue(
-        JsonValue.OBJECT,
-        JsonPayload(JsonObject(keys=keys^, values=vals^)),
-        0,
-    )
+    return _json_from_construct_node(instance, module, opt.value()[])
 
 
 def json_from_instance[

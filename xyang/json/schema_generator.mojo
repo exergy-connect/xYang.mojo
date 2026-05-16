@@ -429,6 +429,7 @@ def _append_child_properties(
     read parent: YangConstruct,
     indent: Int,
     additional_properties_false: Bool = False,
+    include_x_yang: Bool = True,
 ):
     var props = String("{\n")
     var prop_count = 0
@@ -441,7 +442,11 @@ def _append_child_properties(
             props += ",\n"
         props += _indent(indent + 1) + _q(child[].argument_text()) + ": "
         props += _emit_node_schema(
-            module, child[], indent + 1, additional_properties_false
+            module,
+            child[],
+            indent + 1,
+            additional_properties_false,
+            include_x_yang,
         )
         prop_count += 1
     props += "\n" + _indent(indent) + "}"
@@ -497,6 +502,7 @@ def _emit_node_schema(
     read node: YangConstruct,
     indent: Int,
     additional_properties_false: Bool = False,
+    include_x_yang: Bool = True,
 ) -> String:
     from xyang.yang.spec import (
         `anydata`,
@@ -520,15 +526,22 @@ def _emit_node_schema(
                 out, count, indent + 1, "additionalProperties", "false"
             )
         _append_description(out, count, node, indent + 1)
-        _append_pair(
+        if include_x_yang:
+            _append_pair(
+                out,
+                count,
+                indent + 1,
+                "x-yang",
+                _emit_x_yang(node, "container", indent + 1),
+            )
+        _append_child_properties(
+            module,
             out,
             count,
+            node,
             indent + 1,
-            "x-yang",
-            _emit_x_yang(node, "container", indent + 1),
-        )
-        _append_child_properties(
-            module, out, count, node, indent + 1, additional_properties_false
+            additional_properties_false,
+            include_x_yang,
         )
         _append_required(node, out, count, indent + 1)
     elif node.spec == `list`:
@@ -540,17 +553,20 @@ def _emit_node_schema(
         if max_items:
             _append_pair(out, count, indent + 1, "maxItems", max_items.value())
         _append_description(out, count, node, indent + 1)
-        _append_pair(
-            out,
-            count,
-            indent + 1,
-            "x-yang",
-            _emit_x_yang(node, "list", indent + 1),
-        )
+        if include_x_yang:
+            _append_pair(
+                out,
+                count,
+                indent + 1,
+                "x-yang",
+                _emit_x_yang(node, "list", indent + 1),
+            )
         var items = "{\n"
         var item_count = 0
         _append_pair(items, item_count, indent + 2, "type", _q("object"))
-        _append_child_properties(module, items, item_count, node, indent + 2)
+        _append_child_properties(
+            module, items, item_count, node, indent + 2, False, include_x_yang
+        )
         _append_required(node, items, item_count, indent + 2)
         items += "\n" + _indent(indent + 1) + "}"
         _append_pair(out, count, indent + 1, "items", items)
@@ -573,13 +589,14 @@ def _emit_node_schema(
                 or tn == "bits"
             ):
                 xyang_type = tn
-        _append_pair(
-            out,
-            count,
-            indent + 1,
-            "x-yang",
-            _emit_x_yang(node, xyang_type, indent + 1),
-        )
+        if include_x_yang:
+            _append_pair(
+                out,
+                count,
+                indent + 1,
+                "x-yang",
+                _emit_x_yang(node, xyang_type, indent + 1),
+            )
         _append_schema_defaults(node, out, count, indent + 1)
     elif node.spec == `leaf-list`:
         _append_pair(out, count, indent + 1, "type", _q("array"))
@@ -590,13 +607,14 @@ def _emit_node_schema(
         if max_items:
             _append_pair(out, count, indent + 1, "maxItems", max_items.value())
         _append_description(out, count, node, indent + 1)
-        _append_pair(
-            out,
-            count,
-            indent + 1,
-            "x-yang",
-            _emit_x_yang(node, "leaf-list", indent + 1),
-        )
+        if include_x_yang:
+            _append_pair(
+                out,
+                count,
+                indent + 1,
+                "x-yang",
+                _emit_x_yang(node, "leaf-list", indent + 1),
+            )
         var type_stmt = _child_construct(node, `type`)
         if type_stmt:
             _append_pair(
@@ -614,31 +632,36 @@ def _emit_node_schema(
             count,
             indent + 1,
             "oneOf",
-            _emit_choice_cases(module, node, indent + 1),
+            _emit_choice_cases(module, node, indent + 1, include_x_yang),
         )
         _append_description(out, count, node, indent + 1)
-        _append_pair(
-            out,
-            count,
-            indent + 1,
-            "x-yang",
-            _emit_x_yang(node, "choice", indent + 1),
-        )
+        if include_x_yang:
+            _append_pair(
+                out,
+                count,
+                indent + 1,
+                "x-yang",
+                _emit_x_yang(node, "choice", indent + 1),
+            )
     elif node.spec == `anydata` or node.spec == `anyxml`:
         _append_description(out, count, node, indent + 1)
-        _append_pair(
-            out,
-            count,
-            indent + 1,
-            "x-yang",
-            _emit_x_yang(node, keyword_spelling(node.spec), indent + 1),
-        )
+        if include_x_yang:
+            _append_pair(
+                out,
+                count,
+                indent + 1,
+                "x-yang",
+                _emit_x_yang(node, keyword_spelling(node.spec), indent + 1),
+            )
     out += "\n" + _indent(indent) + "}"
     return out^
 
 
 def _emit_choice_cases(
-    read module: YangModule, read node: YangConstruct, indent: Int
+    read module: YangModule,
+    read node: YangConstruct,
+    indent: Int,
+    include_x_yang: Bool = True,
 ) -> String:
     from xyang.yang.spec import `case`
 
@@ -651,14 +674,17 @@ def _emit_choice_cases(
             out += ",\n"
         out += _indent(indent + 1) + "{\n"
         var branch_count = 0
-        _append_pair(
-            out,
-            branch_count,
-            indent + 2,
-            "x-yang",
-            '{"name": ' + _q(child[].argument_text()) + "}",
+        if include_x_yang:
+            _append_pair(
+                out,
+                branch_count,
+                indent + 2,
+                "x-yang",
+                '{"name": ' + _q(child[].argument_text()) + "}",
+            )
+        _append_child_properties(
+            module, out, branch_count, child[], indent + 2, False, include_x_yang
         )
-        _append_child_properties(module, out, branch_count, child[], indent + 2)
         _append_required(child[], out, branch_count, indent + 2)
         out += "\n" + _indent(indent + 1) + "}"
         count += 1
@@ -763,6 +789,7 @@ def yang_json_schema_for_modeled_top_container[
 ](
     read module: YangModule,
     additional_properties_false: Bool = True,
+    include_x_yang: Bool = True,
 ) raises -> String:
     var cname = T.yang_container_name()
     var opt = module.top_container(cname)
@@ -776,4 +803,6 @@ def yang_json_schema_for_modeled_top_container[
             + "`",
         )
     ref node = opt.value()[]
-    return _emit_node_schema(module, node, 0, additional_properties_false)
+    return _emit_node_schema(
+        module, node, 0, additional_properties_false, include_x_yang
+    )

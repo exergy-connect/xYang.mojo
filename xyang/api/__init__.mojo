@@ -37,21 +37,25 @@ from .types import (
     ## Data node wrappers
     YangContainer,
     YangDataNodeSpec,
+    YangField,
     YangLeaf,
     YangLeafValueReadable,
     YangLeafList,
     YangList,
+    YangListModel,
     YangListItem,
+    YangModel,
     YangModeled,
+    YangNamedDataNode,
 )
 from .model import (
-    ## Reflection and validation helpers
+    ## Model construction and validation helpers
+    YangModuleSketch,
     container_construct_from_model,
     construct_from_model_field,
-    effective_leaf_names_under,
     parse_and_validate_json_against_model,
     validate_data_against_model,
-    validate_leaf_model_vs_module,
     validate_yang_subtree,
     yang_module_from_model,
+    yang_module_from_sketch,
 )

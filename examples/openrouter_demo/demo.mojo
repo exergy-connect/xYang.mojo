@@ -8,6 +8,7 @@
 
 from std.collections import List
 from std.memory import ArcPointer
+from std.os import getenv
 from std.python import Python
 
 from xyang.api import (
@@ -15,7 +16,9 @@ from xyang.api import (
     YangBuiltinUInt16,
     YangConstraints,
     YangEnum,
+    YangField,
     YangLeaf,
+    YangModel,
     YangModeled,
     YangRange,
     json_from_modeled_instance,
@@ -127,18 +130,11 @@ comptime DEMO_OPENROUTER_TOOL_DESCRIPTION = (
 )
 
 
-@fieldwise_init
-struct QuoteRequest(ImplicitlyDestructible, Movable, YangModeled):
-    @staticmethod
-    def yang_container_name() -> String:
-        return "quote_request"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        validate_yang_subtree[Self](module)
-
-    var product_name: YangLeaf[ProductName]
-    var quantity: YangLeaf[YangBuiltinUInt16, QuantityConstraints]
+comptime QuoteRequest = YangModel[
+    "quote_request",
+    YangField["product_name", YangLeaf[ProductName]],
+    YangField["quantity", YangLeaf[YangBuiltinUInt16, QuantityConstraints]],
+]
 
 
 def _python_quote(read s: String) -> String:
@@ -153,10 +149,8 @@ def _python_quote(read s: String) -> String:
     )
 
 
-def _env(name: String, default_value: String = "") raises -> String:
-    var os = Python.import_module("os")
-    var builtins = Python.import_module("builtins")
-    return String(builtins.str(os.environ.get(name, default_value)))
+def _env(name: String, default_value: String = "") -> String:
+    return getenv(name, default_value)
 
 
 def _quote_module() raises -> YangModule:
@@ -165,7 +159,7 @@ def _quote_module() raises -> YangModule:
         "urn:example:openrouter-quote-tool",
         "oqt",
     )
-    QuoteRequest.comptime_validate(module)
+    validate_yang_subtree[QuoteRequest](module)
     return module^
 
 
@@ -175,21 +169,8 @@ def _tool_calls_module() raises -> YangModule:
         "urn:example:openrouter-tool-calls",
         "ortc",
     )
-    DemoOpenRouterToolCalls.comptime_validate(module)
+    validate_yang_subtree[DemoOpenRouterToolCalls](module)
     return module^
-
-
-def _tool_function_yang_module[
-    tool_name: StaticString,
-    description: StaticString,
-    Parameters: YangModeled,
-]() raises -> YangModule:
-    comptime Fn = OpenRouterFunction[tool_name, description, Parameters]
-    return yang_module_from_model[Fn](
-        "openrouter-tool-function-schema",
-        "urn:example:openrouter-tool-function-schema",
-        "otfns",
-    )
 
 
 def openrouter_tool_function_tool_json[
@@ -198,8 +179,12 @@ def openrouter_tool_function_tool_json[
     Parameters: YangModeled,
 ]() raises -> Tuple[String, String]:
     comptime Fn = OpenRouterFunction[tool_name, description, Parameters]
-    var m_fn = _tool_function_yang_module[tool_name, description, Parameters]()
-    Fn.comptime_validate(m_fn)
+    var m_fn = yang_module_from_model[Fn](
+        "openrouter-tool-function-schema",
+        "urn:example:openrouter-tool-function-schema",
+        "otfns",
+    )
+    # Fn.comptime_validate(m_fn)
     var inst = Fn()
     inst.name.value = String(tool_name)
     var inner = json_from_modeled_instance[Fn](inst, m_fn)
@@ -208,7 +193,7 @@ def openrouter_tool_function_tool_json[
         "urn:example:openrouter-quote-tool",
         "oqt",
     )
-    Parameters.comptime_validate(m_params)
+    validate_yang_subtree[Parameters](m_params)
     var params = yang_json_schema_for_modeled_top_container[Parameters](
         m_params
     )

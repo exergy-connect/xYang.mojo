@@ -2,9 +2,13 @@
 ## Mojo structs declare their YANG node kind, leaf types, constraints, list keys,
 ## and conditional `when` expressions.
 
+from std.memory import ArcPointer
+
+from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.validator.pattern_match import yang_string_matches_xsd_subset
-from std.reflection import reflect
+
+comptime Arc = ArcPointer
 
 
 trait StringLengthCap:
@@ -507,6 +511,18 @@ trait YangModeled:
     def comptime_validate(read module: YangModule) raises:
         ...
 
+    @staticmethod
+    def field_count() -> Int:
+        return 0
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return String()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        ...
+
 
 trait YangListItem(YangModeled):
     comptime LIST_KEY: StaticString
@@ -537,19 +553,6 @@ trait NodeModelSpec:
 comptime LeafModelSpec = StringLengthCap & StringPatternConstraint & NumericRangeConstraint & NodeModelSpec
 
 
-@fieldwise_init
-struct NoYangModel(ImplicitlyDestructible, Movable, YangListItem):
-    comptime LIST_KEY = ""
-
-    @staticmethod
-    def yang_container_name() -> String:
-        return ""
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        pass
-
-
 trait YangDataNodeSpec:
     comptime ChildType: YangModeled
     comptime EntryType: YangListItem
@@ -571,6 +574,31 @@ trait YangDataNodeSpec:
         ...
 
 
+trait YangNamedDataNode:
+    comptime NodeType: YangDataNodeSpec & LeafModelSpec
+
+    @staticmethod
+    def field_name() -> String:
+        ...
+
+
+@fieldwise_init
+struct NoYangModel(ImplicitlyDestructible, Movable, YangListItem):
+    comptime LIST_KEY = ""
+
+    @staticmethod
+    def yang_container_name() -> String:
+        return ""
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        pass
+
+
 trait YangLeafValueReadable:
     def yang_leaf_string_value(read self) -> String:
         ...
@@ -580,6 +608,86 @@ trait YangLeafValueReadable:
 
     def yang_leaf_int64_value(read self) -> Int64:
         ...
+
+
+struct YangField[
+    name: StaticString,
+    Node: YangDataNodeSpec & LeafModelSpec,
+](YangNamedDataNode):
+    comptime NodeType = Self.Node
+
+    @staticmethod
+    def field_name() -> String:
+        return String(Self.name)
+
+
+struct YangModel[
+    name: StaticString,
+    *Fields: YangNamedDataNode,
+](
+    Defaultable,
+    ImplicitlyDestructible,
+    Movable,
+    YangModeled,
+):
+    def __init__(out self):
+        pass
+
+    @staticmethod
+    def yang_container_name() -> String:
+        return String(Self.name)
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    @staticmethod
+    def field_count() -> Int:
+        return len(Self.Fields)
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Fields[i].field_name()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        _append_explicit_model_fields[*Self.Fields](parent)
+
+
+struct YangListModel[
+    name: StaticString,
+    key: StaticString,
+    *Fields: YangNamedDataNode,
+](
+    Defaultable,
+    ImplicitlyDestructible,
+    Movable,
+    YangListItem,
+):
+    comptime LIST_KEY = Self.key
+
+    def __init__(out self):
+        pass
+
+    @staticmethod
+    def yang_container_name() -> String:
+        return String(Self.name)
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        pass
+
+    @staticmethod
+    def field_count() -> Int:
+        return len(Self.Fields)
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Fields[i].field_name()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        _append_explicit_model_fields[*Self.Fields](parent)
 
 
 struct NodeConstraints[
@@ -711,9 +819,12 @@ struct YangLeaf[
         return rebind[Bool](self.value)
 
     def yang_leaf_int64_value(read self) -> Int64:
-        comptime value_type = Self.Builtin.Value
-        comptime value_type_name = reflect[value_type].name()
-        comptime if value_type_name == reflect[Int64].name():
+        comptime keyword = Self.Builtin.yang_type_keyword()
+        comptime if (
+            keyword == "int64"
+            or keyword == "uint32"
+            or keyword == "uint64"
+        ):
             return rebind[Int64](self.value)
         return Int64(rebind[Int](self.value))
 
@@ -1041,3 +1152,134 @@ struct YangList[
     @staticmethod
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
+
+
+def _model_stmt(keyword: String, argument: String = "") -> YangConstruct:
+    var node = YangConstruct(keyword, 0)
+    if argument.byte_length() > 0:
+        node.set_raw_argument(argument)
+    return node^
+
+
+def _model_append_stmt(mut parent: YangConstruct, var child: YangConstruct):
+    parent.children.append(Arc[YangConstruct](child^))
+
+
+def _model_append_arg(
+    mut parent: YangConstruct, keyword: String, argument: String
+):
+    if argument.byte_length() == 0:
+        return
+    var child = _model_stmt(keyword, argument)
+    _model_append_stmt(parent, child^)
+
+
+def _append_explicit_leaf_constraints[FT: NodeModelSpec](
+    mut node: YangConstruct
+):
+    if FT.has_yang_when():
+        _model_append_stmt(node, _model_stmt("when", FT.yang_when_condition()))
+    comptime for i in range(FT.yang_must_count()):
+        _model_append_stmt(
+            node, _model_stmt("must", FT.yang_must_condition[i]())
+        )
+
+
+def _append_explicit_type_constraints[
+    FT: YangDataNodeSpec & LeafModelSpec
+](
+    mut type_node: YangConstruct, read yt: String
+):
+    if yt == "enumeration":
+        comptime for i in range(FT.yang_enum_count()):
+            _model_append_arg(type_node, "enum", FT.yang_enum_value[i]())
+    elif yt == "string":
+        var max_len = FT.model_max_string_length()
+        if max_len >= 0:
+            _model_append_arg(type_node, "length", "0.." + String(max_len))
+        comptime for i in range(FT.yang_pattern_count()):
+            _model_append_arg(type_node, "pattern", FT.yang_pattern_text[i]())
+    else:
+        if FT.has_model_range():
+            _model_append_arg(
+                type_node,
+                "range",
+                String(FT.model_range_min())
+                + ".."
+                + String(FT.model_range_max()),
+            )
+
+
+def _explicit_leaf_construct[
+    FT: YangDataNodeSpec & LeafModelSpec
+](read name: String) raises -> YangConstruct:
+    var leaf_node = _model_stmt("leaf", name)
+    var yt = FT.yang_type_str()
+    var type_node = _model_stmt("type", yt)
+    _append_explicit_type_constraints[FT](type_node, yt)
+    _model_append_stmt(leaf_node, type_node^)
+    _append_explicit_leaf_constraints[FT](leaf_node)
+    return leaf_node^
+
+
+def _explicit_leaf_list_construct[
+    FT: YangDataNodeSpec & LeafModelSpec
+](read name: String) raises -> YangConstruct:
+    var node = _model_stmt("leaf-list", name)
+    var yt = FT.yang_type_str()
+    var type_node = _model_stmt("type", yt)
+    _append_explicit_type_constraints[FT](type_node, yt)
+    _model_append_stmt(node, type_node^)
+    _append_explicit_leaf_constraints[FT](node)
+    return node^
+
+
+def _explicit_container_construct[
+    FT: YangDataNodeSpec & LeafModelSpec
+](read name: String) raises -> YangConstruct:
+    var node = _model_stmt("container", name)
+    _append_explicit_leaf_constraints[FT](node)
+    FT.ChildType.append_model_fields(node)
+    return node^
+
+
+def _explicit_list_construct[
+    FT: YangDataNodeSpec & LeafModelSpec
+](read name: String) raises -> YangConstruct:
+    var node = _model_stmt("list", name)
+    var key = String(FT.EntryType.LIST_KEY)
+    if key.byte_length() > 0:
+        _model_append_arg(node, "key", key)
+    _append_explicit_leaf_constraints[FT](node)
+    FT.EntryType.append_model_fields(node)
+    return node^
+
+
+def _append_explicit_model_fields[*Fields: YangNamedDataNode](
+    mut parent: YangConstruct
+) raises:
+    comptime for i in range(len(Fields)):
+        comptime FieldType = Fields[i].NodeType
+        comptime kind = FieldType.yang_node_kind()
+        comptime if kind == "leaf":
+            var child = _explicit_leaf_construct[FieldType](
+                Fields[i].field_name()
+            )
+            _model_append_stmt(parent, child^)
+        elif kind == "leaf-list":
+            var child = _explicit_leaf_list_construct[FieldType](
+                Fields[i].field_name()
+            )
+            _model_append_stmt(parent, child^)
+        elif kind == "container":
+            var child = _explicit_container_construct[FieldType](
+                Fields[i].field_name()
+            )
+            _model_append_stmt(parent, child^)
+        elif kind == "list":
+            var child = _explicit_list_construct[FieldType](
+                Fields[i].field_name()
+            )
+            _model_append_stmt(parent, child^)
+        else:
+            raise Error("unsupported model node kind `" + kind + "`")

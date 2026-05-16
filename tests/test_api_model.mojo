@@ -6,10 +6,11 @@ from xyang.api import (
     YangBuiltinUInt16,
     YangConstraints,
     YangEnum,
+    YangField,
     YangLeafList,
     YangList,
-    YangListItem,
-    YangModeled,
+    YangListModel,
+    YangModel,
     YangMust,
     YangBuiltinString,
     YangLeaf,
@@ -21,91 +22,83 @@ from xyang.api import (
     yang_module_from_model,
 )
 from xyang.yang.ast.lexer import AstLexer
-from xyang.yang.ast.module import YangModule
 from xyang.yang.ast.parser import parse_module
 
 
-@fieldwise_init
-struct ApiCart(ImplicitlyDestructible, Movable, YangModeled):
-    @staticmethod
-    def yang_container_name() -> String:
-        return "cart"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        validate_yang_subtree[Self](module)
-
-    var customer_id: YangLeaf[
-        YangBuiltinString, YangConstraints[MaxStringLength[128]]
-    ]
-    var currency: YangLeaf[
-        YangBuiltinString,
-        YangConstraints[MaxStringLength[3], Pattern=YangPattern["[A-Z]{3}"]],
-    ]
-    var quantity: YangLeaf[
-        YangBuiltinUInt16,
-        YangConstraints[Range=YangRange[0, 65535]],
-    ]
-
-
-@fieldwise_init
-struct ApiServer(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
-    comptime LIST_KEY = "name"
-
-    @staticmethod
-    def yang_container_name() -> String:
-        return "server"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        pass
-
-    var name: YangLeaf[
-        YangBuiltinString,
-        YangConstraints[
-            MaxStringLength[64],
-            Must=YangMust["string-length(.) > 0"],
+comptime ApiCart = YangModel[
+    "cart",
+    YangField[
+        "customer_id",
+        YangLeaf[
+            YangBuiltinString, YangConstraints[MaxStringLength[128]]
         ],
-    ]
-    var enabled: YangLeaf[
-        YangBuiltinBool,
-        YangConstraints[When=YangWhen["../name = 'primary'"]],
-    ]
+    ],
+    YangField[
+        "currency",
+        YangLeaf[
+            YangBuiltinString,
+            YangConstraints[
+                MaxStringLength[3], Pattern=YangPattern["[A-Z]{3}"]
+            ],
+        ],
+    ],
+    YangField[
+        "quantity",
+        YangLeaf[
+            YangBuiltinUInt16,
+            YangConstraints[Range=YangRange[0, 65535]],
+        ],
+    ],
+]
 
 
-@fieldwise_init
-struct ApiConfig(ImplicitlyDestructible, Movable, YangModeled):
-    @staticmethod
-    def yang_container_name() -> String:
-        return "config"
+comptime ApiServer = YangListModel[
+    "server",
+    "name",
+    YangField[
+        "name",
+        YangLeaf[
+            YangBuiltinString,
+            YangConstraints[
+                MaxStringLength[64],
+                Must=YangMust["string-length(.) > 0"],
+            ],
+        ],
+    ],
+    YangField[
+        "enabled",
+        YangLeaf[
+            YangBuiltinBool,
+            YangConstraints[When=YangWhen["../name = 'primary'"]],
+        ],
+    ],
+]
 
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        pass
 
-    var server: YangList[ApiServer]
-    var tag: YangLeafList[
-        YangBuiltinString, YangConstraints[MaxStringLength[16]]
-    ]
-    var mode: YangLeaf[YangEnum["active", "standby"]]
+comptime ApiConfig = YangModel[
+    "config",
+    YangField["server", YangList[ApiServer]],
+    YangField[
+        "tag",
+        YangLeafList[
+            YangBuiltinString, YangConstraints[MaxStringLength[16]]
+        ],
+    ],
+    YangField["mode", YangLeaf[YangEnum["active", "standby"]]],
+]
 
 
-@fieldwise_init
-struct BadWhenConfig(ImplicitlyDestructible, Movable, YangModeled):
-    @staticmethod
-    def yang_container_name() -> String:
-        return "config"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        pass
-
-    var name: YangLeaf[YangBuiltinString]
-    var enabled: YangLeaf[
-        YangBuiltinBool,
-        YangConstraints[When=YangWhen["../missing = 'primary'"]],
-    ]
-
+comptime BadWhenConfig = YangModel[
+    "config",
+    YangField["name", YangLeaf[YangBuiltinString]],
+    YangField[
+        "enabled",
+        YangLeaf[
+            YangBuiltinBool,
+            YangConstraints[When=YangWhen["../missing = 'primary'"]],
+        ],
+    ],
+]
 
 def _generated_model_ok() -> Bool:
     try:
@@ -197,9 +190,6 @@ def _model_constructs_match_parsed_yang_ast() -> Bool:
         return False
 
 
-comptime _API_CONFIG_AST_PARITY_OK = _model_constructs_match_parsed_yang_ast()
-
-
 def test_generated_module_from_model() raises:
     comptime assert _MODEL_OK, "generated model failed at compile time"
     var module = yang_module_from_model[ApiCart](
@@ -272,9 +262,6 @@ def test_generated_module_rejects_bad_pattern() raises:
 
 
 def test_model_constructs_match_parsed_yang_ast() raises:
-    comptime assert _API_CONFIG_AST_PARITY_OK, (
-        "generated ApiConfig AST did not match parsed YANG AST at compile time"
-    )
     var yang_text = String(API_CONFIG_YANG)
     var lexer = AstLexer(yang_text.as_bytes())
     var parsed_tree = parse_module(lexer)

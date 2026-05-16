@@ -50,3 +50,7 @@ cmd = "build/xyang convert examples/meta-model/meta-model.yang -o examples/meta-
 [tasks.openrouter-demo]
 depends-on = ["package"]
 cmd = "bash -lc 'M=\"$PWD/.pixi/envs/default/lib/mojo\"; mojo -I examples/openrouter_demo -I build -I \"$M\" examples/openrouter_demo/demo.mojo'"
+
+[tasks.openrouter-mini-demo]
+depends-on = ["package"]
+cmd = "bash -lc 'M=\"$PWD/.pixi/envs/default/lib/mojo\"; mojo -I examples/openrouter_demo -I build -I \"$M\" examples/openrouter_demo/mini_demo.mojo'"

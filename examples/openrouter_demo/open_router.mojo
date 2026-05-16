@@ -13,13 +13,17 @@ from xyang.api import (
     YangConstraints,
     YangContainer,
     YangEnum,
+    YangField,
     YangLeaf,
     YangList,
     YangListItem,
+    YangListModel,
+    YangModel,
     YangModeled,
     validate_yang_subtree,
 )
 from xyang.json.value import JsonPayload, JsonString, JsonValue
+from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 
 
@@ -64,13 +68,37 @@ struct OpenRouterFunction[
 ):
     """OpenRouter `function` object: `name` + stringified `arguments`."""
 
+    comptime Schema = YangModel[
+        "function",
+        YangField["name", YangLeaf[YangEnum[Self.tool_name]]],
+        YangField[
+            "arguments",
+            YangLeaf[
+                YangBuiltinString,
+                YangConstraints[MaxStringLength[4096]],
+            ],
+        ],
+    ]
+
     @staticmethod
     def yang_container_name() -> String:
-        return "function"
+        return Self.Schema.yang_container_name()
 
     @staticmethod
     def comptime_validate(read module: YangModule) raises:
         validate_yang_subtree[Self](module)
+
+    @staticmethod
+    def field_count() -> Int:
+        return Self.Schema.field_count()
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Schema.field_name[i]()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        Self.Schema.append_model_fields(parent)
 
     var name: YangLeaf[YangEnum[Self.tool_name]]
     var arguments: YangLeaf[
@@ -90,6 +118,24 @@ struct OpenRouterFunction[
             return _json_string_value_from_yang_leaf_field(self.arguments)
         raise Error("unknown leaf `" + leaf_name + "` for OpenRouterFunction")
 
+    def json_nested_value(
+        read self,
+        read child_keyword: String,
+        read child_name: String,
+        read module: YangModule,
+        read child_node: YangConstruct,
+    ) raises -> JsonValue:
+        _ = self
+        _ = module
+        _ = child_node
+        raise Error(
+            "json_from_modeled_instance: nested `"
+            + child_keyword
+            + "` `"
+            + child_name
+            + "` is not implemented for OpenRouterFunction",
+        )
+
 
 @fieldwise_init
 struct OpenRouterTool[
@@ -101,13 +147,38 @@ struct OpenRouterTool[
     """One OpenRouter `tools[]` entry: `{ "type": "function", "function": … }`.
     """
 
+    comptime Schema = YangModel[
+        "openrouter_tool",
+        YangField["type", YangLeaf[YangEnum["function"]]],
+        YangField[
+            "function",
+            YangContainer[
+                OpenRouterFunction[
+                    Self.tool_name, Self.Description, Self.Parameters
+                ]
+            ],
+        ],
+    ]
+
     @staticmethod
     def yang_container_name() -> String:
-        return "openrouter_tool"
+        return Self.Schema.yang_container_name()
 
     @staticmethod
     def comptime_validate(read module: YangModule) raises:
         validate_yang_subtree[Self](module)
+
+    @staticmethod
+    def field_count() -> Int:
+        return Self.Schema.field_count()
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Schema.field_name[i]()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        Self.Schema.append_model_fields(parent)
 
     var type: YangLeaf[YangEnum["function"]]
     var function: YangContainer[
@@ -123,14 +194,46 @@ struct OpenRouterToolCall[
     Callback: OpenRouterToolCallback,
 ](ImplicitlyDestructible, Movable, YangListItem):
     comptime LIST_KEY = "id"
+    comptime Schema = YangListModel[
+        "tool_call",
+        Self.LIST_KEY,
+        YangField[
+            "id",
+            YangLeaf[
+                YangBuiltinString,
+                YangConstraints[MaxStringLength[256]],
+            ],
+        ],
+        YangField["type", YangLeaf[YangEnum["function"]]],
+        YangField[
+            "function",
+            YangContainer[
+                OpenRouterFunction[
+                    Self.tool_name, Self.Description, Self.Parameters
+                ]
+            ],
+        ],
+    ]
 
     @staticmethod
     def yang_container_name() -> String:
-        return "tool_call"
+        return Self.Schema.yang_container_name()
 
     @staticmethod
     def comptime_validate(read module: YangModule) raises:
         pass
+
+    @staticmethod
+    def field_count() -> Int:
+        return Self.Schema.field_count()
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Schema.field_name[i]()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        Self.Schema.append_model_fields(parent)
 
     var id: YangLeaf[YangBuiltinString, YangConstraints[MaxStringLength[256]]]
     var type: YangLeaf[YangEnum["function"]]
@@ -146,13 +249,40 @@ struct OpenRouterToolCalls[
     Parameters: YangModeled,
     Callback: OpenRouterToolCallback,
 ](ImplicitlyDestructible, Movable, YangModeled):
+    comptime Schema = YangModel[
+        "openrouter_tool_calls",
+        YangField[
+            "tool_calls",
+            YangList[
+                OpenRouterToolCall[
+                    Self.tool_name,
+                    Self.Description,
+                    Self.Parameters,
+                    Self.Callback,
+                ]
+            ],
+        ],
+    ]
+
     @staticmethod
     def yang_container_name() -> String:
-        return "openrouter_tool_calls"
+        return Self.Schema.yang_container_name()
 
     @staticmethod
     def comptime_validate(read module: YangModule) raises:
         validate_yang_subtree[Self](module)
+
+    @staticmethod
+    def field_count() -> Int:
+        return Self.Schema.field_count()
+
+    @staticmethod
+    def field_name[i: Int]() -> String:
+        return Self.Schema.field_name[i]()
+
+    @staticmethod
+    def append_model_fields(mut parent: YangConstruct) raises:
+        Self.Schema.append_model_fields(parent)
 
     var tool_calls: YangList[
         OpenRouterToolCall[
