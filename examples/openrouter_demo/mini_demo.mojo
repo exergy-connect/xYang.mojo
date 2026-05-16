@@ -7,7 +7,8 @@ from xyang.api import (
     YangEnum,
     YangField,
     YangLeaf,
-    YangModel,
+    YangList,
+    YangListModel,
     json_from_modeled_instance,
     yang_module_from_model,
 )
@@ -15,14 +16,15 @@ from xyang.api import (
 from open_router import OpenRouterFunction
 
 comptime MINI_TOOL_DESCRIPTION = "Mini demo tool with a single string parameter."
-comptime MiniParams = YangModel[
+comptime MiniParamEntry = YangListModel[
     "mini_params",
+    "ping",
     YangField["ping", YangLeaf[YangBuiltinString]],
 ]
 comptime MiniFn = OpenRouterFunction[
     "echo",
     MINI_TOOL_DESCRIPTION,
-    MiniParams,
+    MiniParamEntry,
 ]
 
 

@@ -12,6 +12,8 @@ from .types import (
     YangDataNodeSpec,
     LeafModelSpec,
     NodeModelSpec,
+    YangList,
+    YangListItem,
     YangModeled,
 )
 
@@ -37,9 +39,30 @@ def _append_arg(mut parent: YangConstruct, keyword: String, argument: String):
     _append_stmt(parent, child^)
 
 
+def find_module_top_data_node(
+    read module: YangModule, read name: String
+) raises -> Optional[Arc[YangConstruct]]:
+    """Top-level ``container`` or ``list`` node with argument ``name``."""
+
+    var opt = module.top_container(name)
+    if opt:
+        return opt
+    from xyang.yang.spec import `container`, `list`
+
+    ref root = module.root_construct()
+    for child in root[].children:
+        if not child[].has_argument():
+            continue
+        if child[].argument_text() != name:
+            continue
+        if child[].spec == `container` or child[].spec == `list`:
+            return Optional[Arc[YangConstruct]](child.copy())
+    return Optional[Arc[YangConstruct]]()
+
+
 def validate_yang_subtree[T: YangModeled](read module: YangModule) raises:
     var want = T.yang_container_name()
-    var actual = module.top_container(want)
+    var actual = find_module_top_data_node(module, want)
     if not actual:
         raise Error(
             "model: Yang subtree missing top container `" + want + "`"
@@ -47,7 +70,7 @@ def validate_yang_subtree[T: YangModeled](read module: YangModule) raises:
     var generated = yang_module_from_model[T](
         module.get_name(), module.get_namespace(), module.get_prefix()
     )
-    var expected = generated.top_container(want)
+    var expected = find_module_top_data_node(generated, want)
     if not expected:
         raise Error(
             "model: generated schema missing top container `" + want + "`"
@@ -57,6 +80,60 @@ def validate_yang_subtree[T: YangModeled](read module: YangModule) raises:
             "model: generated container `"
             + want
             + "` does not match module container `"
+            + want
+            + "`"
+        )
+
+
+def list_construct_from_entry[T: YangListItem]() raises -> YangConstruct:
+    """Build a top-level ``list`` node for list entry type ``T``."""
+
+    var node = _stmt("list", T.yang_container_name())
+    var key = String(T.LIST_KEY)
+    if key.byte_length() > 0:
+        _append_arg(node, "key", key)
+    T.append_model_fields(node)
+    return node^
+
+
+def yang_module_from_list_entry[T: YangListItem](
+    module_name: String,
+    namespace: String,
+    prefix: String,
+    yang_version: String = "1.1",
+) raises -> YangModule:
+    """Build a ``module`` whose sole top-level data node is ``list`` ``T``."""
+
+    var root = _stmt("module", module_name)
+    _append_arg(root, "yang-version", yang_version)
+    _append_arg(root, "namespace", namespace)
+    _append_arg(root, "prefix", prefix)
+    _append_stmt(root, list_construct_from_entry[T]()^)
+    var module = YangModule()
+    module.ingest_construct_tree(root^)
+    return module^
+
+
+def validate_yang_subtree_list[T: YangListItem](read module: YangModule) raises:
+    var want = T.yang_container_name()
+    var actual = find_module_top_data_node(module, want)
+    if not actual:
+        raise Error(
+            "model: Yang subtree missing top list `" + want + "`"
+        )
+    var generated = yang_module_from_list_entry[T](
+        module.get_name(), module.get_namespace(), module.get_prefix()
+    )
+    var expected = find_module_top_data_node(generated, want)
+    if not expected:
+        raise Error(
+            "model: generated schema missing top list `" + want + "`"
+        )
+    if actual.value()[].format(0) != expected.value()[].format(0):
+        raise Error(
+            "model: generated list `"
+            + want
+            + "` does not match module list `"
             + want
             + "`"
         )
@@ -175,7 +252,7 @@ def container_construct_from_model[T: YangModeled]() raises -> YangConstruct:
 
 
 trait YangModuleSketch:
-    """Lower multiple top-level ``container`` nodes into one YANG ``module``."""
+    """Lower multiple top-level ``container`` / ``list`` nodes into one ``module``."""
 
     @staticmethod
     def append_containers_to_module(mut module_root: YangConstruct) raises:
@@ -190,7 +267,7 @@ def yang_module_from_sketch[
     prefix: String,
     yang_version: String = "1.1",
 ) raises -> YangModule:
-    """Build one ``module`` with multiple top-level ``container`` nodes from ``T``."""
+    """Build one ``module`` with multiple top-level data nodes from sketch ``T``."""
 
     var root = _stmt("module", module_name)
     _append_arg(root, "yang-version", yang_version)

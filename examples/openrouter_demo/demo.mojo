@@ -12,20 +12,26 @@ from std.os import getenv
 from std.python import Python
 
 from xyang.api import (
+    MaxStringLength,
     YangBuiltinString,
     YangBuiltinUInt16,
     YangConstraints,
     YangEnum,
     YangField,
     YangLeaf,
-    YangModel,
-    YangModeled,
+    YangListItem,
+    YangListModel,
     YangRange,
     json_from_modeled_instance,
     validate_yang_subtree,
-    yang_module_from_model,
+    validate_yang_subtree_list,
+    yang_module_from_list_entry,
+    yang_module_from_sketch,
 )
-from xyang.json import parse_json, yang_json_schema_for_modeled_top_container
+from xyang.json import (
+    parse_json,
+    yang_json_schema_for_modeled_list_entry,
+)
 from xyang.json.value import (
     JsonArray,
     JsonInt,
@@ -130,8 +136,9 @@ comptime DEMO_OPENROUTER_TOOL_DESCRIPTION = (
 )
 
 
-comptime QuoteRequest = YangModel[
+comptime QuoteRequest = YangListModel[
     "quote_request",
+    "product_name",
     YangField["product_name", YangLeaf[ProductName]],
     YangField["quantity", YangLeaf[YangBuiltinUInt16, QuantityConstraints]],
 ]
@@ -154,12 +161,12 @@ def _env(name: String, default_value: String = "") -> String:
 
 
 def _quote_module() raises -> YangModule:
-    var module = yang_module_from_model[QuoteRequest](
+    var module = yang_module_from_list_entry[QuoteRequest](
         "openrouter-quote-tool",
         "urn:example:openrouter-quote-tool",
         "oqt",
     )
-    validate_yang_subtree[QuoteRequest](module)
+    validate_yang_subtree_list[QuoteRequest](module)
     return module^
 
 
@@ -176,26 +183,25 @@ def _tool_calls_module() raises -> YangModule:
 def openrouter_tool_function_tool_json[
     tool_name: StaticString,
     description: StaticString,
-    Parameters: YangModeled,
+    ParametersEntry: YangListItem,
 ]() raises -> Tuple[String, String]:
-    comptime Fn = OpenRouterFunction[tool_name, description, Parameters]
-    var m_fn = yang_module_from_model[Fn](
+    comptime Fn = OpenRouterFunction[tool_name, description, ParametersEntry]
+    var module = yang_module_from_sketch[Fn](
         "openrouter-tool-function-schema",
         "urn:example:openrouter-tool-function-schema",
         "otfns",
     )
-    # Fn.comptime_validate(m_fn)
-    var inst = Fn()
-    inst.name.value = String(tool_name)
-    var inner = json_from_modeled_instance[Fn](inst, m_fn)
-    var m_params = yang_module_from_model[Parameters](
-        "openrouter-quote-tool",
-        "urn:example:openrouter-quote-tool",
-        "oqt",
-    )
-    validate_yang_subtree[Parameters](m_params)
-    var params = yang_json_schema_for_modeled_top_container[Parameters](
-        m_params
+    Fn.comptime_validate(module)
+    var name_leaf = YangLeaf[YangEnum[tool_name]]()
+    name_leaf.value = String(tool_name)
+    var args_leaf = YangLeaf[
+        YangBuiltinString, YangConstraints[MaxStringLength[4096]]
+    ]()
+    args_leaf.value = String("{}")
+    var inst = Fn(name=name_leaf^, arguments=args_leaf^)
+    var inner = json_from_modeled_instance(inst, module)
+    var params = yang_json_schema_for_modeled_list_entry[ParametersEntry](
+        module
     )
     var params_value = parse_json(
         params, "openrouter-tool-parameters-schema.json"
@@ -235,7 +241,7 @@ def _json_int_field(read obj: JsonValue, key: String) raises -> Int:
 
 def _validate_tool_args(read module: YangModule, read args_json: String) raises:
     var wrapped = parse_json(
-        '{"quote_request":' + args_json + "}", "tool-arguments.json"
+        '{"quote_request":[' + args_json + "]}", "tool-arguments.json"
     )
     validate_data(wrapped, module, "tool-arguments.json")
 
@@ -358,7 +364,7 @@ def _validate_tool_calls(read module: YangModule, read calls: JsonValue) raises:
 def _append_tool_results[
     tool_name: StaticString,
     description: StaticString,
-    Parameters: YangModeled,
+    ParametersEntry: YangListItem,
     Callback: OpenRouterToolCallback,
 ](
     read module: YangModule,

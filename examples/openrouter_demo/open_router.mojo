@@ -4,6 +4,8 @@
 ## shadow the modeled `function` leaf field `name`, which must stay `name` for
 ## correct YANG / JSON keys.
 
+from std.memory import ArcPointer
+
 from xyang.api import (
     JsonFromYangWalkInstance,
     LeafModelSpec,
@@ -20,11 +22,33 @@ from xyang.api import (
     YangListModel,
     YangModel,
     YangModeled,
+    YangModuleSketch,
+    container_construct_from_model,
+    list_construct_from_entry,
     validate_yang_subtree,
+    validate_yang_subtree_list,
 )
 from xyang.json.value import JsonPayload, JsonString, JsonValue
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
+
+comptime Arc = ArcPointer
+
+
+def _append_top_level_container[
+    T: YangModeled
+](mut module_root: YangConstruct) raises:
+    module_root.children.append(
+        Arc[YangConstruct](container_construct_from_model[T]()^)
+    )
+
+
+def _append_top_level_list[
+    Entry: YangListItem
+](mut module_root: YangConstruct) raises:
+    module_root.children.append(
+        Arc[YangConstruct](list_construct_from_entry[Entry]()^)
+    )
 
 
 def _json_string_value_from_yang_leaf_field[
@@ -58,15 +82,18 @@ trait OpenRouterToolCallback(Movable):
 struct OpenRouterFunction[
     tool_name: StaticString,
     Description: StaticString,
-    Parameters: YangModeled,
+    ParametersEntry: YangListItem,
 ](
     Defaultable,
     ImplicitlyDestructible,
     JsonFromYangWalkInstance,
     Movable,
     YangModeled,
+    YangModuleSketch,
 ):
     """OpenRouter `function` object: `name` + stringified `arguments`."""
+
+    comptime Parameters = YangList[Self.ParametersEntry]
 
     comptime Schema = YangModel[
         "function",
@@ -87,6 +114,12 @@ struct OpenRouterFunction[
     @staticmethod
     def comptime_validate(read module: YangModule) raises:
         validate_yang_subtree[Self](module)
+        validate_yang_subtree_list[Self.ParametersEntry](module)
+
+    @staticmethod
+    def append_containers_to_module(mut module_root: YangConstruct) raises:
+        _append_top_level_container[Self](module_root)
+        _append_top_level_list[Self.ParametersEntry](module_root)
 
     @staticmethod
     def field_count() -> Int:
@@ -141,9 +174,10 @@ struct OpenRouterFunction[
 struct OpenRouterTool[
     tool_name: StaticString,
     Description: StaticString,
-    Parameters: YangModeled,
+    ParametersEntry: YangListItem,
     Callback: OpenRouterToolCallback,
 ](ImplicitlyDestructible, Movable, YangModeled):
+    comptime Parameters = YangList[Self.ParametersEntry]
     """One OpenRouter `tools[]` entry: `{ "type": "function", "function": … }`.
     """
 
@@ -190,9 +224,10 @@ struct OpenRouterTool[
 struct OpenRouterToolCall[
     tool_name: StaticString,
     Description: StaticString,
-    Parameters: YangModeled,
+    ParametersEntry: YangListItem,
     Callback: OpenRouterToolCallback,
 ](ImplicitlyDestructible, Movable, YangListItem):
+    comptime Parameters = YangList[Self.ParametersEntry]
     comptime LIST_KEY = "id"
     comptime Schema = YangListModel[
         "tool_call",
@@ -246,9 +281,10 @@ struct OpenRouterToolCall[
 struct OpenRouterToolCalls[
     tool_name: StaticString,
     Description: StaticString,
-    Parameters: YangModeled,
+    ParametersEntry: YangListItem,
     Callback: OpenRouterToolCallback,
 ](ImplicitlyDestructible, Movable, YangModeled):
+    comptime Parameters = YangList[Self.ParametersEntry]
     comptime Schema = YangModel[
         "openrouter_tool_calls",
         YangField[

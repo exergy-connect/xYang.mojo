@@ -55,7 +55,11 @@ from .model import (
     construct_from_model_field,
     parse_and_validate_json_against_model,
     validate_data_against_model,
+    find_module_top_data_node,
+    list_construct_from_entry,
     validate_yang_subtree,
+    validate_yang_subtree_list,
+    yang_module_from_list_entry,
     yang_module_from_model,
     yang_module_from_sketch,
 )

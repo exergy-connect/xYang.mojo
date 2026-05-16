@@ -17,6 +17,7 @@ from .value import (
 )
 from .yang_parser import parse_yang_json, parse_yang_json_module
 from .schema_generator import (
+    yang_json_schema_for_modeled_list_entry,
     yang_json_schema_for_modeled_top_container,
     yang_module_to_json_schema,
 )

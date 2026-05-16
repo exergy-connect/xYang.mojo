@@ -18,17 +18,20 @@ from std.memory import ArcPointer
 from xyang.api import (
     MaxStringLength,
     YangBuiltinString,
+    YangBuiltinUInt16,
     YangConstraints,
+    YangContainer as ApiYangContainer,
     YangEnum,
+    YangField as ApiYangField,
     YangLeaf,
+    YangListModel,
+    YangModel,
     YangModeled,
-    YangModuleSketch,
-    container_construct_from_model,
     json_from_modeled_instance,
     validate_yang_subtree,
     yang_module_from_sketch,
 )
-from xyang.json import yang_json_schema_for_modeled_top_container
+from xyang.json import yang_json_schema_for_modeled_list_entry
 from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 
@@ -346,11 +349,24 @@ comptime InnerParams = YangField[
     Runtime=InnerBody,
 ]
 
-comptime MiniParams = YangContainer[
+comptime MiniParamsTemplate = YangContainer[
     "mini_params",
     YangString["ping"],
     InnerParams,
     YangInt["pong"],
+]
+
+comptime InnerParamsModel = YangModel[
+    "inner_params",
+    ApiYangField["count", YangLeaf[YangBuiltinUInt16]],
+]
+
+comptime MiniParamEntry = YangListModel[
+    "mini_params",
+    "ping",
+    ApiYangField["ping", YangLeaf[YangBuiltinString]],
+    ApiYangField["inner_params", ApiYangContainer[InnerParamsModel]],
+    ApiYangField["pong", YangLeaf[YangBuiltinUInt16]],
 ]
 
 comptime OPENROUTER_TOOL_DESCRIPTION = (
@@ -359,59 +375,18 @@ comptime OPENROUTER_TOOL_DESCRIPTION = (
 comptime MiniFn = OpenRouterFunction[
     "echo",
     OPENROUTER_TOOL_DESCRIPTION,
-    MiniParams,
-]
-
-
-struct MiniOpenRouterModule[
-    tool_name: StaticString,
-    Description: StaticString,
-    Parameters: YangModeled,
-](
-    YangModeled,
-    YangModuleSketch,
-):
-    """One module: top-level ``function`` + ``Parameters`` containers."""
-
-    comptime Fn = OpenRouterFunction[Self.tool_name, Self.Description, Self.Parameters]
-
-    @staticmethod
-    def yang_container_name() -> String:
-        return String()
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        validate_yang_subtree[Self.Fn](module)
-        validate_yang_subtree[Self.Parameters](module)
-
-    @staticmethod
-    def append_model_fields(mut parent: YangConstruct) raises:
-        _ = parent
-        raise Error("MiniOpenRouterModule: use yang_module_from_sketch")
-
-    @staticmethod
-    def append_containers_to_module(mut module_root: YangConstruct) raises:
-        _append_stmt(module_root, container_construct_from_model[Self.Fn]())
-        _append_stmt(
-            module_root, container_construct_from_model[Self.Parameters]()
-        )
-
-
-comptime MiniOpenRouter = MiniOpenRouterModule[
-    "echo",
-    OPENROUTER_TOOL_DESCRIPTION,
-    MiniParams,
+    MiniParamEntry,
 ]
 
 
 def main() raises:
-    var module = yang_module_from_sketch[MiniOpenRouter](
+    var module = yang_module_from_sketch[MiniFn](
         "openrouter-template-demo",
         "urn:example:openrouter-template-demo",
         "otd",
     )
-    MiniOpenRouter.comptime_validate(module)
-    var params_schema = yang_json_schema_for_modeled_top_container[MiniParams](
+    MiniFn.comptime_validate(module)
+    var params_schema = yang_json_schema_for_modeled_list_entry[MiniParamEntry](
         module
     )
     print("=== parameters JSON Schema (OpenRouterFunction.Parameters) ===")
@@ -429,7 +404,7 @@ def main() raises:
     print("\n=== OpenRouterFunction instance JSON ===")
     print(json_from_modeled_instance(fn_inst, module).to_string())
 
-    var inst = MiniParams(
+    var inst = MiniParamsTemplate(
         values=(
             String("hello"),
             InnerBody(values=(5,)),

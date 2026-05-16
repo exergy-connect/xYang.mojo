@@ -1,6 +1,6 @@
 ## YANG AST -> JSON Schema with `x-yang` annotations.
 
-from xyang.api.types import YangModeled
+from xyang.api.types import YangListItem, YangModeled
 from xyang.json.value import json_escape
 from xyang.yang.arguments import TypeArgument
 from xyang.yang.ast.construct import YangConstruct
@@ -784,6 +784,43 @@ def yang_module_to_json_schema(read module: YangModule) raises -> String:
     return out^
 
 
+def _emit_list_entry_object_schema(
+    read module: YangModule,
+    read list_node: YangConstruct,
+    indent: Int,
+    additional_properties_false: Bool,
+    include_x_yang: Bool,
+) -> String:
+    var out = "{\n"
+    var count = 0
+    _append_pair(out, count, indent + 1, "type", _q("object"))
+    if additional_properties_false:
+        _append_pair(
+            out, count, indent + 1, "additionalProperties", "false"
+        )
+    _append_description(out, count, list_node, indent + 1)
+    if include_x_yang:
+        _append_pair(
+            out,
+            count,
+            indent + 1,
+            "x-yang",
+            _emit_x_yang(list_node, "list", indent + 1),
+        )
+    _append_child_properties(
+        module,
+        out,
+        count,
+        list_node,
+        indent + 1,
+        additional_properties_false,
+        include_x_yang,
+    )
+    _append_required(list_node, out, count, indent + 1)
+    out += "\n" + _indent(indent) + "}"
+    return out^
+
+
 def yang_json_schema_for_modeled_top_container[
     T: YangModeled
 ](
@@ -791,8 +828,10 @@ def yang_json_schema_for_modeled_top_container[
     additional_properties_false: Bool = True,
     include_x_yang: Bool = True,
 ) raises -> String:
+    from xyang.api.model import find_module_top_data_node
+
     var cname = T.yang_container_name()
-    var opt = module.top_container(cname)
+    var opt = find_module_top_data_node(module, cname)
     if not opt:
         raise Error(
             "yang_json_schema_for_modeled_top_container: no top-level"
@@ -804,5 +843,30 @@ def yang_json_schema_for_modeled_top_container[
         )
     ref node = opt.value()[]
     return _emit_node_schema(
+        module, node, 0, additional_properties_false, include_x_yang
+    )
+
+
+def yang_json_schema_for_modeled_list_entry[
+    T: YangListItem
+](
+    read module: YangModule,
+    additional_properties_false: Bool = True,
+    include_x_yang: Bool = True,
+) raises -> String:
+    from xyang.api.model import find_module_top_data_node
+
+    var cname = T.yang_container_name()
+    var opt = find_module_top_data_node(module, cname)
+    if not opt:
+        raise Error(
+            "yang_json_schema_for_modeled_list_entry: no top-level list `"
+            + cname
+            + "` in module `"
+            + module.get_name()
+            + "`",
+        )
+    ref node = opt.value()[]
+    return _emit_list_entry_object_schema(
         module, node, 0, additional_properties_false, include_x_yang
     )

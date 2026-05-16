@@ -3,11 +3,10 @@
 ## Run (after `pixi run package`):
 ##   pixi run mojo -I build -I . issues/two_yangleaf_nested_templates_to_json.mojo
 ##
-## This is the non-reflection alternative to
-## `two_yangleaf_reflection_to_json.mojo`: the YANG shape is declared as a
-## variadic nested template, and the runtime value container derives from the
-## same template parameters. Serialization follows those explicit type slots.
+## Heterogeneous `*Leaves`: `YangString`, `YangUInt16`, and nested rows via
+## `YangRowLeaf[DetailsRow]` (row value type stays `DetailsRow`).
 
+from std.builtin.variadics import TypeList
 from std.collections import List
 from std.memory import ArcPointer
 
@@ -22,57 +21,116 @@ from xyang.json.value import (
 comptime Arc = ArcPointer
 
 
-trait YangTemplateLeaf:
-    comptime Value: Copyable & Defaultable & ImplicitlyDestructible & Movable
+trait YangRowNestable(Defaultable, ImplicitlyDestructible, Movable):
+    @staticmethod
+    def yang_name() -> String:
+        ...
+
+    def to_json(read self) raises -> JsonValue:
+        ...
+
+
+struct _NoNested(YangRowNestable):
+    def __init__(out self):
+        pass
+
+    @staticmethod
+    def yang_name() -> String:
+        return ""
+
+    def to_json(read self) raises -> JsonValue:
+        _ = self
+        return JsonValue(
+            JsonValue.OBJECT,
+            JsonPayload(JsonObject(keys=List[String](), values=List[Arc[JsonValue]]())),
+            0,
+        )
+
+
+trait YangNode:
+    comptime Type = UInt8
+    comptime STRING: Self.Type = 0
+    comptime UINT16: Self.Type = 1
+    comptime NESTED_ROW: Self.Type = 2
+
+    comptime NodeType: Self.Type
+    comptime RuntimeValue: Defaultable & ImplicitlyDestructible & Movable
+    comptime NestedBody: YangRowNestable = _NoNested
 
     @staticmethod
     def yang_name() -> String:
         ...
 
     @staticmethod
-    def yang_type_str() -> String:
+    def yang_type() -> Self.Type:
         ...
 
     @staticmethod
-    def json_value(var value: Self.Value) raises -> JsonValue:
+    def is_nested_row() -> Bool:
         ...
 
 
-struct YangString[name: StaticString](YangTemplateLeaf):
-    comptime Value = String
+struct YangString[name: StaticString](YangNode):
+    comptime NodeType = Self.STRING
+    comptime RuntimeValue = String
+    comptime NestedBody = _NoNested
 
     @staticmethod
     def yang_name() -> String:
         return String(Self.name)
 
     @staticmethod
-    def yang_type_str() -> String:
-        return "string"
+    def yang_type() -> Self.Type:
+        return Self.NodeType
 
     @staticmethod
-    def json_value(var value: Self.Value) raises -> JsonValue:
-        return _json_string_value(rebind[String](value))
+    def is_nested_row() -> Bool:
+        return Self.NodeType == Self.NESTED_ROW
 
 
-struct YangUInt16[name: StaticString](YangTemplateLeaf):
-    comptime Value = Int
+struct YangUInt16[name: StaticString](YangNode):
+    comptime NodeType = Self.UINT16
+    comptime RuntimeValue = Int
+    comptime NestedBody = _NoNested
 
     @staticmethod
     def yang_name() -> String:
         return String(Self.name)
 
     @staticmethod
-    def yang_type_str() -> String:
-        return "uint16"
+    def yang_type() -> Self.Type:
+        return Self.NodeType
 
     @staticmethod
-    def json_value(value: Self.Value) raises -> JsonValue:
-        return _json_int_value(Int64(rebind[Int](value)))
+    def is_nested_row() -> Bool:
+        return Self.NodeType == Self.NESTED_ROW
 
 
-comptime LeafValue[
-    Leaf: YangTemplateLeaf,
-]: Copyable & Defaultable & ImplicitlyDestructible & Movable = Leaf.Value
+struct YangRowLeaf[
+    Body: YangRowNestable,
+](YangNode):
+    """Field descriptor for a nested `YangRow`; tuple slot type is `Body`."""
+
+    comptime NodeType = Self.NESTED_ROW
+    comptime RuntimeValue = Self.Body
+    comptime NestedBody = Self.Body
+
+    @staticmethod
+    def yang_name() -> String:
+        return Self.Body.yang_name()
+
+    @staticmethod
+    def yang_type() -> Self.Type:
+        return Self.NodeType
+
+    @staticmethod
+    def is_nested_row() -> Bool:
+        return Self.NodeType == Self.NESTED_ROW
+
+
+comptime LeafRuntime[
+    Leaf: YangNode,
+]: Defaultable & ImplicitlyDestructible & Movable = Leaf.RuntimeValue
 
 
 trait YangTemplateObject:
@@ -91,7 +149,7 @@ trait YangTemplateObject:
 
 struct YangObject[
     name: StaticString,
-    *Fields: YangTemplateLeaf,
+    *Leaves: YangNode,
 ](YangTemplateObject):
     @staticmethod
     def yang_name() -> String:
@@ -99,11 +157,11 @@ struct YangObject[
 
     @staticmethod
     def field_count() -> Int:
-        return len(Self.Fields)
+        return len(Self.Leaves)
 
     @staticmethod
     def field_name[i: Int]() -> String:
-        return Self.Fields[i].yang_name()
+        return Self.Leaves[i].yang_name()
 
 
 def _json_string_value(var value: String) -> JsonValue:
@@ -124,66 +182,77 @@ def _json_int_value(value: Int64) -> JsonValue:
 
 struct YangRow[
     name: StaticString,
-    *Fields: YangTemplateLeaf,
+    *Leaves: YangNode,
 ](
+    Defaultable,
     ImplicitlyDestructible,
     Movable,
+    YangRowNestable,
 ):
-    comptime Schema = YangObject[Self.name, *Self.Fields]
-    comptime ValueTypes = TypeList.of[
-        Trait=YangTemplateLeaf, *Self.Fields
+    comptime Schema = YangObject[Self.name, *Self.Leaves]
+    comptime SlotTypes = TypeList.of[
+        Trait=YangNode, *Self.Leaves
     ]().map[
-        ToTrait=Copyable & Defaultable & ImplicitlyDestructible & Movable,
-        LeafValue,
+        ToTrait=Defaultable & ImplicitlyDestructible & Movable,
+        LeafRuntime,
     ]()
 
-    var values: Tuple[*Self.ValueTypes]
+    var slots: Tuple[*Self.SlotTypes]
 
     def __init__(out self):
-        comptime assert Self.Schema.field_count() == len(Self.Fields)
-        comptime for i in range(len(Self.Fields)):
-            comptime assert (
-                Self.Schema.field_name[i]() == Self.Fields[i].yang_name()
-            )
-        self.values = Tuple[*Self.ValueTypes]()
+        self.slots = Tuple[*Self.SlotTypes]()
 
-    def set[i: Int](mut self, var value: Self.ValueTypes[i]):
-        comptime assert i >= 0 and i < len(Self.Fields)
-        self.values[i] = value^
+    def __init__(out self, *, var slot_values: Tuple[*Self.SlotTypes]):
+        self.slots = slot_values^
+
+    @staticmethod
+    def yang_name() -> String:
+        return String(Self.name)
+
+    def set[i: Int](mut self, var value: Self.SlotTypes[i]):
+        comptime assert i >= 0 and i < len(Self.Leaves)
+        self.slots[i] = value^
 
     @staticmethod
     def field_index[field_name: StaticString]() -> Int:
-        comptime for i in range(len(Self.Fields)):
+        comptime for i in range(len(Self.Leaves)):
             comptime if String(field_name) == Self.Schema.field_name[i]():
                 return i
         return -1
 
     def set_by_name[
         field_name: StaticString,
-        Value: Copyable & Defaultable & ImplicitlyDestructible & Movable,
+        Value: Defaultable & ImplicitlyDestructible & Movable,
     ](
         mut self, var value: Value
     ) raises:
         comptime i = Self.field_index[field_name]()
         comptime assert i >= 0, "unknown schema field"
-        self.set[i](rebind_var[Self.ValueTypes[i]](value^))
+        comptime assert not Self.Leaves[i].is_nested_row(), (
+            "field is a nested row; assign the whole row value for now"
+        )
+        self.set[i](rebind_var[Self.SlotTypes[i]](value^))
+
+    def _field_json[i: Int](read self) raises -> JsonValue:
+        comptime field = Self.Leaves[i]
+        comptime if field.yang_type() == field.NESTED_ROW:
+            return rebind[field.NestedBody](self.slots[i]).to_json()
+        comptime if field.yang_type() == field.STRING:
+            return _json_string_value(String(rebind[String](self.slots[i])))
+        comptime if field.yang_type() == field.UINT16:
+            return _json_int_value(Int64(rebind[Int](self.slots[i])))
+        raise Error("unsupported YangNode.Type")
 
     def to_json(read self) raises -> JsonValue:
-        comptime assert Self.Schema.field_count() == len(Self.Fields)
+        comptime assert Self.Schema.field_count() == len(Self.Leaves)
         var keys = List[String]()
         var vals = List[Arc[JsonValue]]()
-        comptime for i in range(len(Self.Fields)):
+        comptime for i in range(len(Self.Leaves)):
             comptime assert (
-                Self.Schema.field_name[i]() == Self.Fields[i].yang_name()
+                Self.Schema.field_name[i]() == Self.Leaves[i].yang_name()
             )
             keys.append(Self.Schema.field_name[i]())
-            var value = rebind_var[Self.Fields[i].Value](
-                self.values[i].copy()
-            )
-            vals.append(
-                Arc[JsonValue](Self.Fields[i].json_value(value^))
-            )
-
+            vals.append(Arc[JsonValue](self._field_json[i]()))
         return JsonValue(
             JsonValue.OBJECT,
             JsonPayload(JsonObject(keys=keys^, values=vals^)),
@@ -191,15 +260,29 @@ struct YangRow[
         )
 
 
+comptime DetailsRow = YangRow[
+    "details",
+    YangString["comment"],
+    YangUInt16["amount"],
+]
+
+comptime DetailsField = YangRowLeaf[DetailsRow]
+
 comptime CatalogLineRow = YangRow[
     "catalog_line",
     YangString["title"],
     YangUInt16["units"],
+    DetailsField,
 ]
 
 
 def main() raises:
-    var row = CatalogLineRow()
-    row.set_by_name["title"](String("mug"))
-    row.set_by_name["units"](3)
+    var details = DetailsRow(slot_values=(String("new mug"), 42))
+    var row = CatalogLineRow(
+        slot_values=(
+            String("mug"),
+            3,
+            details^,
+        )
+    )
     print(row.to_json().to_string())
