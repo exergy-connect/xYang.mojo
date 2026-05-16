@@ -26,13 +26,21 @@ OPENROUTER_MODEL='some/provider-model:free' pixi run openrouter-demo
 
 ## What It Shows
 
-- `examples/openrouter_tool_demo.mojo` owns the compile-time product catalog,
+- `examples/openrouter_demo/demo.mojo` owns the compile-time product catalog,
   the `QuoteRequest` xYang model, response parsing, validation, and callback
   dispatch.
 - `QuoteRequest.product_name` is a `YangEnum[...]` specialized from the
   compile-time product names.
-- The OpenRouter function `parameters` object is extracted from
-  `yang_module_from_model[QuoteRequest]` and `yang_module_to_json_schema`.
+- `OpenRouterToolFunction[tool_name, Parameters]` is parameterized by a
+  compile-time `StaticString` tool name and a `Parameters: YangModeled` type for
+  the OpenRouter **`parameters`** JSON Schema (here `QuoteCartItemOpenRouterToolFunction`
+  = `OpenRouterToolFunction["quote_cart_item", QuoteRequest]`). The wire
+  `function` subtree still carries an `arguments` string leaf for API
+  compatibility.
+- The OpenRouter **`parameters`** object is projected from
+  `yang_module_from_model[Parameters]` and
+  `yang_json_schema_for_modeled_top_container[Parameters]` (same emitter as
+  `yang_module_to_json_schema`, scoped to the modeled parameters container).
 - The model returns a `tool_calls` assistant message.
 - The callback wraps the raw arguments as `{"quote_request": ...}` and calls
   `validate_data` in-process against the embedded YANG contract.

@@ -151,6 +151,23 @@ struct YangRow[
         comptime assert i >= 0 and i < len(Self.Fields)
         self.values[i] = value^
 
+    @staticmethod
+    def field_index[field_name: StaticString]() -> Int:
+        comptime for i in range(len(Self.Fields)):
+            comptime if String(field_name) == Self.Schema.field_name[i]():
+                return i
+        return -1
+
+    def set_by_name[
+        field_name: StaticString,
+        Value: Copyable & Defaultable & ImplicitlyDestructible & Movable,
+    ](
+        mut self, var value: Value
+    ) raises:
+        comptime i = Self.field_index[field_name]()
+        comptime assert i >= 0, "unknown schema field"
+        self.set[i](rebind_var[Self.ValueTypes[i]](value^))
+
     def to_json(read self) raises -> JsonValue:
         comptime assert Self.Schema.field_count() == len(Self.Fields)
         var keys = List[String]()
@@ -183,6 +200,6 @@ comptime CatalogLineRow = YangRow[
 
 def main() raises:
     var row = CatalogLineRow()
-    row.set[0](String("mug"))
-    row.set[1](3)
+    row.set_by_name["title"](String("mug"))
+    row.set_by_name["units"](3)
     print(row.to_json().to_string())

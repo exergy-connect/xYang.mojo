@@ -77,6 +77,23 @@ struct SchemaRow[
     def set[i: Int](mut self, var value: Self.ValueTypes[i]):
         comptime assert i >= 0 and i < len(Self.Fields)
         self.values[i] = value^
+
+    @staticmethod
+    def field_index[field_name: StaticString]() -> Int:
+        comptime for i in range(len(Self.Fields)):
+            comptime if String(field_name) == Self.Schema.field_name[i]():
+                return i
+        return -1
+
+    def set_by_name[
+        field_name: StaticString,
+        Value: Copyable & Defaultable & ImplicitlyDestructible & Movable,
+    ](
+        mut self, var value: Value
+    ) raises:
+        comptime i = Self.field_index[field_name]()
+        comptime assert i >= 0, "unknown schema field"
+        self.set[i](rebind_var[Self.ValueTypes[i]](value^))
 ```
 
 Then give call sites a single alias:
@@ -89,9 +106,32 @@ comptime CatalogLineRow = SchemaRow[
 ]
 
 var row = CatalogLineRow()
-row.set[0](String("mug"))
-row.set[1](3)
+row.set_by_name["title"](String("mug"))
+row.set_by_name["units"](3)
 ```
+
+## Name-based setters
+
+Use a compile-time field-name parameter when call sites should be resilient to
+field order or more readable than numeric indexes. The method still compiles to
+one typed slot assignment because `comptime for` resolves the matching field at
+compile time.
+
+Rules:
+
+1. Make `field_name` a `StaticString` parameter, not a runtime `String`.
+2. Use a `field_index[field_name]()` helper with `comptime for` over
+   `len(Self.Fields)`.
+3. Use `comptime if String(field_name) == Self.Schema.field_name[i]()` in that
+   helper to find the slot.
+4. In `set_by_name`, use `comptime assert i >= 0` so unknown names fail at
+   compile time.
+5. Forward through the typed index setter (`self.set[i](...)`) rather than
+   duplicating storage assignment logic.
+6. Bound the incoming `Value` enough for `rebind_var`:
+   `Copyable & Defaultable & ImplicitlyDestructible & Movable`.
+7. Let `Value` be inferred from the argument at the call site:
+   `row.set_by_name["field"](value)`.
 
 ## Why
 
@@ -124,3 +164,5 @@ and value tuple from one pack.
    tuple element and `Fields[i].Value` are identical.
 5. Prefer a named row alias (`CatalogLineRow`) at call sites; it keeps the
    schema declaration single-source and construction short.
+6. Prefer `set_by_name["field"](value)` for public examples and tests; keep
+   `set[i](value)` available as the lower-level primitive.

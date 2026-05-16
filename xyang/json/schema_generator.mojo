@@ -1,5 +1,6 @@
 ## YANG AST -> JSON Schema with `x-yang` annotations.
 
+from xyang.api.types import YangModeled
 from xyang.json.value import json_escape
 from xyang.yang.arguments import TypeArgument
 from xyang.yang.ast.construct import YangConstruct
@@ -256,14 +257,20 @@ def _append_x_yang_common(
     var config_arg = _child_arg(node, `config`)
     if config_arg:
         _append_pair(
-            xyang, count, indent, "config", _json_bool(config_arg.value() == "true")
+            xyang,
+            count,
+            indent,
+            "config",
+            _json_bool(config_arg.value() == "true"),
         )
     var status_arg = _child_arg(node, `status`)
     if status_arg:
         _append_pair(xyang, count, indent, "status", _q(status_arg.value()))
     var reference_arg = _child_arg(node, `reference`)
     if reference_arg:
-        _append_pair(xyang, count, indent, "reference", _q(reference_arg.value()))
+        _append_pair(
+            xyang, count, indent, "reference", _q(reference_arg.value())
+        )
     var units_arg = _child_arg(node, `units`)
     if units_arg:
         _append_pair(xyang, count, indent, "units", _q(units_arg.value()))
@@ -421,6 +428,7 @@ def _append_child_properties(
     mut count: Int,
     read parent: YangConstruct,
     indent: Int,
+    additional_properties_false: Bool = False,
 ):
     var props = String("{\n")
     var prop_count = 0
@@ -432,7 +440,9 @@ def _append_child_properties(
         if prop_count > 0:
             props += ",\n"
         props += _indent(indent + 1) + _q(child[].argument_text()) + ": "
-        props += _emit_node_schema(module, child[], indent + 1)
+        props += _emit_node_schema(
+            module, child[], indent + 1, additional_properties_false
+        )
         prop_count += 1
     props += "\n" + _indent(indent) + "}"
     if prop_count > 0:
@@ -483,7 +493,10 @@ def _append_schema_defaults(
 
 
 def _emit_node_schema(
-    read module: YangModule, read node: YangConstruct, indent: Int
+    read module: YangModule,
+    read node: YangConstruct,
+    indent: Int,
+    additional_properties_false: Bool = False,
 ) -> String:
     from xyang.yang.spec import (
         `anydata`,
@@ -502,6 +515,10 @@ def _emit_node_schema(
     var count = 0
     if node.spec == `container`:
         _append_pair(out, count, indent + 1, "type", _q("object"))
+        if additional_properties_false:
+            _append_pair(
+                out, count, indent + 1, "additionalProperties", "false"
+            )
         _append_description(out, count, node, indent + 1)
         _append_pair(
             out,
@@ -510,7 +527,9 @@ def _emit_node_schema(
             "x-yang",
             _emit_x_yang(node, "container", indent + 1),
         )
-        _append_child_properties(module, out, count, node, indent + 1)
+        _append_child_properties(
+            module, out, count, node, indent + 1, additional_properties_false
+        )
         _append_required(node, out, count, indent + 1)
     elif node.spec == `list`:
         _append_pair(out, count, indent + 1, "type", _q("array"))
@@ -737,3 +756,24 @@ def yang_module_to_json_schema(read module: YangModule) raises -> String:
     _append_defs(module, out, count, 1)
     out += "\n}\n"
     return out^
+
+
+def yang_json_schema_for_modeled_top_container[
+    T: YangModeled
+](
+    read module: YangModule,
+    additional_properties_false: Bool = True,
+) raises -> String:
+    var cname = T.yang_container_name()
+    var opt = module.top_container(cname)
+    if not opt:
+        raise Error(
+            "yang_json_schema_for_modeled_top_container: no top-level"
+            " container `"
+            + cname
+            + "` in module `"
+            + module.get_name()
+            + "`",
+        )
+    ref node = opt.value()[]
+    return _emit_node_schema(module, node, 0, additional_properties_false)

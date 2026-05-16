@@ -4,6 +4,7 @@
 
 from xyang.yang.ast.module import YangModule
 from xyang.validator.pattern_match import yang_string_matches_xsd_subset
+from std.reflection import reflect
 
 
 trait StringLengthCap:
@@ -31,6 +32,7 @@ trait StringPatternConstraint:
 
 
 comptime StdTraits = Copyable & Defaultable & ImplicitlyDestructible & Movable & Writable
+
 
 @fieldwise_init
 struct NoStringConstraints(
@@ -129,8 +131,8 @@ trait NumericRangeConstraint:
 
 @fieldwise_init
 struct NoNumericRange(
-    StdTraits,
     NumericRangeConstraint,
+    StdTraits,
 ):
     @staticmethod
     def model_range_min() -> Int64:
@@ -150,8 +152,8 @@ struct YangRange[
     min: Int64,
     max: Int64,
 ](
-    StdTraits,
     NumericRangeConstraint,
+    StdTraits,
 ):
     @staticmethod
     def model_range_min() -> Int64:
@@ -496,7 +498,17 @@ struct YangMust[
         return len(Self.conditions) > 0
 
 
-trait YangListItem:
+trait YangModeled:
+    @staticmethod
+    def yang_container_name() -> String:
+        ...
+
+    @staticmethod
+    def comptime_validate(read module: YangModule) raises:
+        ...
+
+
+trait YangListItem(YangModeled):
     comptime LIST_KEY: StaticString
 
 
@@ -525,18 +537,8 @@ trait NodeModelSpec:
 comptime LeafModelSpec = StringLengthCap & StringPatternConstraint & NumericRangeConstraint & NodeModelSpec
 
 
-trait YangModeled:
-    @staticmethod
-    def yang_container_name() -> String:
-        ...
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        ...
-
-
 @fieldwise_init
-struct NoYangModel(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
+struct NoYangModel(ImplicitlyDestructible, Movable, YangListItem):
     comptime LIST_KEY = ""
 
     @staticmethod
@@ -550,7 +552,7 @@ struct NoYangModel(ImplicitlyDestructible, Movable, YangListItem, YangModeled):
 
 trait YangDataNodeSpec:
     comptime ChildType: YangModeled
-    comptime EntryType: YangModeled & YangListItem
+    comptime EntryType: YangListItem
 
     @staticmethod
     def yang_node_kind() -> String:
@@ -569,11 +571,21 @@ trait YangDataNodeSpec:
         ...
 
 
+trait YangLeafValueReadable:
+    def yang_leaf_string_value(read self) -> String:
+        ...
+
+    def yang_leaf_bool_value(read self) -> Bool:
+        ...
+
+    def yang_leaf_int64_value(read self) -> Int64:
+        ...
+
+
 struct NodeConstraints[
     When: YangWhenPredicate = NoYangWhen,
     Must: YangMustConstraints = NoYangMust,
 ](NodeModelSpec):
-
     @staticmethod
     def yang_when_condition() -> String:
         return Self.When.yang_when_condition()
@@ -602,7 +614,6 @@ struct YangConstraints[
     When: YangWhenPredicate = NoYangWhen,
     Must: YangMustConstraints = NoYangMust,
 ](LeafModelSpec):
-
     @staticmethod
     def model_max_string_length() -> Int:
         return Self.Constraints.model_max_string_length()
@@ -655,15 +666,17 @@ struct YangConstraints[
     def has_yang_must() -> Bool:
         return Self.Must.has_yang_must()
 
+
 struct YangLeaf[
     Builtin: YangBuiltinDescriptor,
     C: LeafModelSpec = YangConstraints[],
 ](
+    Defaultable,
     ImplicitlyDestructible,
     LeafModelSpec,
     Movable,
-    Defaultable,
     YangDataNodeSpec,
+    YangLeafValueReadable,
 ):
     comptime BuiltinType = Self.Builtin
     comptime ConstraintType = Self.C
@@ -690,6 +703,19 @@ struct YangLeaf[
     @staticmethod
     def yang_enum_count() -> Int:
         return Self.Builtin.yang_enum_count()
+
+    def yang_leaf_string_value(read self) -> String:
+        return String(self.value)
+
+    def yang_leaf_bool_value(read self) -> Bool:
+        return rebind[Bool](self.value)
+
+    def yang_leaf_int64_value(read self) -> Int64:
+        comptime value_type = Self.Builtin.Value
+        comptime value_type_name = reflect[value_type].name()
+        comptime if value_type_name == reflect[Int64].name():
+            return rebind[Int64](self.value)
+        return Int64(rebind[Int](self.value))
 
     @staticmethod
     def model_max_string_length() -> Int:
@@ -748,10 +774,10 @@ struct YangLeafList[
     Builtin: YangBuiltinDescriptor,
     C: LeafModelSpec = YangConstraints[],
 ](
+    Defaultable,
     ImplicitlyDestructible,
     LeafModelSpec,
     Movable,
-    Defaultable,
     YangDataNodeSpec,
 ):
     comptime BuiltinType = Self.Builtin
@@ -835,7 +861,7 @@ struct YangLeafList[
 
 @fieldwise_init
 struct YangContainer[
-    Child: Movable & ImplicitlyDestructible & YangModeled,
+    Child: Movable & ImplicitlyDestructible & Defaultable & YangModeled,
     C: NodeModelSpec = NodeConstraints[],
 ](
     ImplicitlyDestructible,
@@ -849,6 +875,9 @@ struct YangContainer[
     comptime ConstraintType = Self.C
 
     var body: Self.Child
+
+    def __init__(out self):
+        self.body = Self.Child()
 
     @staticmethod
     def yang_node_kind() -> String:
@@ -924,13 +953,13 @@ struct YangContainer[
 
 
 struct YangList[
-    Entry: Movable & ImplicitlyDestructible & YangListItem & YangModeled,
+    Entry: Movable & ImplicitlyDestructible & YangListItem,
     C: NodeModelSpec = NodeConstraints[],
 ](
+    Defaultable,
     ImplicitlyDestructible,
     LeafModelSpec,
     Movable,
-    Defaultable,
     NodeModelSpec,
     YangDataNodeSpec,
 ):

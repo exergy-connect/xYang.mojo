@@ -1,7 +1,13 @@
 ## Public API for field-annotated Mojo structs bound to YANG schemas.
 
+from .data import (
+    JsonFromYangWalkInstance,
+    json_from_instance,
+    json_from_modeled_instance,
+)
 from .types import (
     ## Constraint traits and defaults
+    LeafModelSpec,
     MaxStringLength,
     NodeConstraints,
     NodeModelSpec,
@@ -32,6 +38,7 @@ from .types import (
     YangContainer,
     YangDataNodeSpec,
     YangLeaf,
+    YangLeafValueReadable,
     YangLeafList,
     YangList,
     YangListItem,

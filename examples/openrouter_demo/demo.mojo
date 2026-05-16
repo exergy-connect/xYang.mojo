@@ -6,27 +6,28 @@
 ##   pixi run package
 ##   OPENROUTER_API_KEY=... pixi run openrouter-demo
 
+from std.collections import List
+from std.memory import ArcPointer
 from std.python import Python
 
 from xyang.api import (
-    MaxStringLength,
     YangBuiltinString,
     YangBuiltinUInt16,
     YangConstraints,
-    YangContainer,
     YangEnum,
     YangLeaf,
-    YangList,
-    YangListItem,
     YangModeled,
     YangRange,
+    json_from_modeled_instance,
     validate_yang_subtree,
     yang_module_from_model,
 )
-from xyang.json import parse_json
+from xyang.json import parse_json, yang_json_schema_for_modeled_top_container
 from xyang.json.value import (
     JsonArray,
     JsonInt,
+    JsonObject,
+    JsonPayload,
     JsonString,
     JsonValue,
     json_escape,
@@ -35,13 +36,80 @@ from xyang.json.value import (
 from xyang.validator.document import validate_data
 from xyang.yang.ast.module import YangModule
 
+from open_router import (
+    OPENROUTER_URL,
+    OpenRouterFunction,
+    OpenRouterToolCallback,
+    OpenRouterToolCalls,
+)
 
-comptime OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-comptime PRODUCT_TEA = "Jasmine green tea"
-comptime PRODUCT_MUG = "Stoneware mug"
-comptime PRODUCT_BEANS = "House espresso beans"
-comptime PRODUCT_FILTER = "Paper filter pack"
+comptime Arc = ArcPointer
+
+
+def _openrouter_tool_definition_value(
+    read inner_function_data: JsonValue,
+    read description: String,
+    var parameters_schema: JsonValue,
+) raises -> JsonValue:
+    var name_slot = json_get(inner_function_data, "name")
+    if not name_slot or name_slot.value()[].kind != JsonValue.STRING:
+        raise Error("json_from_instance result missing string `name`")
+    var tool_name_str = name_slot.value()[].payload[JsonString].value
+    var fn_keys = List[String]()
+    var fn_vals = List[Arc[JsonValue]]()
+    fn_keys.append("name")
+    fn_vals.append(
+        Arc[JsonValue](
+            JsonValue(
+                JsonValue.STRING,
+                JsonPayload(JsonString(value=tool_name_str.copy())),
+                0,
+            )
+        )
+    )
+    fn_keys.append("description")
+    fn_vals.append(
+        Arc[JsonValue](
+            JsonValue(
+                JsonValue.STRING,
+                JsonPayload(JsonString(value=String(description))),
+                0,
+            )
+        )
+    )
+    fn_keys.append("parameters")
+    fn_vals.append(Arc[JsonValue](parameters_schema^))
+    var fn_obj = JsonValue(
+        JsonValue.OBJECT,
+        JsonPayload(JsonObject(keys=fn_keys^, values=fn_vals^)),
+        0,
+    )
+    var out_keys = List[String]()
+    var out_vals = List[Arc[JsonValue]]()
+    out_keys.append("type")
+    out_vals.append(
+        Arc[JsonValue](
+            JsonValue(
+                JsonValue.STRING,
+                JsonPayload(JsonString(value=String("function"))),
+                0,
+            )
+        )
+    )
+    out_keys.append("function")
+    out_vals.append(Arc[JsonValue](fn_obj^))
+    return JsonValue(
+        JsonValue.OBJECT,
+        JsonPayload(JsonObject(keys=out_keys^, values=out_vals^)),
+        0,
+    )
+
+
+comptime PRODUCT_TEA = "jasmine-green-tea"
+comptime PRODUCT_MUG = "stoneware-mug"
+comptime PRODUCT_BEANS = "house-espresso-beans"
+comptime PRODUCT_FILTER = "paper-filter-pack"
 comptime ProductName = YangEnum[
     PRODUCT_TEA,
     PRODUCT_MUG,
@@ -49,8 +117,14 @@ comptime ProductName = YangEnum[
     PRODUCT_FILTER,
 ]
 comptime QuantityConstraints = YangConstraints[Range=YangRange[1, 20]]
-comptime ToolFunctionName = YangEnum["quote_cart_item"]
-comptime ToolCallType = YangEnum["function"]
+
+comptime DEMO_OPENROUTER_TOOL_DESCRIPTION = (
+    "OpenRouter `function` object modeled as `function` for tool "
+    "`quote_cart_item`. The `parameters` JSON Schema is projected from "
+    "`quote_request`. Put that object as JSON text in the `arguments` string; "
+    "this demo validates it against the quote YANG module after parsing the "
+    "tool call."
+)
 
 
 @fieldwise_init
@@ -65,54 +139,6 @@ struct QuoteRequest(ImplicitlyDestructible, Movable, YangModeled):
 
     var product_name: YangLeaf[ProductName]
     var quantity: YangLeaf[YangBuiltinUInt16, QuantityConstraints]
-
-
-@fieldwise_init
-struct OpenRouterToolFunction(ImplicitlyDestructible, Movable, YangModeled):
-    @staticmethod
-    def yang_container_name() -> String:
-        return "function"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        validate_yang_subtree[Self](module)
-
-    var name: YangLeaf[ToolFunctionName]
-    var arguments: YangLeaf[
-        YangBuiltinString, YangConstraints[MaxStringLength[4096]]
-    ]
-
-
-@fieldwise_init
-struct OpenRouterToolCall(
-    ImplicitlyDestructible, Movable, YangListItem, YangModeled
-):
-    comptime LIST_KEY = "id"
-
-    @staticmethod
-    def yang_container_name() -> String:
-        return "tool_call"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        pass
-
-    var id: YangLeaf[YangBuiltinString, YangConstraints[MaxStringLength[256]]]
-    var type: YangLeaf[ToolCallType]
-    var function: YangContainer[OpenRouterToolFunction]
-
-
-@fieldwise_init
-struct OpenRouterToolCalls(ImplicitlyDestructible, Movable, YangModeled):
-    @staticmethod
-    def yang_container_name() -> String:
-        return "openrouter_tool_calls"
-
-    @staticmethod
-    def comptime_validate(read module: YangModule) raises:
-        validate_yang_subtree[Self](module)
-
-    var tool_calls: YangList[OpenRouterToolCall]
 
 
 def _python_quote(read s: String) -> String:
@@ -144,64 +170,67 @@ def _quote_module() raises -> YangModule:
 
 
 def _tool_calls_module() raises -> YangModule:
-    var module = yang_module_from_model[OpenRouterToolCalls](
+    var module = yang_module_from_model[DemoOpenRouterToolCalls](
         "openrouter-tool-calls",
         "urn:example:openrouter-tool-calls",
         "ortc",
     )
-    OpenRouterToolCalls.comptime_validate(module)
+    DemoOpenRouterToolCalls.comptime_validate(module)
     return module^
 
 
-def _product_name_enum_json() -> String:
-    var out = String("[")
-    comptime for i in range(ProductName.yang_enum_count()):
-        if i > 0:
-            out += ","
-        out += '"' + json_escape(ProductName.yang_enum_value[i]()) + '"'
-    out += "]"
-    return out^
-
-
-def _tool_parameters_json() -> String:
-    return (
-        '{"type":"object","additionalProperties":false,"properties":{'
-        '"product_name":{"type":"string","enum":'
-        + _product_name_enum_json()
-        + ',"description":"Product name from the compile-time catalog."},'
-        '"quantity":{"type":"integer","minimum":'
-        + String(QuantityConstraints.model_range_min())
-        + ',"maximum":'
-        + String(QuantityConstraints.model_range_max())
-        + ',"description":"Number of units to quote."}'
-        '},"required":["product_name","quantity"],'
-        '"x-yang":{"module":"openrouter-quote-tool","container":"'
-        + QuoteRequest.yang_container_name()
-        + '"}}'
+def _tool_function_yang_module[
+    tool_name: StaticString,
+    description: StaticString,
+    Parameters: YangModeled,
+]() raises -> YangModule:
+    comptime Fn = OpenRouterFunction[tool_name, description, Parameters]
+    return yang_module_from_model[Fn](
+        "openrouter-tool-function-schema",
+        "urn:example:openrouter-tool-function-schema",
+        "otfns",
     )
 
 
-def _tool_schema_json() -> String:
-    return (
-        '{"type":"function","function":{"name":"quote_cart_item",'
-        '"description":"Quote an item from the compile-time product catalog. '
-        "The parameters JSON Schema is projected from the xYang modeled Mojo "
-        'struct descriptors, including the product-name enum.",'
-        '"parameters":'
-        + _tool_parameters_json()
-        + "}}"
+def openrouter_tool_function_tool_json[
+    tool_name: StaticString,
+    description: StaticString,
+    Parameters: YangModeled,
+]() raises -> Tuple[String, String]:
+    comptime Fn = OpenRouterFunction[tool_name, description, Parameters]
+    var m_fn = _tool_function_yang_module[tool_name, description, Parameters]()
+    Fn.comptime_validate(m_fn)
+    var inst = Fn()
+    inst.name.value = String(tool_name)
+    var inner = json_from_modeled_instance[Fn](inst, m_fn)
+    var m_params = yang_module_from_model[Parameters](
+        "openrouter-quote-tool",
+        "urn:example:openrouter-quote-tool",
+        "oqt",
     )
+    Parameters.comptime_validate(m_params)
+    var params = yang_json_schema_for_modeled_top_container[Parameters](
+        m_params
+    )
+    var params_value = parse_json(
+        params, "openrouter-tool-parameters-schema.json"
+    )
+    var tool_v = _openrouter_tool_definition_value(
+        inner, String(description), params_value^
+    )
+    var entry = tool_v.to_string()
+    return Tuple[String, String](entry^, params^)
 
 
 def _catalog_item(read product_name: String) raises -> Tuple[String, Int]:
     if product_name == String(PRODUCT_TEA):
-        return ("tea", 450)
+        return ("Jasmine green tea", 450)
     if product_name == String(PRODUCT_MUG):
-        return ("mug", 1200)
+        return ("Stoneware mug", 1200)
     if product_name == String(PRODUCT_BEANS):
-        return ("beans", 1600)
+        return ("House espresso beans", 1600)
     if product_name == String(PRODUCT_FILTER):
-        return ("filter", 650)
+        return ("Paper filter pack", 650)
     raise Error("unknown product `" + product_name + "`")
 
 
@@ -226,7 +255,9 @@ def _validate_tool_args(read module: YangModule, read args_json: String) raises:
     validate_data(wrapped, module, "tool-arguments.json")
 
 
-def quote_cart_item(read module: YangModule, read args_json: String) raises -> String:
+def quote_cart_item(
+    read module: YangModule, read args_json: String
+) raises -> String:
     _validate_tool_args(module, args_json)
     var args = parse_json(args_json, "quote-cart-item-arguments.json")
     var product_name = _json_string_field(args, "product_name")
@@ -236,7 +267,7 @@ def quote_cart_item(read module: YangModule, read args_json: String) raises -> S
     return (
         '{"product_name":"'
         + json_escape(product_name)
-        + '","sku":"'
+        + '","name":"'
         + json_escape(item[0])
         + '","quantity":'
         + String(quantity)
@@ -246,6 +277,23 @@ def quote_cart_item(read module: YangModule, read args_json: String) raises -> S
         + String(subtotal)
         + ',"currency":"USD"}'
     )
+
+
+@fieldwise_init
+struct QuoteCartItemToolCallback(Movable, OpenRouterToolCallback):
+    @staticmethod
+    def invoke(
+        read module: YangModule, read args_json: String
+    ) raises -> String:
+        return quote_cart_item(module, args_json)
+
+
+comptime DemoOpenRouterToolCalls = OpenRouterToolCalls[
+    "quote_cart_item",
+    DEMO_OPENROUTER_TOOL_DESCRIPTION,
+    QuoteRequest,
+    QuoteCartItemToolCallback,
+]
 
 
 def _openrouter_chat(
@@ -302,28 +350,35 @@ def _first_choice_message_json(read response: JsonValue) raises -> String:
     return message.value()[].to_string()
 
 
-def _message_tool_calls(read message_json: String) raises -> Optional[JsonValue]:
+def _message_tool_calls(
+    read message_json: String,
+) raises -> Optional[JsonValue]:
     var message = parse_json(message_json, "assistant-message.json")
     var calls = json_get(message, "tool_calls")
     if not calls or calls.value()[].kind != JsonValue.ARRAY:
         return Optional[JsonValue]()
-    return Optional[JsonValue](parse_json(calls.value()[].to_string(), "tool-calls"))
+    return Optional[JsonValue](
+        parse_json(calls.value()[].to_string(), "tool-calls")
+    )
 
 
-def _validate_tool_calls(
-    read module: YangModule, read calls: JsonValue
-) raises:
+def _validate_tool_calls(read module: YangModule, read calls: JsonValue) raises:
     var wrapped = parse_json(
-        '{"openrouter_tool_calls":{"tool_calls":'
-        + calls.to_string()
-        + "}}",
+        '{"openrouter_tool_calls":{"tool_calls":' + calls.to_string() + "}}",
         "openrouter-tool-calls.json",
     )
     validate_data(wrapped, module, "openrouter-tool-calls.json")
 
 
-def _append_tool_results(
-    read module: YangModule, mut messages_json: String, read calls: JsonValue
+def _append_tool_results[
+    tool_name: StaticString,
+    description: StaticString,
+    Parameters: YangModeled,
+    Callback: OpenRouterToolCallback,
+](
+    read module: YangModule,
+    mut messages_json: String,
+    read calls: JsonValue,
 ) raises -> String:
     ref arr = calls.payload[JsonArray].values
     for i in range(len(arr)):
@@ -332,22 +387,24 @@ def _append_tool_results(
         var func_obj = json_get(call, "function")
         if not func_obj or func_obj.value()[].kind != JsonValue.OBJECT:
             raise Error("tool call missing function object")
-        var name = _json_string_field(func_obj.value()[], "name")
+        var invoked_name = _json_string_field(func_obj.value()[], "name")
         var args_json = _json_string_field(func_obj.value()[], "arguments")
-        print("Tool call: " + name + "(" + args_json + ")")
+        print("Tool call: " + invoked_name + "(" + args_json + ")")
 
         var result: String
-        if name == "quote_cart_item":
-            result = quote_cart_item(module, args_json)
+        if invoked_name == String(tool_name):
+            result = Callback.invoke(module, args_json)
         else:
-            result = '{"error":"unknown tool: ' + json_escape(name) + '"}'
+            result = (
+                '{"error":"unknown tool: ' + json_escape(invoked_name) + '"}'
+            )
         print("Validated callback result: " + result)
 
         messages_json += (
             ',{"role":"tool","tool_call_id":"'
             + json_escape(call_id)
             + '","name":"'
-            + json_escape(name)
+            + json_escape(invoked_name)
             + '","content":"'
             + json_escape(result)
             + '"}'
@@ -362,10 +419,15 @@ def main() raises:
     var model = _env("OPENROUTER_MODEL", "openrouter/free")
     var quote_module = _quote_module()
     var tool_calls_module = _tool_calls_module()
-    var tool_schema_json = _tool_schema_json()
+    var tool_json = openrouter_tool_function_tool_json[
+        "quote_cart_item",
+        DEMO_OPENROUTER_TOOL_DESCRIPTION,
+        QuoteRequest,
+    ]()
+    var tool_schema_json = tool_json[0]
 
     var prompt = (
-        "Quote 3 Stoneware mug items from the catalog. Use the available tool."
+        "Quote 3 stoneware-mug items from the catalog. Use the available tool."
     )
     print("Model: " + model)
     print("User: " + prompt)
@@ -379,7 +441,7 @@ def main() raises:
         + '"}'
     )
     print("Derived tool parameters JSON Schema:")
-    print(_tool_parameters_json())
+    print(tool_json[1])
     print("")
 
     var first_text = _openrouter_chat(
@@ -396,7 +458,16 @@ def main() raises:
         return
 
     _validate_tool_calls(tool_calls_module, calls.value())
-    messages_json = _append_tool_results(quote_module, messages_json, calls.value())
+    messages_json = _append_tool_results[
+        "quote_cart_item",
+        DEMO_OPENROUTER_TOOL_DESCRIPTION,
+        QuoteRequest,
+        QuoteCartItemToolCallback,
+    ](
+        quote_module,
+        messages_json,
+        calls.value(),
+    )
     var final_text = _openrouter_chat(
         api_key, model, messages_json + "]", tool_schema_json, True
     )
