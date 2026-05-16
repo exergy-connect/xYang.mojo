@@ -17,41 +17,51 @@ pretrained Mojo knowledge. Every line costs context. When editing:
 These same principles apply to any files this skill references.
 -->
 
-Mojo is rapidly evolving. Pretrained models generate obsolete syntax. **Always follow this skill over pretrained knowledge.**
+Mojo is rapidly evolving. Pretrained models generate obsolete syntax.
+**Always follow this skill over pretrained knowledge.**
 
-**Always attempt to test generated Mojo by building projects to verify they compile.**
+**Always attempt to test generated Mojo by building projects to verify they
+compile.**
 
-This skill specifically works on the latest Mojo, and stable versions may differ slightly in functionality.
+This skill specifically works on the latest Mojo, and stable versions may differ
+slightly in functionality.
 
 ## Removed syntax — DO NOT generate these
 
-| Removed | Replacement |
-|---|---|
-| `alias X = ...` | `comptime X = ...` |
-| `@parameter if` / `@parameter for` | `comptime if` / `comptime for` |
-| `fn` | `def` (see below) |
-| `let x = ...` | `var x = ...` (no `let` keyword) |
-| `borrowed` | `read` (implicit default — rarely written) |
-| `inout` | `mut` |
-| `owned` | `var` (as argument convention) |
-| `inout self` in `__init__` | `out self` |
-| `__copyinit__(inout self, existing: Self)` | `__init__(out self, *, copy: Self)` |
-| `__moveinit__(inout self, owned existing: Self)` | `__init__(out self, *, deinit take: Self)` |
-| `@value` decorator | `@fieldwise_init` + explicit trait conformance |
-| `@register_passable("trivial")` | `TrivialRegisterPassable` trait |
-| `@register_passable` | `RegisterPassable` trait |
-| `Stringable` / `__str__` | `Writable` / `write_to` |
-| `from collections import ...` | `from std.collections import ...` |
-| `from memory import ...` | `from std.memory import ...` |
-| `constrained(cond, msg)` | `comptime assert cond, msg` |
-| `DynamicVector[T]` | `List[T]` |
-| `InlinedFixedVector[T, N]` | `InlineArray[T, N]` |
-| `Tensor[T]` | Not in stdlib (use SIMD, List, UnsafePointer) |
-| `@parameter fn` (nested) | Still used for nested compile-time closures |
+| Removed                                          | Replacement                                                                      |
+|--------------------------------------------------|----------------------------------------------------------------------------------|
+| `alias X = ...`                                  | `comptime X = ...`                                                               |
+| `@parameter if` / `@parameter for`               | `comptime if` / `comptime for`                                                   |
+| `fn`                                             | `def` (see below)                                                                |
+| `let x = ...`                                    | `var x = ...` (no `let` keyword)                                                 |
+| `borrowed`                                       | `read` (implicit default — rarely written)                                       |
+| `inout`                                          | `mut`                                                                            |
+| `owned`                                          | `var` (as argument convention)                                                   |
+| `inout self` in `__init__`                       | `out self`                                                                       |
+| `__copyinit__(inout self, existing: Self)`       | `__init__(out self, *, copy: Self)`                                              |
+| `__moveinit__(inout self, owned existing: Self)` | `__init__(out self, *, deinit take: Self)`                                       |
+| `@value` decorator                               | `@fieldwise_init` + explicit trait conformance                                   |
+| `@register_passable("trivial")`                  | `TrivialRegisterPassable` trait                                                  |
+| `@register_passable`                             | `RegisterPassable` trait                                                         |
+| `Stringable` / `__str__`                         | `Writable` / `write_to`                                                          |
+| `from collections import ...`                    | `from std.collections import ...`                                                |
+| `from memory import ...`                         | `from std.memory import ...`                                                     |
+| `from sys import ...`                            | `from std.sys import ...`                                                        |
+| `from os import ...`                             | `from std.os import ...`                                                         |
+| `from pathlib import ...`                        | `from std.pathlib import ...`                                                    |
+| `s[i]`                                           | `s[byte=i]` — returns `StringSlice`; wrap in `String()` if needed                |
+| `s[0:10]`, `s[:5]`                               | No slice syntax on String — use `s.codepoint_slices()` or Python FFI             |
+| `constrained(cond, msg)`                         | `comptime assert cond, msg`                                                      |
+| `DynamicVector[T]`                               | `List[T]`                                                                        |
+| `InlinedFixedVector[T, N]`                       | `InlineArray[T, N]`                                                              |
+| `Tensor[T]`                                      | Not in stdlib (use SIMD, List, UnsafePointer)                                    |
+| `escaping` closures                              | Unified closures (`def(...) -> T`, captures in `{}`); `capturing[_]` still valid |
 
 ## `def` is the only function keyword
 
-`fn` is deprecated and being removed. `def` does **not** imply `raises`. **Always** add `raises` explicitly when needed — omitting it is a warning today, error soon:
+`fn` is deprecated and being removed. `def` does **not** imply `raises`.
+**Always** add `raises` explicitly when needed — omitting it is a warning today,
+error soon:
 
 ```mojo
 def compute(x: Int) -> Int:              # non-raising (compiler enforced)
@@ -64,7 +74,8 @@ def main() raises:                       # main usually raises → def raises
     ...
 ```
 
-Note: existing stdlib code still uses `fn` during migration. New code should always use `def`.
+Note: existing stdlib code still uses `fn` during migration. New code should
+always use `def`.
 
 ## `comptime` replaces `alias` and `@parameter`
 
@@ -78,7 +89,9 @@ comptime for i in range(10):                 # compile-time loop
 comptime assert N > 0, "N must be positive"  # compile-time assertion
 ```
 
-**`comptime assert` must be inside a function body** — not at module/struct scope. Place them in `main()`, `__init__`, or the function that depends on the invariant.
+**`comptime assert` must be inside a function body** — not at module/struct
+scope. Place them in `main()`, `__init__`, or the function that depends on the
+invariant.
 
 Inside structs, `comptime` defines associated constants and type aliases:
 
@@ -99,6 +112,12 @@ def consume(deinit self):                     # deinit = consuming/destroying
 def view(ref self) -> ref[self] Self.T:       # ref = reference with origin
 def view2[origin: Origin, //](ref[origin] self) -> ...:           # ref[origin] = explicit origin
 ```
+
+`ref`, `mut`, `out`, `deinit`, `read`, `var` are reserved and **cannot be used
+as identifiers** — neither as parameter names (`def cmp(got: T, ref: T)` →
+`"error: expected argument name"`) nor as local `var` names
+(`var ref = ...` → `"unexpected token in expression"`). Rename
+(`expected`, `reference`, etc.).
 
 ## Lifecycle methods
 
@@ -148,11 +167,13 @@ def __init__(out self, value: Int):
     self.data = value
 ```
 
-The compiler synthesizes copy/move constructors when a struct conforms to `Copyable`/`Movable` and all fields support it.
+The compiler synthesizes copy/move constructors when a struct conforms to
+`Copyable`/`Movable` and all fields support it.
 
 ### Self-qualify struct parameters
 
-Inside a struct body, **always** use `Self.ParamName` — bare parameter names are errors:
+Inside a struct body, **always** use `Self.ParamName` — bare parameter names are
+errors:
 
 ```mojo
 # WRONG — bare parameter access
@@ -167,11 +188,16 @@ struct Container[T: Writable]:
         return self.data
 ```
 
-This applies to all struct parameters (`T`, `N`, `mut`, `origin`, etc.) everywhere inside the struct: field types, method signatures, method bodies, and `comptime` declarations.
+This applies to all struct parameters (`T`, `N`, `mut`, `origin`, etc.)
+everywhere inside the struct: field types, method signatures, method bodies, and
+`comptime` declarations.
 
 ### Explicit copy / transfer
 
-Types not conforming to `ImplicitlyCopyable` (e.g., `Dict`, `List`) require explicit `.copy()` or ownership transfer `^`:
+Types not conforming to `ImplicitlyCopyable` (e.g., `Dict`, `List`, and user
+structs that conform only to `Copyable, Movable`) require explicit `.copy()` or
+ownership transfer `^` — `return my_struct` errors until you transfer with `^`
+or add `ImplicitlyCopyable` conformance:
 
 ```mojo
 # WRONG — implicit copy of non-ImplicitlyCopyable type
@@ -191,9 +217,21 @@ from std.python import PythonObject
 import std.random
 ```
 
-Prelude auto-imports (no import needed): `Int`, `String`, `Bool`, `List`, `Dict`, `Optional`, `SIMD`, `Float32`, `Float64`, `UInt8`, `Pointer`, `UnsafePointer`, `Span`, `Error`, `DType`, `Writable`, `Writer`, `Copyable`, `Movable`, `Equatable`, `Hashable`, `rebind`, `print`, `range`, `len`, and more.
+Prelude auto-imports (no import needed): `Int`, `String`, `Bool`, `List`,
+`Dict`, `Optional`, `SIMD`, `Float32`, `Float64`, `UInt8`, `Pointer`,
+`UnsafePointer`, `Span`, `Error`, `DType`, `Writable`, `Writer`, `Copyable`,
+`Movable`, `Equatable`, `Hashable`, `rebind`, `print`, `range`, `len`, and more.
 
-`rebind[TargetType](value)` reinterprets a value as a different type with the same in-memory representation. Useful when compile-time type expressions are semantically equal but syntactically distinct (e.g., LayoutTensor element types — see GPU skill).
+`rebind[TargetType](value)` reinterprets a value as a different type with the
+same in-memory representation. Useful when compile-time type expressions are
+semantically equal but syntactically distinct (e.g., TileTensor element types
+— see GPU skill).
+
+`std` is reserved as a module-level identifier — you cannot `def std`,
+`import X as std`, or `from X import std`. Struct methods named `std` are fine.
+
+Inside a multi-module package, `pkg.X.Y(...)` from a submodule needs explicit
+`import pkg`; `import pkg.X as X` binds only `X`, not `pkg`.
 
 ## `Writable` / `Writer` (replaces `Stringable`)
 
@@ -209,7 +247,8 @@ struct MyType(Writable):
 ```
 
 - `Some[Writer]` — builtin existential type (not `Writer` directly)
-- Both methods have **default implementations** via reflection if all fields are `Writable` — simple structs need not implement them
+- Both methods have **default implementations** via reflection if all fields are
+  `Writable` — simple structs need not implement them
 - Convert to `String` with `String.write(value)`, not `str(value)`
 
 ## Iterator protocol
@@ -233,24 +272,30 @@ For-in: `for item in col:` (immutable) / `for ref item in col:` (mutable).
 
 ## Memory and pointer types
 
-| Type | Use |
-|---|---|
-| `Pointer[T, mut=M, origin=O]` | Safe, non-nullable. Deref with `p[]`. |
+| Type                            | Use                                                                    |
+|---------------------------------|------------------------------------------------------------------------|
+| `Pointer[T, mut=M, origin=O]`   | Safe, non-nullable. Deref with `p[]`.                                  |
 | `alloc[T](n)` / `UnsafePointer` | Free function `alloc[T](count)` → `UnsafePointer`. `.free()` required. |
-| `Span(list)` | Non-owning contiguous view. |
-| `OwnedPointer[T]` | Unique ownership (like Rust `Box`). |
-| `ArcPointer[T]` | Reference-counted shared ownership. |
+| `Span(list)`                    | Non-owning contiguous view.                                            |
+| `OwnedPointer[T]`               | Unique ownership (like Rust `Box`).                                    |
+| `ArcPointer[T]`                 | Reference-counted shared ownership.                                    |
 
-`UnsafePointer` has an `origin` parameter that must be specified for struct fields. Use `MutExternalOrigin` for owned heap data (this is what stdlib `ArcPointer` uses):
+`UnsafePointer` has an `origin` parameter that must be specified for struct
+fields. Use `MutExternalOrigin` for owned heap data (this is what stdlib
+`ArcPointer` uses):
 
 ```mojo
 # Struct field — specify origin explicitly
 var _ptr: UnsafePointer[Self.T, MutExternalOrigin]
 
 # Allocate with alloc[]
-fn __init__(out self, size: Int):
+def __init__(out self, size: Int):
     self._ptr = alloc[Self.T](size)
 ```
+
+`UnsafePointer` is **non-null by design** — null default constructor and
+`__bool__` are deprecated. For nullable storage, use
+`Optional[UnsafePointer[...]]` (same layout; `None` is the null niche).
 
 ## Origin system (not "lifetime")
 
@@ -260,7 +305,9 @@ Mojo tracks reference provenance with **origins**, not "lifetimes":
 struct Span[mut: Bool, //, T: AnyType, origin: Origin[mut=mut]]: ...
 ```
 
-Key types: `Origin`, `MutOrigin`, `ImmutOrigin`, `MutAnyOrigin`, `ImmutAnyOrigin`, `MutExternalOrigin`, `ImmutExternalOrigin`, `StaticConstantOrigin`. Use `origin_of(value)` to get a value's origin.
+Key types: `Origin`, `MutOrigin`, `ImmutOrigin`, `MutAnyOrigin`,
+`ImmutAnyOrigin`, `MutExternalOrigin`, `ImmutExternalOrigin`,
+`StaticConstantOrigin`. Use `origin_of(value)` to get a value's origin.
 
 ## Testing
 
@@ -275,6 +322,9 @@ def test_my_feature() raises:
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
 ```
+
+The `mojo test` CLI subcommand was removed — run test files with `mojo run`
+against a `TestSuite.discover_tests` runner like the one above.
 
 ## Dict iteration
 
@@ -302,18 +352,34 @@ var nums: List[Float32] = [1.0, 2.0, 3.0]         # explicit element type
 var scores = {"alice": 95, "bob": 87}              # Dict[String, Int]
 ```
 
+`List[T]` rejects negative indices at compile time — use `lst[len(lst) - 1]`,
+not `lst[-1]`. (Library types may still support it.)
+
+## Variant access
+
+`Variant[A, B]` is `ImplicitlyCopyable` only if *all* arms are. With a
+non-copyable arm, indexing the variant copies it — use the typed-arm subscript:
+
+```mojo
+# WRONG — `values[i]` implicitly copies the Variant
+var x = values[i].take[T]()          # ERROR: cannot implicitly copy
+
+# CORRECT — `values[i][T]` returns a ref to the inner value
+var x = values[i][T].copy()          # or `^` to transfer
+```
+
 ## Common decorators
 
-| Decorator | Purpose |
-|---|---|
-| `@fieldwise_init` | Generate fieldwise constructor |
-| `@implicit` | Allow implicit conversion |
-| `@always_inline` / `@always_inline("nodebug")` | Force inline |
-| `@no_inline` | Prevent inline |
-| `@staticmethod` | Static method |
-| `@deprecated("msg")` | Deprecation warning |
-| `@doc_private` | Hide from docs |
-| `@explicit_destroy` | Linear type (no implicit destruction) |
+| Decorator                                      | Purpose                               |
+|------------------------------------------------|---------------------------------------|
+| `@fieldwise_init`                              | Generate fieldwise constructor        |
+| `@implicit`                                    | Allow implicit conversion             |
+| `@always_inline` / `@always_inline("nodebug")` | Force inline                          |
+| `@no_inline`                                   | Prevent inline                        |
+| `@staticmethod`                                | Static method                         |
+| `@deprecated("msg")`                           | Deprecation warning                   |
+| `@doc_hidden`                                  | Hide from docs                        |
+| `@explicit_destroy`                            | Linear type (no implicit destruction) |
 
 ## Numeric conversions — must be explicit
 
@@ -324,7 +390,8 @@ var x = Float32(my_int) * scale    # CORRECT: Int → Float32
 var y = Int(my_uint)               # CORRECT: UInt → Int
 ```
 
-**Literals are polymorphic** — `FloatLiteral` and `IntLiteral` auto-adapt to context:
+**Literals are polymorphic** — `FloatLiteral` and `IntLiteral` auto-adapt to
+context:
 
 ```mojo
 var a: Float32 = 0.5              # literal becomes Float32
@@ -363,7 +430,39 @@ v.reduce_min()                     # horizontal min → Scalar
 
 ## Strings
 
-`len(s)` returns **byte length**, not codepoint count. Mojo strings are UTF-8. Byte indexing requires keyword syntax: `s[byte=idx]` (not `s[idx]`).
+**All explicit stdlib imports require the `std.` prefix.** The
+removed-syntax table shows the most common corrections, but the rule
+is universal. Prelude types (`Int`, `String`, `List`, etc.) are
+auto-imported and need no import statement.
+
+`len(s)` returns **byte length**, not codepoint count. Mojo strings are UTF-8.
+Byte indexing requires keyword syntax: `s[byte=idx]` (not `s[idx]`). `len(s)` is
+deprecated on `String` — use `s.byte_length()` or `s.count_codepoints()`.
+
+`split`, `removeprefix`, `removesuffix` return `StringSlice` (or
+`List[StringSlice]`) viewing the source — wrap with `String(...)` to
+materialize an owned `String`.
+
+### String indexing (common error)
+
+```mojo
+# WRONG — compile error
+var ch = s[0]
+var sub = s[0:10]
+
+# CORRECT — byte-level access
+var ch = s[byte=0]              # returns StringSlice
+var ch_str = String(s[byte=0])  # if you need a String
+
+# CORRECT — iterate codepoints for truncation
+var result = String("")
+var count = 0
+for cp in s.codepoint_slices():
+    if count >= 10:
+        break
+    result += String(cp)
+    count += 1
+```
 
 ```mojo
 var s = "Hello"
@@ -371,7 +470,7 @@ len(s)                  # 5 (bytes)
 s.byte_length()         # 5 (same as len)
 s.count_codepoints()    # 5 (codepoint count — differs for non-ASCII)
 
-# Iteration — by codepoint slices (not bytes)
+# Iteration — `for c in s:` is deprecated; use codepoint_slices()
 for cp_slice in s.codepoint_slices():
     print(cp_slice)
 
@@ -406,27 +505,32 @@ except err:                               # err is Int
     print("error code:", err)
 ```
 
-No `match` statement. No `async`/`await` — use `Coroutine`/`Task` from `std.runtime`.
+No `match` statement. No `async`/`await` — use `Coroutine`/`Task` from
+`std.runtime`.
 
 ## Function types and closures
 
-No lambda syntax. Closures use `capturing[origins]`:
+No lambda. Closures use bare `def` with a capture list in `{}` after the arg
+list. `escaping` is removed; `capturing[_]` is still valid on parametric
+closure-type params:
 
 ```mojo
-# Function type with capture
-comptime MyFunc = fn(Int) capturing[_] -> None
+comptime MyFn = def(Int) -> None                  # unified value type
+def runner[f: def(Int) capturing[_] -> None](): ...  # parametric form
 
-# Parametric function type (for vectorize etc.)
-comptime SIMDFunc = fn[width: Int](Int) capturing[_] -> None
+def closure(i: Int) {mut count, read ptr, var x}: # captures: mut/read/var
+    count += ptr[i] + x^                          # `^` at use site, not in `{}`
 
-# vectorize pattern
-from std.algorithm import vectorize
-vectorize[simd_width](size, my_closure)
+vectorize[simd_width](size, closure)              # runtime-arg overload
 ```
+
+`read` is default. `var x` is owned — transfer with `x^` at the use site.
+`@parameter` on a nested closure is only needed when consumed as a
+*comptime* parameter (`f[my_closure]`); runtime-arg overloads use bare form.
 
 ## Type hierarchy
 
-```
+```text
 AnyType
   ImplicitlyDestructible          — auto __del__; most types
   Movable                         — __init__(out self, *, deinit take: Self)
