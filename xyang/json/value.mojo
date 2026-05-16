@@ -102,7 +102,21 @@ struct JsonValue(ImplicitlyDestructible, Movable):
                 s += arr.values[i][].to_string()
             s += "]"
             return s^
-        return _SCALAR_SERIALIZERS[self.kind](self)
+        # Keep scalar serialization as direct branches. A previous version used
+        # a comptime InlineArray of thin function pointers here; with this
+        # recursive Variant-backed type, that caused severe compile/runtime
+        # latency. See issues/standalone_recursive_fn_table_compile_repro.mojo.
+        if self.kind == Self.STRING:
+            return '"' + json_escape(self.payload[JsonString].value) + '"'
+        if self.kind == Self.INT:
+            return String(self.payload[JsonInt].value)
+        if self.kind == Self.REAL:
+            return self.payload[JsonReal].text
+        if self.kind == Self.BOOL:
+            if self.payload[JsonBool].value:
+                return "true"
+            return "false"
+        return "null"
 
 
 ## --- Helpers -----------------------------------------------------------------
@@ -136,48 +150,3 @@ def json_scalar_text(read value: JsonValue) -> String:
     if value.kind == JsonValue.BOOL:
         return "true" if value.payload[JsonBool].value else "false"
     return "<non-scalar>"
-
-
-## --- Scalar serializer dispatch table ----------------------------------------
-
-comptime _ScalarSerializer = def(read JsonValue) raises thin -> String
-
-
-@always_inline
-def _string_to_json(read v: JsonValue) raises -> String:
-    return '"' + json_escape(v.payload[JsonString].value) + '"'
-
-
-@always_inline
-def _int_to_json(read v: JsonValue) raises -> String:
-    return String(v.payload[JsonInt].value)
-
-
-@always_inline
-def _real_to_json(read v: JsonValue) raises -> String:
-    return v.payload[JsonReal].text
-
-
-@always_inline
-def _bool_to_json(read v: JsonValue) raises -> String:
-    if v.payload[JsonBool].value:
-        return "true"
-    return "false"
-
-
-@always_inline
-def _null_to_json(read v: JsonValue) raises -> String:
-    return "null"
-
-
-@always_inline
-def _scalar_serializer_table() -> InlineArray[_ScalarSerializer, 7]:
-    var table = InlineArray[_ScalarSerializer, 7](fill=_null_to_json)
-    table[JsonValue.STRING] = _string_to_json
-    table[JsonValue.INT] = _int_to_json
-    table[JsonValue.REAL] = _real_to_json
-    table[JsonValue.BOOL] = _bool_to_json
-    return table^
-
-
-comptime _SCALAR_SERIALIZERS = _scalar_serializer_table()
