@@ -109,7 +109,7 @@ struct JsonValue(ImplicitlyDestructible, Movable):
         if self.kind == Self.STRING:
             return '"' + json_escape(self.payload[JsonString].value) + '"'
         if self.kind == Self.INT:
-            return String(self.payload[JsonInt].value)
+            return self.payload[JsonInt].text
         if self.kind == Self.REAL:
             return self.payload[JsonReal].text
         if self.kind == Self.BOOL:
