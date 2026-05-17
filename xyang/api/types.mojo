@@ -8,6 +8,11 @@ from xyang.yang.ast.construct import YangConstruct
 from xyang.yang.ast.module import YangModule
 from xyang.validator.pattern_match import yang_string_matches_xsd_subset
 
+from .reflection_traits import (
+    YangInstanceConstructEmitter,
+    YangSchemaFieldEmitter,
+)
+
 comptime Arc = ArcPointer
 
 
@@ -784,7 +789,9 @@ struct YangLeaf[
     LeafModelSpec,
     Movable,
     YangDataNodeSpec,
+    YangInstanceConstructEmitter,
     YangLeafValueReadable,
+    YangSchemaFieldEmitter,
 ):
     comptime BuiltinType = Self.Builtin
     comptime ConstraintType = Self.C
@@ -880,6 +887,39 @@ struct YangLeaf[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
+    def append_schema_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        _ = self
+        var child = _explicit_leaf_construct[Self](name)
+        _model_append_stmt(parent, child^)
+
+    def append_instance_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        comptime yt = Self.yang_type_str()
+        comptime if yt == "string" or yt == "enumeration":
+            _model_append_stmt(
+                parent,
+                _leaf_instance_construct[Self](name, self.yang_leaf_string_value())^,
+            )
+        comptime if yt == "boolean":
+            var text = "true" if self.yang_leaf_bool_value() else "false"
+            _model_append_stmt(
+                parent, _leaf_instance_construct[Self](name, text)^
+            )
+        comptime if (
+            yt != "string"
+            and yt != "enumeration"
+            and yt != "boolean"
+        ):
+            _model_append_stmt(
+                parent,
+                _leaf_instance_construct[Self](
+                    name, String(self.yang_leaf_int64_value())
+                )^,
+            )
+
 
 struct YangLeafList[
     Builtin: YangBuiltinDescriptor,
@@ -890,6 +930,8 @@ struct YangLeafList[
     LeafModelSpec,
     Movable,
     YangDataNodeSpec,
+    YangInstanceConstructEmitter,
+    YangSchemaFieldEmitter,
 ):
     comptime BuiltinType = Self.Builtin
     comptime ConstraintType = Self.C
@@ -969,6 +1011,18 @@ struct YangLeafList[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
+    def append_schema_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        _ = self
+        var child = _explicit_leaf_list_construct[Self](name)
+        _model_append_stmt(parent, child^)
+
+    def append_instance_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        raise Error("leaf-list instance lowering is not implemented yet")
+
 
 @fieldwise_init
 struct YangContainer[
@@ -980,6 +1034,8 @@ struct YangContainer[
     Movable,
     NodeModelSpec,
     YangDataNodeSpec,
+    YangInstanceConstructEmitter,
+    YangSchemaFieldEmitter,
 ):
     comptime ChildType = Self.Child
     comptime EntryType = NoYangModel
@@ -1062,6 +1118,20 @@ struct YangContainer[
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
 
+    def append_schema_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        _ = self
+        var child = _explicit_container_construct[Self](name)
+        _model_append_stmt(parent, child^)
+
+    def append_instance_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        var container = _model_stmt("container", name)
+        _reflection_append_instance_fields[Self.Child](self.body, container)
+        _model_append_stmt(parent, container^)
+
 
 struct YangList[
     Entry: Movable & ImplicitlyDestructible & YangListItem,
@@ -1073,6 +1143,8 @@ struct YangList[
     Movable,
     NodeModelSpec,
     YangDataNodeSpec,
+    YangInstanceConstructEmitter,
+    YangSchemaFieldEmitter,
 ):
     comptime ChildType = NoYangModel
     comptime EntryType = Self.Entry
@@ -1152,6 +1224,18 @@ struct YangList[
     @staticmethod
     def has_yang_must() -> Bool:
         return Self.C.has_yang_must()
+
+    def append_schema_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        _ = self
+        var child = _explicit_list_construct[Self](name)
+        _model_append_stmt(parent, child^)
+
+    def append_instance_field(
+        read self, read name: String, mut parent: YangConstruct
+    ) raises:
+        raise Error("list instance lowering is not implemented yet")
 
 
 def _model_stmt(keyword: String, argument: String = "") -> YangConstruct:
@@ -1283,3 +1367,30 @@ def _append_explicit_model_fields[*Fields: YangNamedDataNode](
             _model_append_stmt(parent, child^)
         else:
             raise Error("unsupported model node kind `" + kind + "`")
+
+
+def _leaf_instance_construct[
+    FT: YangDataNodeSpec & LeafModelSpec,
+](read name: String, read value_text: String) raises -> YangConstruct:
+    var leaf_node = _model_stmt("leaf", name)
+    var yt = FT.yang_type_str()
+    var type_node = _model_stmt("type", yt)
+    _model_append_stmt(leaf_node, type_node^)
+    _model_append_stmt(leaf_node, _model_stmt("value", value_text)^)
+    _append_explicit_leaf_constraints[FT](leaf_node)
+    return leaf_node^
+
+
+def _reflection_append_instance_fields[T: YangModeled](
+    read instance: T, mut parent: YangConstruct
+) raises:
+    """Reflection instance walk; implemented here to avoid an import cycle with ``reflection.mojo``."""
+
+    from std.reflection import reflect
+
+    comptime ri = reflect[T]
+    comptime for i in range(ri.field_count()):
+        comptime nm = String(ri.field_names()[i])
+        trait_downcast[YangInstanceConstructEmitter](
+            ri.field_ref[i](instance)
+        ).append_instance_field(nm, parent)

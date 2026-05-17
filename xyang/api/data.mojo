@@ -121,3 +121,15 @@ def json_from_instance[
     """Alias for :func:`json_from_modeled_instance`."""
 
     return json_from_modeled_instance(instance, module)
+
+
+def json_from_construct_subtree[
+    T: JsonFromYangWalkInstance
+](
+    read instance: T,
+    read module: YangModule,
+    read root_node: YangConstruct,
+) raises -> JsonValue:
+    """Serialize one ``container`` / ``list`` / ``leaf-list`` subtree from ``root_node``."""
+
+    return _json_from_construct_node(instance, module, root_node)

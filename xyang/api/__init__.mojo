@@ -1,4 +1,10 @@
 ## Public API for field-annotated Mojo structs bound to YANG schemas.
+##
+## **Struct-based schema** (default here): ``YangModel`` / ``YangField`` type packs and
+## optional manual ``JsonFromYangWalkInstance``. For **reflection-based** models
+## (``YangLeaf`` fields on a struct, ``reflection_append_model_fields``,
+## ``reflection_instance_to_construct``), import ``xyang.api.reflection`` instead —
+## same descriptor types from ``types``, pick one style per model.
 
 from .data import (
     JsonFromYangWalkInstance,
